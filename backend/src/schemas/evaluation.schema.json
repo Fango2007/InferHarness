@@ -61,6 +61,38 @@
         },
         "stream": {
           "type": ["boolean", "null"]
+        },
+        "seed": {
+          "type": ["integer", "null"]
+        },
+        "stop": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "minLength": 1 },
+            {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "minItems": 1
+            }
+          ]
+        },
+        "presence_penalty": {
+          "type": ["number", "null"],
+          "minimum": -2,
+          "maximum": 2
+        },
+        "frequency_penalty": {
+          "type": ["number", "null"],
+          "minimum": -2,
+          "maximum": 2
+        },
+        "timeout_ms": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "unsupported_parameter_policy": {
+          "type": ["string", "null"],
+          "enum": ["strict", "permissive", null]
         }
       }
     },

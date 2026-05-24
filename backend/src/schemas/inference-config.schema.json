@@ -2,8 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "inference-config.schema.json",
   "title": "InferenceConfig",
-  "description": "Inference hyperparameter snapshot captured alongside an evaluation for reproducibility.",
-  "version": "1.0.0",
+  "description": "Inference parameter snapshot captured alongside evaluations and benchmark runtime profiles for reproducibility.",
+  "version": "1.1.0",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -24,9 +24,51 @@
       "minimum": 1,
       "description": "Maximum number of output tokens. Null means no override."
     },
+    "stream": {
+      "type": ["boolean", "null"],
+      "description": "Whether the request should ask the server for a streamed response. Null means no override."
+    },
+    "seed": {
+      "type": ["integer", "null"],
+      "description": "Deterministic sampling seed when the target server supports it. Null means no override."
+    },
+    "stop": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        }
+      ],
+      "description": "Stop sequence or sequences. Null means no override."
+    },
+    "presence_penalty": {
+      "type": ["number", "null"],
+      "minimum": -2,
+      "maximum": 2,
+      "description": "Presence penalty applied by compatible servers. Null means no override."
+    },
+    "frequency_penalty": {
+      "type": ["number", "null"],
+      "minimum": -2,
+      "maximum": 2,
+      "description": "Frequency penalty applied by compatible servers. Null means no override."
+    },
+    "timeout_ms": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "description": "Request timeout in milliseconds. Null means the caller or server default was used."
+    },
+    "unsupported_parameter_policy": {
+      "type": ["string", "null"],
+      "enum": ["strict", "permissive", null],
+      "description": "How benchmark/evaluation execution should handle parameters unsupported by the selected server."
+    },
     "quantization_level": {
       "type": ["string", "null"],
-      "description": "Model quantization level (e.g. 'int4', 'int8', 'fp16'). Null means unknown or not applicable."
+      "description": "Legacy evaluation-only quantization hint. New benchmark contracts keep quantization under model.architecture.quantisation and precision under model.architecture.precision."
     }
   }
 }

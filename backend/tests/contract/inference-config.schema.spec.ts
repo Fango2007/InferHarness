@@ -30,6 +30,22 @@ describe('inference-config.schema.json', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('accepts benchmark runtime parameters', () => {
+    const result = validateWithSchema(IC_SCHEMA, {
+      temperature: 0.2,
+      top_p: 0.9,
+      max_tokens: 512,
+      stream: false,
+      seed: 42,
+      stop: ['END'],
+      presence_penalty: 0,
+      frequency_penalty: 0,
+      timeout_ms: 300000,
+      unsupported_parameter_policy: 'strict'
+    });
+    expect(result.ok).toBe(true);
+  });
+
   it('accepts an empty object (no required fields)', () => {
     const result = validateWithSchema(IC_SCHEMA, {});
     expect(result.ok).toBe(true);
@@ -47,6 +63,11 @@ describe('inference-config.schema.json', () => {
 
   it('rejects max_tokens < 1', () => {
     const result = validateWithSchema(IC_SCHEMA, { max_tokens: 0 });
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects unsupported parameter policy outside the canonical vocabulary', () => {
+    const result = validateWithSchema(IC_SCHEMA, { unsupported_parameter_policy: 'drop' });
     expect(result.ok).toBe(false);
   });
 
@@ -85,6 +106,19 @@ describe('evaluation.schema.json', () => {
       latency_ms: 320.5,
       word_count: 1,
       estimated_cost: 0.0001,
+      inference_config: {
+        temperature: 0.2,
+        top_p: 0.9,
+        max_tokens: 512,
+        stream: false,
+        seed: 42,
+        stop: 'END',
+        presence_penalty: 0,
+        frequency_penalty: 0,
+        timeout_ms: 300000,
+        unsupported_parameter_policy: 'permissive',
+        quantization_level: null
+      },
       note: 'Good answer'
     });
     expect(result.ok).toBe(true);

@@ -1,58 +1,199 @@
 # InferHarness
 
-**Local-first testing and evaluation harness for LLM inference servers and open-weight models.**
+**A local-first tool for testing, comparing, and evaluating AI models and inference servers.**
+
+InferHarness helps you answer practical questions before you rely on a model in real work:
+
+- Does this model answer consistently?
+- Does it follow the format I asked for?
+- Does it call tools correctly?
+- Is it fast enough on my machine or server?
+- Did a model, prompt, or inference-server upgrade change behavior?
+
+All data stays on your machine. InferHarness does not require a cloud account, hosted service, or telemetry connection. It runs as a browser interface backed by a local API and a local SQLite database.
 
 ---
 
 ## Why InferHarness Exists
 
-InferHarness was initially developed to investigate compatibility and tool-calling behaviour differences across local inference servers and open-weight LLMs. The project progressively evolved into a local-first evaluation and testing environment designed to compare inference behaviour, validate workflows and analyse model responses in practical AI engineering scenarios.
+Local AI stacks are powerful, but they are not automatically predictable. Two models can expose the same OpenAI-compatible API and still behave differently. The same model can also behave differently depending on whether it is served by Ollama, LM Studio, llama.cpp, vLLM, or another runtime.
 
-All data stays on your machine. There are no cloud dependencies, no accounts, and no telemetry — just a browser-based interface backed by a local SQLite database.
+InferHarness was created to make those differences visible. It started as a way to investigate compatibility and tool-calling behavior across local inference servers and open-weight models. It has grown into a local evaluation environment for checking model quality, response format, latency, throughput, tool use, and regressions over time.
+
+The goal is simple: make model and server decisions based on repeatable evidence instead of one-off manual prompt checks.
+
+---
+
+## Who It Is For
+
+InferHarness is useful for:
+
+- AI engineers comparing local models and inference servers.
+- Product teams validating whether a model is reliable enough for a workflow.
+- Developers testing prompts, tool calls, structured output, and regression behavior.
+- Researchers or hobbyists who want local, inspectable evaluation data.
+- Teams that cannot send prompts, responses, or datasets to a hosted evaluation service.
+
+You do not need to understand the internal architecture to use the app. You define what you want to test, choose which model or server should run it, and review the results.
+
+---
+
+## What You Can Test
+
+InferHarness can help evaluate:
+
+- Answer quality: accuracy, relevance, coherence, completeness, and helpfulness.
+- Performance: time to first token, total latency, token counts, and tokens per second.
+- Format compliance: whether the model returns valid JSON or another expected structure.
+- Tool calling: whether the model calls the right tool with the right arguments.
+- Regression risk: whether behavior changed after a model, prompt, or server update.
+- Server differences: whether the same model behaves differently across runtimes.
+- Model metadata: model format, base model identity, quantization, capabilities, and architecture details.
+
+---
+
+## How the Test Pipeline Works
+
+InferHarness tests are designed to be repeatable and comparable.
+
+1. You define a reusable test: the prompt, dataset, expected behavior, metrics, and pass conditions.
+2. You choose the target model, inference server, and runtime settings.
+3. InferHarness records the exact model, server, settings, and dataset proof used for the run.
+4. The run executes against the selected model or models.
+5. InferHarness stores the raw responses, normalized results, metrics, warnings, and errors.
+6. You compare results over time, across models, or across inference servers.
+
+This means a result is more than a screenshot or a manually copied answer. It is a recorded run with enough context to explain what happened and compare it with future runs.
 
 ---
 
 ## Main Features
 
-**Server & model management**
-Register inference servers, discover available models automatically, and maintain a curated catalog with metadata (format, quantization provider, capabilities, base model name).
+**Server and model management**
+Register local or remote inference servers, discover available models, and maintain a model catalog with provider, format, quantization, capabilities, and base-model metadata.
 
-**Test execution**
-Run single tests, suites, and parameter sweeps against any registered model. Write tests as declarative JSON or as Python scripts for scenarios that need custom logic, multi-step conversations, or programmatic assertions.
+**Reusable test definitions**
+Create tests for one prompt, a dataset loop, tool-calling behavior, structured output, or multi-model comparisons.
+
+**Benchmark runs**
+Run the same test against one model, many models, or the same model served by different inference servers.
 
 **Automated metrics**
-Every run captures TTFB, total latency, prefill/decode timing, tokens per second, prompt tokens, and completion tokens — regardless of which server or model serves the request.
+Capture time to first token, total latency, prefill/decode timing, prompt tokens, completion tokens, and tokens per second.
 
 **Qualitative evaluation**
-Submit a prompt to one or more models, review the answer, and score it on five dimensions: accuracy, relevance, coherence, completeness, and helpfulness. Compare Mode runs the same prompt across up to four models side by side.
+Score model answers on accuracy, relevance, coherence, completeness, and helpfulness. Compare Mode runs the same prompt across up to four models side by side.
 
 **Leaderboard**
-All evaluated models are ranked by composite qualitative score. Filter by date range and tag to compare subsets across evaluation sessions.
+Rank evaluated models by composite qualitative score and filter by date range or tag.
 
 **Model architecture inspection**
-For supported open-weight models, inspect internal layer structure without downloading weights. Displays an expandable layer tree with total, trainable, non-trainable, and per-layer-type parameter counts. Supports Hugging Face-hosted models and local GGUF files.
+Inspect supported open-weight models without loading weight tensors. For Hugging Face models and local GGUF files, InferHarness can show a layer tree and parameter summaries.
 
 ---
 
-## Architecture
+## Example Test Definitions
 
-InferHarness is a two-process web application with an optional Python subprocess for architecture inspection.
+These examples show the kinds of tests a user can define.
 
-**Frontend** — React single-page application served by Vite. Communicates with the backend exclusively through a typed REST API. No direct database access.
+**Single prompt regression**
+Check whether a model still answers one important prompt correctly.
 
-**Backend** — Fastify HTTP server responsible for inference server registry, model discovery, template storage, run execution, evaluation records, and results persistence. All state is kept in a local SQLite database and a file cache directory.
+```text
+Question: Does the model answer our support escalation prompt correctly?
+Input: one customer-support scenario
+Expected behavior: includes the required policy decision and avoids forbidden claims
+Metrics: latency, output tokens, answer quality score
+Pass condition: required decision is present and no forbidden claim appears
+```
 
-**Python subprocess** — Spawned on demand when architecture inspection is triggered. Uses the Hugging Face `transformers` library (`AutoModel.from_config` + `named_modules`) for HF-hosted models and the `gguf` library for local GGUF files. No model weights are loaded. The subprocess is isolated, hard-limited to 60 seconds, and capped at two concurrent instances.
+**Dataset benchmark**
+Run the same task across a file of examples and aggregate the results.
 
-Data flow: browser → Vite dev server (or static build) → Fastify API → SQLite / file cache / Python subprocess → response.
+```text
+Question: Can the model classify 1,000 support tickets accurately?
+Dataset: JSONL, CSV, or JSON file with labeled examples
+Expected behavior: returns the correct category for each ticket
+Metrics: accuracy, invalid response rate, average latency, p95 latency
+Pass condition: accuracy is at least 92% and invalid responses stay below 1%
+```
+
+**Tool-calling compliance**
+Check whether a model calls the right tool with the right arguments.
+
+```text
+Question: Can the model schedule a meeting using the available calendar tool?
+Input: user asks for a meeting with date, attendees, and topic
+Expected behavior: calls create_calendar_event once
+Metrics: tool called, tool name match, argument validity, extra tool calls
+Pass condition: exactly one valid tool call and no premature final answer
+```
+
+**Structured output validation**
+Check whether a model returns data in the shape your application expects.
+
+```text
+Question: Can the model extract invoice fields as valid JSON?
+Input: invoice text
+Expected behavior: JSON with invoice_number, vendor_name, amount, currency, due_date
+Metrics: JSON parse success, schema validity, field completeness, extraction accuracy
+Pass condition: output is valid JSON and all required fields are present
+```
+
+**Multi-model comparison**
+Run the same test against several models or servers.
+
+```text
+Question: Which local setup gives the best quality and speed for coding tasks?
+Test: generate a unit test from a function signature
+Targets: the same model served by Ollama, LM Studio, and llama-server
+Metrics: pass rate, compile success, latency, token usage
+Output: one result per target, then a comparison table
+```
+
+---
+
+## Typical Use Cases
+
+**Compare inference servers**
+Register Ollama, LM Studio, and llama-server, point them at the same base model, and compare latency, throughput, and output quality.
+
+**Validate tool-calling behavior**
+Test whether different models call the expected function with the expected arguments before you use tool calling in an application.
+
+**Check structured output reliability**
+Measure how often a model returns valid JSON or another required response format.
+
+**Run regression tests before upgrades**
+Keep a fixed test suite for important prompts and run it before and after changing a model, prompt, quantization, or inference-server version.
+
+**Build a local model leaderboard**
+Score models with the same prompts and compare results over time.
+
+---
+
+## Supported Inference Servers
+
+InferHarness works with servers that expose an OpenAI-compatible or Ollama-compatible HTTP API.
+
+| Server | API family | Notes |
+|---|---|---|
+| [Ollama](https://ollama.com) | Ollama + OpenAI-compatible | Model discovery via `/api/tags` |
+| [LM Studio](https://lmstudio.ai) | OpenAI-compatible | Serves local GGUF and MLX models |
+| [llama-server (llama.cpp)](https://github.com/ggml-org/llama.cpp) | OpenAI-compatible | Single-model, low-level inference |
+| [vLLM](https://github.com/vllm-project/vllm) | OpenAI-compatible | High-throughput GPU inference |
+| [Inferencer](https://github.com/inferencerlabs/inferencer-feedback) | OpenAI-compatible + Ollama | High-end MLX inference server |
+| Any OpenAI/Ollama-compatible server | OpenAI/Ollama-compatible | Custom auth header and token supported |
+
+Model formats supported in the catalog include `GGUF`, `MLX`, `GPTQ`, `AWQ`, and `SafeTensors`.
 
 ---
 
 ## Screenshots
 
 <p align="center">
-  <img src=".github/assets/1-Catalog-servers-page.png" width="49%" alt="Catalog — Servers" />
-  <img src=".github/assets/2-Catalog-models-page.png" width="49%" alt="Catalog — Models" />
+  <img src=".github/assets/1-Catalog-servers-page.png" width="49%" alt="Catalog - Servers" />
+  <img src=".github/assets/2-Catalog-models-page.png" width="49%" alt="Catalog - Models" />
 </p>
 <p align="center">
   <img src=".github/assets/3-Templates-page.png" width="49%" alt="Templates" />
@@ -64,33 +205,127 @@ Data flow: browser → Vite dev server (or static build) → Fastify API → SQL
 
 ---
 
-## Supported Inference Servers
+## Setup
 
-InferHarness works with any server that exposes an OpenAI-compatible or Ollama HTTP API. The following servers are explicitly supported and tested:
+Requirements:
 
-| Server | API family | Notes |
-|---|---|---|
-| [Ollama](https://ollama.com) | Ollama + OpenAI-compatible | Model discovery via `/api/tags` |
-| [LM Studio](https://lmstudio.ai) | OpenAI-compatible | Serves local GGUF and MLX models |
-| [llama-server (llama.cpp)](https://github.com/ggml-org/llama.cpp) | OpenAI-compatible | Single-model, low-level inference |
-| [vLLM](https://github.com/vllm-project/vllm) | OpenAI-compatible | High-throughput GPU inference |
-| [Inferencer](https://github.com/inferencerlabs/inferencer-feedback) | OpenAI-compatible + Ollama | High-end MLX inference server |
-| Any OpenAI-compatible server | OpenAI-compatible | Custom auth header and token supported |
+- Node.js 22.19 or newer, below Node.js 26.
+- Python 3.10 or newer for model architecture inspection and Python-based tests.
+- At least one inference server if you want to run live model tests.
 
-Model formats supported in the catalog: `GGUF`, `MLX`, `GPTQ`, `AWQ`, `SafeTensors`.
+Install dependencies:
+
+```bash
+npm install
+pip install -r backend/src/scripts/requirements.txt
+cp .env.example .env
+```
+
+Edit `.env` and set at least `INFERHARNESS_API_TOKEN`.
 
 ---
 
-## Typical Use Cases
+## Run
 
-**Compare backend performance with the same model**
-Register Ollama, LM Studio, and llama-server pointing at the same base model. Run an identical test suite against all three and compare TTFB, tokens per second, and latency distributions in the results dashboard.
+**Development**
 
-**Validate tool-calling behaviour across models**
-Write a Python template that sends a structured tool-call prompt and asserts the response schema and tool invocation order. Run it against multiple models to surface differences in function-calling compliance before committing to a model for production.
+```bash
+npm run dev
+```
 
-**Regression testing before model or server upgrades**
-Maintain a fixed test suite covering your most important prompts and scenarios. Run it before and after upgrading a model version or inference server binary. The run history and leaderboard make regressions immediately visible.
+**Production build**
+
+```bash
+npm ci
+pip install -r backend/src/scripts/requirements.txt
+npm run build
+npm start
+```
+
+**Tests**
+
+```bash
+npm -w backend run test
+npm -w frontend run test
+```
+
+---
+
+## Environment Variables
+
+**Required**
+
+| Variable | Default | Description |
+|---|---|---|
+| `INFERHARNESS_API_TOKEN` | - | Shared token for API authentication. |
+
+**App URLs and ports**
+
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `8080` | Backend HTTP port. |
+| `VITE_INFERHARNESS_API_BASE_URL` | `http://localhost:8080` | Backend URL used by the browser. |
+| `VITE_INFERHARNESS_FRONTEND_BASE_URL` | `http://localhost:5173` | Frontend base URL. |
+| `VITE_INFERHARNESS_API_TOKEN` | - | Alternate frontend token environment variable. |
+
+**Storage and retention**
+
+| Variable | Default | Description |
+|---|---|---|
+| `INFERHARNESS_DB_PATH` | `./backend/data/db/inferharness.sqlite` | SQLite database file path. |
+| `INFERHARNESS_TEST_TEMPLATES_DIR` | `./backend/data/templates` | Test template storage directory. |
+| `RETENTION_DAYS` | `30` | Days to keep run results. |
+
+**Inference connectivity**
+
+| Variable | Default | Description |
+|---|---|---|
+| `INFERHARNESS_HEALTH_POLL_INTERVAL` | `30` | Seconds between inference-server health checks. |
+| `INFERHARNESS_CONTEXT_PROBE_TIMEOUT_MS` | `300000` | Context probe and discovery timeout in milliseconds. |
+| `CONNECTIVITY_TIMEOUT_MS` | `5000` | HTTP connectivity probe timeout in milliseconds. |
+| `INFERHARNESS_INFERENCE_PROXY` | - | HTTP proxy for outbound inference-server requests. |
+| `INFERHARNESS_INFERENCE_NO_PROXY` | `localhost,127.0.0.1` | Comma-separated no-proxy exceptions. |
+| `INFERHARNESS_PROXY_PERPLEXITY_DATASET` | - | Path to dataset file used by the proxy perplexity test protocol. |
+
+**Python and model inspection**
+
+| Variable | Default | Description |
+|---|---|---|
+| `INFERHARNESS_PYTHON_BIN` | `python3` | Python executable for subprocesses. |
+| `HF_TOKEN` / `HUGGINGFACE_HUB_TOKEN` | - | Hugging Face token for gated model inspection. |
+
+**Test-only**
+
+| Variable | Default | Description |
+|---|---|---|
+| `INFERHARNESS_DRY_RUN` | - | Set to `1` to skip live HTTP calls in tests. |
+
+---
+
+## Technical Architecture
+
+InferHarness runs as a local web application.
+
+```text
+Browser UI
+-> local backend API
+-> SQLite database, local files, inference servers, optional Python subprocess
+```
+
+**Frontend**
+React single-page application served by Vite. It talks to the backend through the API and does not access the database directly.
+
+**Backend**
+Fastify HTTP server responsible for server registration, model discovery, test execution, evaluation records, leaderboard data, and persistence.
+
+**Persistence**
+SQLite stores application data. Local files store templates, cached metadata, and generated artifacts.
+
+**Python subprocess**
+Used when a feature needs Python tooling, such as architecture inspection or Python-based test logic. Architecture inspection reads model configuration or GGUF metadata without loading model weights.
+
+**Inference servers**
+External local or remote servers provide model inference through OpenAI-compatible or Ollama-compatible HTTP APIs.
 
 ---
 
@@ -109,62 +344,15 @@ Maintain a fixed test suite covering your most important prompts and scenarios. 
 
 ---
 
-## Setup
+## For Contributors
 
-```bash
-npm install
-pip install -r backend/src/scripts/requirements.txt
-cp .env.example .env
-```
+The active backend schema catalog is documented in [`backend/src/schemas/README.md`](backend/src/schemas/README.md).
 
-Edit `.env` and set at minimum `INFERHARNESS_API_TOKEN`.
-
-## Environment Variables
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `INFERHARNESS_API_TOKEN` | ✅ | — | Shared token for API auth |
-| `PORT` | | `8080` | Backend HTTP port |
-| `INFERHARNESS_DB_PATH` | | `./backend/data/db/inferharness.sqlite` | SQLite file path |
-| `INFERHARNESS_TEST_TEMPLATES_DIR` | | `./backend/data/templates` | Template storage directory |
-| `RETENTION_DAYS` | | `30` | Days to keep run results |
-| `INFERHARNESS_HEALTH_POLL_INTERVAL` | | `30` | Seconds between inference server health checks |
-| `INFERHARNESS_CONTEXT_PROBE_TIMEOUT_MS` | | `300000` | Context probe / discovery TTL in milliseconds |
-| `CONNECTIVITY_TIMEOUT_MS` | | `5000` | HTTP connectivity probe timeout in milliseconds |
-| `INFERHARNESS_INFERENCE_PROXY` | | — | HTTP proxy for outbound inference server requests |
-| `INFERHARNESS_INFERENCE_NO_PROXY` | | `localhost,127.0.0.1` | Comma-separated no-proxy exceptions |
-| `INFERHARNESS_PROXY_PERPLEXITY_DATASET` | | — | Path to dataset file used by the proxy perplexity test protocol |
-| `INFERHARNESS_PYTHON_BIN` | | `python3` | Python executable for subprocesses |
-| `HF_TOKEN` / `HUGGINGFACE_HUB_TOKEN` | | — | Hugging Face token for gated model inspection |
-| `VITE_INFERHARNESS_API_BASE_URL` | | `http://localhost:8080` | Backend URL seen by the browser |
-| `VITE_INFERHARNESS_FRONTEND_BASE_URL` | | `http://localhost:5173` | Frontend base URL |
-| `VITE_INFERHARNESS_API_TOKEN` | | — | Alternate frontend token env name |
-| `INFERHARNESS_DRY_RUN` | | — | Set to `1` to skip live HTTP calls in tests |
-
-## Run
-
-**Development**
-```bash
-npm run dev
-```
-
-**Production build**
-```bash
-npm ci
-pip install -r backend/src/scripts/requirements.txt
-npm run build
-npm start
-```
-
-**Tests**
-```bash
-npm -w backend run test
-npm -w frontend run test
-```
+---
 
 ## Troubleshooting
 
-- `401 Unauthorized` — confirm `INFERHARNESS_API_TOKEN` in `.env` matches the value used by the client.
-- `409 Conflict` with `"Inference server has existing runs"` — servers with runs must be archived, not deleted.
-- `no such table` — delete the SQLite file and restart; the schema is applied on startup.
-- `python3 not found` — install Python 3.10+ and verify it is on `PATH`, or set `INFERHARNESS_PYTHON_BIN`.
+- `401 Unauthorized` - confirm `INFERHARNESS_API_TOKEN` in `.env` matches the token used by the client.
+- `409 Conflict` with `"Inference server has existing runs"` - servers with runs must be archived, not deleted.
+- `no such table` - delete the SQLite file and restart; the schema is applied on startup.
+- `python3 not found` - install Python 3.10+ and verify it is on `PATH`, or set `INFERHARNESS_PYTHON_BIN`.
