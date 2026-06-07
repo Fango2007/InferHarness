@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://inferharness.local/schemas/benchmark/model_profile.schema.json",
+  "title": "Benchmark ModelProfile",
+  "description": "Logical benchmark target. It reuses the canonical model object names from model-schema.json and the canonical inference-server object names from inferencer-server-schema.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "model", "identity", "inference_server", "runtime", "endpoints", "capabilities", "discovery"],
+  "properties": {
+    "kind": { "type": "string", "const": "model_profile" },
+    "schema_version": { "type": "string", "const": "benchmark_model_profile_v1" },
+    "profile_id": { "type": "string", "minLength": 1 },
+    "model": { "$ref": "#/$defs/modelRecord" },
+    "identity": { "$ref": "#/$defs/modelIdentity" },
+    "architecture": { "$ref": "#/$defs/modelArchitecture" },
+    "model_capabilities": { "$ref": "#/$defs/modelCapabilities" },
+    "inference_server": { "$ref": "#/$defs/inferenceServerRecord" },
+    "runtime": { "$ref": "#/$defs/serverRuntime" },
+    "endpoints": { "$ref": "#/$defs/serverEndpoints" },
+    "auth": { "$ref": "#/$defs/serverAuth" },
+    "capabilities": { "$ref": "#/$defs/serverCapabilities" },
+    "discovery": { "$ref": "#/$defs/serverDiscovery" },
+    "raw": { "type": "object", "additionalProperties": true },
+    "metadata": { "type": "object", "additionalProperties": true },
+    "provider_options": { "type": "object", "additionalProperties": true }
+  },
+  "$defs": {
+    "modelRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_id", "server_id", "display_name", "base_model_name"],
+      "properties": {
+        "model_id": { "type": "string", "minLength": 1 },
+        "server_id": { "type": "string", "minLength": 1 },
+        "display_name": { "type": "string", "minLength": 1 },
+        "base_model_name": { "type": ["string", "null"] }
+      }
+    },
+    "modelIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "family", "version", "revision", "checksum", "quantized_provider"],
+      "properties": {
+        "provider": {
+          "description": "LLM/base-model provider from the app model schema, not the serving runtime.",
+          "type": "string",
+          "enum": ["openai", "meta", "mistral", "qwen", "google", "moonshot", "cohere", "deepseek", "anthropic", "nvidia", "zai", "custom", "unknown"]
+        },
+        "family": { "type": ["string", "null"] },
+        "version": { "type": ["string", "null"] },
+        "revision": { "type": ["string", "null"] },
+        "checksum": { "type": ["string", "null"] },
+        "quantized_provider": { "type": ["string", "null"] }
+      }
+    },
+    "modelArchitecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "parameter_count", "precision", "quantisation"],
+      "properties": {
+        "type": { "type": "string", "enum": ["decoder-only", "encoder-decoder", "other", "unknown"] },
+        "parameter_count": { "type": ["number", "null"] },
+        "parameter_count_label": { "type": ["string", "null"] },
+        "active_parameter_label": { "type": ["string", "null"] },
+        "precision": { "type": "string", "enum": ["fp32", "fp16", "bf16", "int8", "int4", "mixed", "unknown"] },
+        "quantisation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "bits", "group_size"],
+          "properties": {
+            "method": { "type": "string", "enum": ["gguf", "gptq", "awq", "mlx", "none", "unknown"] },
+            "bits": { "type": ["number", "null"] },
+            "group_size": { "type": ["number", "null"] },
+            "scheme": { "type": ["string", "null"], "enum": ["k-quant", "legacy", "tensorwise", "unknown", null] },
+            "variant": { "type": ["string", "null"], "enum": ["S", "M", "L", null] },
+            "weight_format": { "type": ["string", "null"] }
+          }
+        },
+        "format": { "type": ["string", "null"], "enum": ["MLX", "GGUF", "GPTQ", "AWQ", "SafeTensors", null] }
+      }
+    },
+    "modelCapabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generation", "multimodal", "reasoning"],
+      "properties": {
+        "generation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text", "json_schema_output", "tools", "embeddings"],
+          "properties": {
+            "text": { "type": "boolean" },
+            "json_schema_output": { "type": "boolean" },
+            "tools": { "type": "boolean" },
+            "embeddings": { "type": "boolean" }
+          }
+        },
+        "multimodal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["vision", "audio"],
+          "properties": {
+            "vision": { "type": "boolean" },
+            "audio": { "type": "boolean" }
+          }
+        },
+        "reasoning": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["supported", "explicit_tokens"],
+          "properties": {
+            "supported": { "type": "boolean" },
+            "explicit_tokens": { "type": "boolean" }
+          }
+        },
+        "use_case": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "thinking": { "type": "boolean" },
+            "coding": { "type": "boolean" },
+            "instruct": { "type": "boolean" },
+            "mixture_of_experts": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "inferenceServerRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["server_id", "display_name"],
+      "properties": {
+        "server_id": { "type": "string", "minLength": 1 },
+        "display_name": { "type": "string", "minLength": 1 },
+        "active": { "type": "boolean" },
+        "archived": { "type": "boolean" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "archived_at": { "type": ["string", "null"] }
+      }
+    },
+    "serverRuntime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["server_software", "api"],
+      "properties": {
+        "retrieved_at": { "type": "string" },
+        "source": { "type": "string", "enum": ["server", "client", "mixed"] },
+        "server_software": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version", "build"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "version": { "type": ["string", "null"] },
+            "build": { "type": ["string", "null"] }
+          }
+        },
+        "api": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema_family", "api_version"],
+          "properties": {
+            "schema_family": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "enum": ["openai-compatible", "ollama", "custom"] },
+              "uniqueItems": true
+            },
+            "api_version": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+    "serverEndpoints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_url"],
+      "properties": {
+        "base_url": { "type": "string", "pattern": "^https?://" },
+        "health_url": { "type": ["string", "null"] },
+        "https": { "type": "boolean" }
+      }
+    },
+    "serverAuth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "header_name", "token_env"],
+      "properties": {
+        "type": { "type": "string", "enum": ["none", "bearer", "basic", "oauth", "custom"] },
+        "header_name": { "type": "string" },
+        "token_env": { "type": ["string", "null"] },
+        "token": { "type": ["string", "null"] },
+        "token_present": { "type": "boolean" }
+      }
+    },
+    "serverCapabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["server", "generation", "multimodal", "reasoning", "concurrency", "enforcement"],
+      "properties": {
+        "server": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["streaming", "models_endpoint"],
+          "properties": {
+            "streaming": { "type": "boolean" },
+            "models_endpoint": { "type": "boolean" }
+          }
+        },
+        "generation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text", "json_schema_output", "tools", "embeddings"],
+          "properties": {
+            "text": { "type": "boolean" },
+            "json_schema_output": { "type": "boolean" },
+            "tools": { "type": "boolean" },
+            "embeddings": { "type": "boolean" }
+          }
+        },
+        "multimodal": { "type": "object", "additionalProperties": true },
+        "reasoning": { "type": "object", "additionalProperties": true },
+        "concurrency": { "type": "object", "additionalProperties": true },
+        "enforcement": { "type": "string", "enum": ["server"] }
+      }
+    },
+    "serverDiscovery": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["retrieved_at"],
+      "properties": {
+        "retrieved_at": { "type": "string" },
+        "ttl_seconds": { "type": "number" },
+        "model_list": { "type": "object", "additionalProperties": true }
+      }
+    }
+  }
+}

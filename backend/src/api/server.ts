@@ -9,7 +9,6 @@ import { registerAuth } from './middleware/auth.js';
 import { registerResultsRoutes } from './routes/results.js';
 import { registerResultsViewRoutes } from './routes/results-view.js';
 import { registerRunsRoutes } from './routes/runs.js';
-import { registerRunGroupsRoutes } from './routes/run-groups.js';
 import { registerSuitesRoutes } from './routes/suites.js';
 import { registerInferenceServersRoutes } from './routes/inference-servers.js';
 import { registerTestsRoutes } from './routes/tests.js';
@@ -22,6 +21,7 @@ import { registerEvalInferenceRoutes } from './routes/eval-inference.js';
 import { registerEvaluationsRoutes } from './routes/evaluations.js';
 import { registerLeaderboardRoutes } from './routes/leaderboard.js';
 import { registerArchitectureRoutes } from './routes/architecture.js';
+import { registerBenchmarkRoutes } from './routes/benchmark.js';
 import { registerInferenceParamPresetRoutes } from './routes/inference-param-presets.js';
 import { registerEvaluationQueueRoutes } from './routes/evaluation-queue.js';
 
@@ -102,7 +102,6 @@ export function createServer() {
   registerInferenceServersRoutes(app);
   registerTestsRoutes(app);
   registerRunsRoutes(app);
-  registerRunGroupsRoutes(app);
   registerSuitesRoutes(app);
   registerProfilesRoutes(app);
   registerModelsRoutes(app);
@@ -116,6 +115,7 @@ export function createServer() {
   registerInferenceParamPresetRoutes(app);
   registerLeaderboardRoutes(app);
   registerArchitectureRoutes(app);
+  registerBenchmarkRoutes(app);
 
   return app;
 }

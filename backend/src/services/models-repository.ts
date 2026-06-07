@@ -32,12 +32,18 @@ export interface ModelInput {
     quantisation?: Partial<ModelArchitecture['quantisation']>;
   };
   modalities?: Partial<ModelModalities>;
-  capabilities?: Partial<Omit<ModelCapabilities, 'use_case'>> & {
+  capabilities?: {
+    generation?: Partial<ModelCapabilities['generation']>;
+    multimodal?: Partial<ModelCapabilities['multimodal']>;
+    reasoning?: Partial<ModelCapabilities['reasoning']>;
     use_case?: Partial<ModelCapabilities['use_case']>;
   };
   limits?: Partial<ModelLimits>;
   performance?: Partial<ModelPerformance>;
-  configuration?: Partial<ModelConfiguration>;
+  configuration?: Partial<Omit<ModelConfiguration, 'default_parameters' | 'context_strategy'>> & {
+    default_parameters?: Partial<ModelConfiguration['default_parameters']>;
+    context_strategy?: Partial<ModelConfiguration['context_strategy']>;
+  };
   discovery?: Partial<ModelDiscovery>;
   raw?: Record<string, unknown>;
 }
@@ -46,6 +52,10 @@ export interface DiscoveredModelInput {
   server_id: string;
   model_id: string;
   display_name?: string | null;
+  provider?: string | null;
+  base_model_name?: string | null;
+  default_temperature?: number | null;
+  capabilities?: Record<string, boolean>;
   context_window_tokens?: number | null;
   quantisation?: {
     method?: string | null;
@@ -253,7 +263,7 @@ function mergePerformance(
 
 function mergeConfiguration(
   existing: ModelConfiguration | null,
-  updates: Partial<ModelConfiguration> | undefined
+  updates: ModelInput['configuration'] | undefined
 ): ModelConfiguration {
   const base = existing ?? defaultConfiguration();
   if (!updates) {
@@ -289,8 +299,71 @@ function isBlankText(value: string | null | undefined): boolean {
   return value == null || value.trim() === '' || value.trim().toLowerCase() === 'unknown';
 }
 
+function normaliseProvider(value: string | null | undefined): ModelProvider | null {
+  if (!value) {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'mistralai' || normalized === 'mistral') {
+    return 'mistral';
+  }
+  if (normalized === 'openai') {
+    return 'openai';
+  }
+  return null;
+}
+
+function providerCapabilities(input: DiscoveredModelInput): ModelInput['capabilities'] {
+  const capabilities = input.capabilities ?? {};
+  const lowerId = input.model_id.toLowerCase();
+  const lowerDisplay = (input.display_name ?? '').toLowerCase();
+  const text = Boolean(capabilities.completion_chat);
+  const embeddings = /\bembed/.test(lowerId) || /\bembed/.test(lowerDisplay);
+  const audioInput = Boolean(capabilities.audio || capabilities.audio_transcription || capabilities.audio_transcription_realtime);
+  const audioOutput = Boolean(capabilities.audio_speech);
+  const vision = Boolean(capabilities.vision);
+  const reasoning = Boolean(capabilities.reasoning);
+  const coding = Boolean(capabilities.completion_fim) || /\b(codestral|devstral|code|coder)\b/.test(`${lowerId} ${lowerDisplay}`);
+
+  return {
+    generation: {
+      text,
+      tools: Boolean(capabilities.function_calling),
+      embeddings
+    },
+    multimodal: {
+      vision,
+      audio: audioInput || audioOutput
+    },
+    reasoning: {
+      supported: reasoning
+    },
+    use_case: {
+      thinking: reasoning,
+      coding
+    }
+  };
+}
+
+function providerModalities(input: DiscoveredModelInput): Partial<ModelModalities> {
+  const capabilities = input.capabilities ?? {};
+  const lowerId = input.model_id.toLowerCase();
+  const lowerDisplay = (input.display_name ?? '').toLowerCase();
+  const embeds = /\bembed/.test(lowerId) || /\bembed/.test(lowerDisplay);
+  const inputModalities = new Set<string>(['text']);
+  const outputModalities = new Set<string>(embeds ? ['embedding'] : ['text']);
+  if (capabilities.vision) inputModalities.add('image');
+  if (capabilities.audio || capabilities.audio_transcription || capabilities.audio_transcription_realtime) inputModalities.add('audio');
+  if (capabilities.audio_speech) outputModalities.add('audio');
+  return {
+    input: Array.from(inputModalities),
+    output: Array.from(outputModalities)
+  };
+}
+
 function inferredModelInput(input: DiscoveredModelInput): ModelInput {
   const guessed = guessModelCharacteristics(input.model_id);
+  const providerCaps = providerCapabilities(input);
   const discoveredMethod = input.quantisation?.method;
   const quantisationMethod =
     discoveredMethod && discoveredMethod !== 'unknown'
@@ -301,10 +374,10 @@ function inferredModelInput(input: DiscoveredModelInput): ModelInput {
       model_id: input.model_id,
       server_id: input.server_id,
       display_name: input.display_name?.trim() || input.model_id,
-      base_model_name: extractBaseModelName(input.model_id)
+      base_model_name: input.base_model_name?.trim() || extractBaseModelName(input.model_id)
     },
     identity: {
-      provider: guessed.provider ?? 'unknown',
+      provider: normaliseProvider(input.provider) ?? guessed.provider ?? 'unknown',
       quantized_provider: guessed.quantized_provider
     },
     architecture: {
@@ -322,11 +395,21 @@ function inferredModelInput(input: DiscoveredModelInput): ModelInput {
       }
     },
     capabilities: {
-      use_case: guessed.use_case
+      ...providerCaps,
+      use_case: {
+        thinking: Boolean(providerCaps?.use_case?.thinking || guessed.use_case.thinking),
+        coding: Boolean(providerCaps?.use_case?.coding || guessed.use_case.coding),
+        instruct: guessed.use_case.instruct,
+        mixture_of_experts: guessed.use_case.mixture_of_experts
+      }
     },
+    modalities: providerModalities(input),
     limits: {
       context_window_tokens: input.context_window_tokens ?? null
     },
+    configuration: typeof input.default_temperature === 'number'
+      ? { default_parameters: { temperature: input.default_temperature } }
+      : undefined,
     discovery: {
       retrieved_at: nowIso(),
       source: 'server',
@@ -388,14 +471,60 @@ function fillMissingModelInput(existing: ModelRecord, inferred: ModelInput): Mod
   if (existing.limits.context_window_tokens == null && inferred.limits?.context_window_tokens != null) {
     updates.limits = { context_window_tokens: inferred.limits.context_window_tokens };
   }
+  if (
+    existing.configuration.default_parameters.temperature == null &&
+    inferred.configuration?.default_parameters?.temperature != null
+  ) {
+    updates.configuration = {
+      default_parameters: {
+        temperature: inferred.configuration.default_parameters.temperature
+      }
+    };
+  }
+  const generationUpdates: Partial<ModelCapabilities['generation']> = {};
+  for (const key of ['text', 'tools', 'embeddings'] as const) {
+    if (!existing.capabilities.generation[key] && inferred.capabilities?.generation?.[key]) {
+      generationUpdates[key] = true;
+    }
+  }
+  const multimodalUpdates: Partial<ModelCapabilities['multimodal']> = {};
+  for (const key of ['vision', 'audio'] as const) {
+    if (!existing.capabilities.multimodal[key] && inferred.capabilities?.multimodal?.[key]) {
+      multimodalUpdates[key] = true;
+    }
+  }
+  const reasoningUpdates: Partial<ModelCapabilities['reasoning']> = {};
+  if (!existing.capabilities.reasoning.supported && inferred.capabilities?.reasoning?.supported) {
+    reasoningUpdates.supported = true;
+  }
   const useCaseUpdates: Partial<ModelCapabilities['use_case']> = {};
   for (const key of ['thinking', 'coding', 'instruct', 'mixture_of_experts'] as const) {
     if (!existing.capabilities.use_case[key] && inferred.capabilities?.use_case?.[key]) {
       useCaseUpdates[key] = true;
     }
   }
-  if (Object.keys(useCaseUpdates).length) {
-    updates.capabilities = { use_case: useCaseUpdates };
+  if (
+    Object.keys(generationUpdates).length ||
+    Object.keys(multimodalUpdates).length ||
+    Object.keys(reasoningUpdates).length ||
+    Object.keys(useCaseUpdates).length
+  ) {
+    updates.capabilities = {
+      ...(Object.keys(generationUpdates).length ? { generation: generationUpdates } : {}),
+      ...(Object.keys(multimodalUpdates).length ? { multimodal: multimodalUpdates } : {}),
+      ...(Object.keys(reasoningUpdates).length ? { reasoning: reasoningUpdates } : {}),
+      ...(Object.keys(useCaseUpdates).length ? { use_case: useCaseUpdates } : {})
+    };
+  }
+  const modalityUpdates: Partial<ModelModalities> = {};
+  if (inferred.modalities?.input?.some((entry) => !existing.modalities.input.includes(entry))) {
+    modalityUpdates.input = Array.from(new Set([...existing.modalities.input, ...inferred.modalities.input]));
+  }
+  if (inferred.modalities?.output?.some((entry) => !existing.modalities.output.includes(entry))) {
+    modalityUpdates.output = Array.from(new Set([...existing.modalities.output, ...inferred.modalities.output]));
+  }
+  if (Object.keys(modalityUpdates).length) {
+    updates.modalities = modalityUpdates;
   }
   return updates;
 }

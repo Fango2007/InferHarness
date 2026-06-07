@@ -83,6 +83,11 @@ export interface DiscoveryInfo {
         variant?: string | null;
         weight_format?: string | null;
       } | string | null;
+      provider?: string | null;
+      base_model_name?: string | null;
+      default_temperature?: number | null;
+      capabilities?: Record<string, boolean>;
+      raw?: Record<string, unknown>;
     }>;
   };
 }
@@ -321,7 +326,6 @@ export function deleteInferenceServer(id: string): boolean {
         SELECT id FROM runs WHERE inference_server_id = ?
       )
     `).run(id);
-    db.prepare('DELETE FROM run_group_items WHERE inference_server_id = ?').run(id);
     db.prepare('DELETE FROM runs WHERE inference_server_id = ?').run(id);
     db.prepare('DELETE FROM evaluations WHERE server_id = ?').run(id);
     db.prepare('DELETE FROM models WHERE server_id = ?').run(id);

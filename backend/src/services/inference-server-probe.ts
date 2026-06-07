@@ -8,6 +8,11 @@ export interface NormalizedProbeModel {
   display_name: string | null;
   context_window_tokens: number | null;
   quantisation: QuantisationDescriptor | null;
+  provider?: string | null;
+  base_model_name?: string | null;
+  default_temperature?: number | null;
+  capabilities?: Record<string, boolean>;
+  raw?: Record<string, unknown>;
 }
 
 export interface ProbeParams {
@@ -33,12 +38,37 @@ export function normalizeOpenAiModels(payload: Record<string, unknown>): Normali
   return (entries as Record<string, unknown>[])
     .map((entry) => {
       const modelId = typeof entry.id === 'string' ? entry.id : '';
+      const provider = typeof entry.owned_by === 'string' && entry.owned_by.trim()
+        ? entry.owned_by.trim()
+        : null;
+      const capabilities = entry.capabilities && typeof entry.capabilities === 'object' && !Array.isArray(entry.capabilities)
+        ? Object.fromEntries(
+            Object.entries(entry.capabilities as Record<string, unknown>)
+              .filter(([, value]) => typeof value === 'boolean')
+          ) as Record<string, boolean>
+        : undefined;
+      const displayName = typeof entry.name === 'string' && entry.name.trim()
+        ? entry.name
+        : modelId || null;
+      const contextWindow =
+        typeof entry.context_window === 'number'
+          ? entry.context_window
+          : typeof entry.context_length === 'number'
+            ? entry.context_length
+            : typeof entry.max_context_length === 'number'
+              ? entry.max_context_length
+              : null;
       const label = modelId ? extractQuantisationLabel(modelId) : null;
       return {
         model_id: modelId,
-        display_name: modelId || null,
-        context_window_tokens: null,
-        quantisation: label ? normaliseQuantisationFromLabel(label) : null
+        display_name: displayName,
+        context_window_tokens: contextWindow,
+        quantisation: label ? normaliseQuantisationFromLabel(label) : null,
+        provider,
+        base_model_name: typeof entry.name === 'string' && entry.name.trim() ? entry.name.trim() : null,
+        default_temperature: typeof entry.default_model_temperature === 'number' ? entry.default_model_temperature : null,
+        capabilities,
+        raw: entry
       };
     })
     .filter((entry) => entry.model_id && !entry.model_id.startsWith('<remote>/'));

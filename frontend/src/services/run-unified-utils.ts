@@ -1,6 +1,5 @@
 import type { InferenceServerRecord } from './inference-servers-api.js';
 import type { ModelRecord } from './models-api.js';
-import type { RunGroupDetail } from './run-groups-api.js';
 
 export const RUN_ACCENTS = [
   '#3776ab',
@@ -94,14 +93,16 @@ export function mergeRunModelOptions(
   models: ModelRecord[]
 ): RunModelOption[] {
   const options = new Map<string, RunModelOption>();
+  const runnableServers = servers.filter((server) => server.inference_server.active && !server.inference_server.archived);
+  const runnableServerIds = new Set(runnableServers.map((server) => server.inference_server.server_id));
   const serverNames = new Map(
-    servers.map((server) => [
+    runnableServers.map((server) => [
       server.inference_server.server_id,
       server.inference_server.display_name
     ])
   );
 
-  for (const server of servers) {
+  for (const server of runnableServers) {
     const serverId = server.inference_server.server_id;
     for (const model of server.discovery.model_list.normalised ?? []) {
       const option: RunModelOption = {
@@ -118,7 +119,12 @@ export function mergeRunModelOptions(
   }
 
   for (const record of models) {
-    if (record.model.archived || !record.model.active) {
+    if (
+      !runnableServerIds.has(record.model.server_id) ||
+      record.model.archived ||
+      !record.model.active ||
+      record.discovery?.discovery_status === 'absent'
+    ) {
       continue;
     }
     const key = targetKey({
@@ -150,23 +156,4 @@ export function assignRunAccents(targets: RunTarget[]): AccentedRunTarget[] {
     accent_index: index,
     accent: RUN_ACCENTS[index]
   }));
-}
-
-export function summarizeRunGroup(group: RunGroupDetail | null) {
-  const items = group?.items ?? [];
-  const pass = items.filter((item) => item.status === 'completed').length;
-  const streaming = items.filter((item) => item.status === 'running' || item.status === 'queued').length;
-  const failed = items.filter((item) => item.status === 'failed').length;
-  const canceled = items.filter((item) => item.status === 'canceled').length;
-  const fastest = items
-    .map((item) => {
-      const total = item.results
-        .map((result) => result.metrics?.total_ms)
-        .find((value): value is number => typeof value === 'number' && Number.isFinite(value));
-      return total == null ? null : { letter: item.stable_letter, total_ms: total };
-    })
-    .filter((entry): entry is { letter: string; total_ms: number } => Boolean(entry))
-    .sort((a, b) => a.total_ms - b.total_ms)[0] ?? null;
-
-  return { pass, streaming, failed, canceled, fastest };
 }

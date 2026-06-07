@@ -60,6 +60,14 @@ export interface ActiveTestRecord {
   template_id: string;
 }
 
+export interface ModelRecord {
+  model: {
+    server_id: string;
+    model_id: string;
+    display_name: string;
+  };
+}
+
 async function parseJsonResponse<T>(response: APIResponse, label: string): Promise<T> {
   const contentType = response.headers()['content-type'] ?? '';
   if (!contentType.includes('application/json')) {
@@ -124,6 +132,53 @@ export async function archiveInferenceServer(request: APIRequestContext, id: str
     const body = await response.text();
     throw new Error(`archiveInferenceServer failed: ${response.status()} ${body}`);
   }
+}
+
+export async function createModel(
+  request: APIRequestContext,
+  serverId: string,
+  overrides?: Partial<{
+    model_id: string;
+    display_name: string;
+    provider: string;
+    family: string | null;
+    format: string | null;
+  }>
+) {
+  const modelId = overrides?.model_id ?? `e2e-model-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+  const displayName = overrides?.display_name ?? modelId;
+  const response = await request.post(`${API_BASE_URL}/models`, {
+    data: {
+      model: {
+        server_id: serverId,
+        model_id: modelId,
+        display_name: displayName,
+        base_model_name: displayName,
+        active: true,
+        archived: false
+      },
+      identity: {
+        provider: overrides?.provider ?? 'custom',
+        family: overrides?.family ?? null,
+        version: null,
+        revision: null,
+        checksum: null,
+        quantized_provider: null
+      },
+      architecture: {
+        format: overrides?.format ?? null
+      },
+      capabilities: {
+        use_case: { thinking: false, coding: false, instruct: true, mixture_of_experts: false }
+      }
+    },
+    headers: authHeaders
+  });
+  if (!response.ok()) {
+    const body = await response.text();
+    throw new Error(`createModel failed: ${response.status()} ${body}`);
+  }
+  return parseJsonResponse<ModelRecord>(response, 'createModel');
 }
 
 export async function listTemplates(request: APIRequestContext) {

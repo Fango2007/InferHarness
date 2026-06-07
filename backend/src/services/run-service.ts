@@ -481,7 +481,6 @@ export function deleteRun(id: string): DeleteRunResult {
     }
 
     db.prepare('DELETE FROM test_results WHERE run_id = ?').run(runId);
-    db.prepare('DELETE FROM run_group_items WHERE child_run_id = ?').run(runId);
     db.prepare('DELETE FROM runs WHERE id = ?').run(runId);
   });
 

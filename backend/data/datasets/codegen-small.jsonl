@@ -1,0 +1,3 @@
+{"id":"codegen-1","system_prompt":"You are a concise coding assistant. Return only the requested code.","prompt":"Write a JavaScript function named add that returns the sum of two numbers.","tags":["codegen","javascript"]}
+{"id":"codegen-2","system_prompt":"You are a concise coding assistant. Return only the requested code.","prompt":"Write a Python function named is_even that returns true when an integer is even.","tags":["codegen","python"]}
+{"id":"codegen-3","system_prompt":"You are a concise coding assistant. Return only the requested code.","prompt":"Write a TypeScript function named clamp that limits a number between min and max.","tags":["codegen","typescript"]}

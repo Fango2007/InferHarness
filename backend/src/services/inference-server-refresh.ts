@@ -131,9 +131,13 @@ export async function refreshDiscovery(server: InferenceServerRecord): Promise<I
       server_id: server.inference_server.server_id,
       model_id: model.model_id,
       display_name: model.display_name,
+      provider: model.provider,
+      base_model_name: model.base_model_name,
+      default_temperature: model.default_temperature,
+      capabilities: model.capabilities,
       context_window_tokens: model.context_window_tokens,
       quantisation: model.quantisation,
-      raw: { discovery_model: model }
+      raw: { discovery_model: model.raw ?? model }
     });
   }
   markAbsentServerModels(

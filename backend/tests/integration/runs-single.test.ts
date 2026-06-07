@@ -91,18 +91,6 @@ function seedRunWithDependencies(input: { runId: string; status?: string; result
       completeness_score, helpfulness_score, note, source_test_result_id, created_at
     ) VALUES (?, ?, 'model-delete', 'srv-delete', '{}', 'Answer', 1, 1, 2, 42, 1, 0.001, 5, 5, 5, 5, 5, null, ?, ?)
   `).run(`evaluation-${runId}`, `prompt-${runId}`, resultId, now);
-  db.prepare(`
-    INSERT INTO run_groups (
-      id, status, selected_template_ids, test_overrides, profile_id, profile_version,
-      created_at, started_at, ended_at, updated_at
-    ) VALUES (?, 'completed', '[]', null, null, null, ?, ?, ?, ?)
-  `).run(`group-${runId}`, now, now, now, now);
-  db.prepare(`
-    INSERT INTO run_group_items (
-      id, group_id, child_run_id, inference_server_id, model_id, stable_letter,
-      accent_index, status, failure_reason, created_at, started_at, ended_at, updated_at
-    ) VALUES (?, ?, ?, 'srv-delete', 'model-delete', 'A', 0, 'completed', null, ?, ?, ?, ?)
-  `).run(`group-item-${runId}`, `group-${runId}`, runId, now, now, now, now);
 }
 
 beforeEach(() => {
@@ -182,8 +170,6 @@ describe('runs API', () => {
     expect((db.prepare('SELECT COUNT(1) AS count FROM test_result_documents WHERE run_id = ?').get('run-delete') as { count: number }).count).toBe(0);
     expect((db.prepare('SELECT COUNT(1) AS count FROM metric_samples WHERE test_result_id = ?').get('result-run-delete') as { count: number }).count).toBe(0);
     expect((db.prepare('SELECT COUNT(1) AS count FROM evaluation_queue_skips WHERE test_result_id = ?').get('result-run-delete') as { count: number }).count).toBe(0);
-    expect((db.prepare('SELECT COUNT(1) AS count FROM run_group_items WHERE child_run_id = ?').get('run-delete') as { count: number }).count).toBe(0);
-    expect((db.prepare('SELECT COUNT(1) AS count FROM run_groups WHERE id = ?').get('group-run-delete') as { count: number }).count).toBe(1);
     expect(
       (db.prepare('SELECT source_test_result_id FROM evaluations WHERE id = ?').get('evaluation-run-delete') as { source_test_result_id: string | null }).source_test_result_id
     ).toBeNull();

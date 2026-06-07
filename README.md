@@ -233,6 +233,26 @@ Edit `.env` and set at least `INFERHARNESS_API_TOKEN`.
 npm run dev
 ```
 
+To run the backend on a different port, set both the backend `PORT` and the frontend API base URL. For example, to use port `9090`:
+
+```bash
+PORT=9090 VITE_INFERHARNESS_API_BASE_URL=http://localhost:9090 npm run dev
+```
+
+For a persistent local setup, put the same values in `.env`:
+
+```dotenv
+PORT=9090
+VITE_INFERHARNESS_API_BASE_URL=http://localhost:9090
+```
+
+If you start services separately, use the same pairing:
+
+```bash
+PORT=9090 npm run start:backend
+VITE_INFERHARNESS_API_BASE_URL=http://localhost:9090 npm -w frontend run dev
+```
+
 **Production build**
 
 ```bash
@@ -283,8 +303,10 @@ npm -w frontend run test
 | `INFERHARNESS_HEALTH_POLL_INTERVAL` | `30` | Seconds between inference-server health checks. |
 | `INFERHARNESS_CONTEXT_PROBE_TIMEOUT_MS` | `300000` | Context probe and discovery timeout in milliseconds. |
 | `CONNECTIVITY_TIMEOUT_MS` | `5000` | HTTP connectivity probe timeout in milliseconds. |
+| `INFERHARNESS_BENCHMARK_DATASET_ROOT` | - | Absolute directory for server-side benchmark dataset files used by manifest-only runs. |
 | `INFERHARNESS_INFERENCE_PROXY` | - | HTTP proxy for outbound inference-server requests. |
 | `INFERHARNESS_INFERENCE_NO_PROXY` | `localhost,127.0.0.1` | Comma-separated no-proxy exceptions. |
+| `INFERHARNESS_INFERENCE_TLS_INSECURE` | `false` | Set to `true` to disable TLS certificate verification for outbound inference-server requests, equivalent to curl `--insecure`. |
 | `INFERHARNESS_PROXY_PERPLEXITY_DATASET` | - | Path to dataset file used by the proxy perplexity test protocol. |
 
 **Python and model inspection**
