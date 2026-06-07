@@ -343,17 +343,42 @@ describe('inference servers contract', () => {
       throw new Error(`create inference server failed: ${createResponse.statusCode} ${createResponse.body}`);
     }
     const created = createResponse.json();
-    const modelId = 'codestral-latest';
+    const modelId = 'codestral-2508';
     const payload = {
       data: [
+        {
+          id: 'codestral-latest',
+          object: 'model',
+          owned_by: 'mistralai',
+          name: modelId,
+          description: 'Our cutting-edge language model for coding released August 2025.',
+          max_context_length: 256000,
+          aliases: [modelId, 'mistral-code-latest'],
+          deprecation: null,
+          deprecation_replacement_model: null,
+          default_model_temperature: 0.3,
+          type: 'base',
+          capabilities: {
+            completion_chat: true,
+            function_calling: true,
+            reasoning: false,
+            completion_fim: true,
+            fine_tuning: false,
+            vision: false,
+            audio: false,
+            audio_transcription: false,
+            audio_transcription_realtime: false,
+            audio_speech: false
+          }
+        },
         {
           id: modelId,
           object: 'model',
           owned_by: 'mistralai',
-          name: 'codestral-2508',
+          name: modelId,
           description: 'Our cutting-edge language model for coding released August 2025.',
           max_context_length: 256000,
-          aliases: ['codestral-2508', 'mistral-code-latest'],
+          aliases: ['codestral-latest', 'mistral-code-latest'],
           deprecation: null,
           deprecation_replacement_model: null,
           default_model_temperature: 0.3,
@@ -378,6 +403,23 @@ describe('inference servers contract', () => {
           name: 'mistral-embed-2312',
           max_context_length: 8192,
           aliases: ['mistral-embed-2312'],
+          default_model_temperature: null,
+          capabilities: {
+            completion_chat: false,
+            function_calling: false,
+            reasoning: false,
+            completion_fim: false,
+            vision: false,
+            audio: false
+          }
+        },
+        {
+          id: 'mistral-embed-2312',
+          object: 'model',
+          owned_by: 'mistralai',
+          name: 'mistral-embed-2312',
+          max_context_length: 8192,
+          aliases: ['mistral-embed'],
           default_model_temperature: null,
           capabilities: {
             completion_chat: false,
@@ -416,7 +458,11 @@ describe('inference servers contract', () => {
     });
     const models = modelsResponse.json();
     const model = models.find((entry: { model: { model_id: string } }) => entry.model.model_id === modelId);
-    const embed = models.find((entry: { model: { model_id: string } }) => entry.model.model_id === 'mistral-embed');
+    const alias = models.find((entry: { model: { model_id: string } }) => entry.model.model_id === 'codestral-latest');
+    const embedAlias = models.find((entry: { model: { model_id: string } }) => entry.model.model_id === 'mistral-embed');
+    const embed = models.find((entry: { model: { model_id: string } }) => entry.model.model_id === 'mistral-embed-2312');
+    expect(alias).toBeUndefined();
+    expect(embedAlias).toBeUndefined();
     expect(model.model.base_model_name).toBe('codestral-2508');
     expect(model.identity.provider).toBe('mistral');
     expect(model.limits.context_window_tokens).toBe(256000);
@@ -425,7 +471,7 @@ describe('inference servers contract', () => {
     expect(model.capabilities.generation.tools).toBe(true);
     expect(model.capabilities.reasoning.supported).toBe(false);
     expect(model.capabilities.use_case.coding).toBe(true);
-    expect(model.raw.discovery_model.aliases).toEqual(['codestral-2508', 'mistral-code-latest']);
+    expect(model.raw.discovery_model.aliases).toEqual(['codestral-latest', 'mistral-code-latest']);
     expect(model.raw.discovery_model.description).toContain('coding');
     expect(embed.identity.provider).toBe('mistral');
     expect(embed.capabilities.generation.embeddings).toBe(true);

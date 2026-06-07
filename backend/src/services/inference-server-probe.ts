@@ -33,9 +33,32 @@ export interface ProbeResult {
   error?: string;
 }
 
+function isMistralProvider(provider: string | null | undefined): boolean {
+  const normalized = provider?.trim().toLowerCase();
+  return normalized === 'mistralai' || normalized === 'mistral';
+}
+
+function keepCanonicalMistralModels(models: NormalizedProbeModel[]): NormalizedProbeModel[] {
+  const kept: NormalizedProbeModel[] = [];
+  const seenMistralNames = new Set<string>();
+  for (const model of models) {
+    if (!isMistralProvider(model.provider)) {
+      kept.push(model);
+      continue;
+    }
+    const canonicalName = model.base_model_name?.trim();
+    if (!canonicalName || model.model_id !== canonicalName || seenMistralNames.has(canonicalName)) {
+      continue;
+    }
+    seenMistralNames.add(canonicalName);
+    kept.push(model);
+  }
+  return kept;
+}
+
 export function normalizeOpenAiModels(payload: Record<string, unknown>): NormalizedProbeModel[] {
   const entries = Array.isArray(payload.data) ? payload.data : [];
-  return (entries as Record<string, unknown>[])
+  const models = (entries as Record<string, unknown>[])
     .map((entry) => {
       const modelId = typeof entry.id === 'string' ? entry.id : '';
       const provider = typeof entry.owned_by === 'string' && entry.owned_by.trim()
@@ -72,6 +95,7 @@ export function normalizeOpenAiModels(payload: Record<string, unknown>): Normali
       };
     })
     .filter((entry) => entry.model_id && !entry.model_id.startsWith('<remote>/'));
+  return keepCanonicalMistralModels(models);
 }
 
 export function normalizeOllamaModels(payload: Record<string, unknown>): NormalizedProbeModel[] {
