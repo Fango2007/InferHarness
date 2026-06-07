@@ -4,3 +4,4 @@ build/
 coverage/
 *.min.js
 specs/new-layouts/**/wireframes/*.jsx
+specs/new-layouts/**/project/**

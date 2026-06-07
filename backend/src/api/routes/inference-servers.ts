@@ -11,11 +11,11 @@ import {
   unarchiveInferenceServer,
   updateInferenceServerRecord
 } from '../../services/inference-servers-repository.js';
-import { InferenceServerRecord, deleteInferenceServer } from '../../models/inference-server.js';
+import { AuthType, InferenceServerRecord, deleteInferenceServer } from '../../models/inference-server.js';
 import { InferenceServerRefreshError, refreshDiscovery, refreshRuntime } from '../../services/inference-server-refresh.js';
 import { checkInferenceServerHealth } from '../../services/inference-server-connectivity.js';
 import { probeServer } from '../../services/inference-server-probe.js';
-import { buildProbeAuthHeaders } from '../../services/inference-server-auth.js';
+import { buildInferenceServerAuthHeaders, buildProbeAuthHeaders } from '../../services/inference-server-auth.js';
 import { inferenceServerCreateSchema, inferenceServerUpdateSchema } from '../inference-servers-schemas.js';
 
 function sanitizeServer(server: InferenceServerRecord): InferenceServerRecord {
@@ -28,6 +28,30 @@ function sanitizeServer(server: InferenceServerRecord): InferenceServerRecord {
       token_present: Boolean(token)
     }
   };
+}
+
+function normalizeProbeBaseUrl(value: string): string | null {
+  try {
+    const parsed = new URL(value);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return null;
+    }
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return null;
+  }
+}
+
+function findSavedProbeServer(serverId: string | undefined, baseUrl: string): InferenceServerRecord | null {
+  if (serverId) {
+    return fetchInferenceServer(serverId);
+  }
+  const normalizedBaseUrl = normalizeProbeBaseUrl(baseUrl);
+  if (!normalizedBaseUrl) {
+    return null;
+  }
+  const matches = fetchInferenceServers().filter((server) => normalizeProbeBaseUrl(server.endpoints.base_url) === normalizedBaseUrl);
+  return matches.length === 1 ? matches[0] : null;
 }
 
 export function registerInferenceServersRoutes(app: FastifyInstance): void {
@@ -65,15 +89,34 @@ export function registerInferenceServersRoutes(app: FastifyInstance): void {
 
   app.post('/inference-servers/probe', async (request, reply) => {
     const body = request.body as {
+      server_id?: string;
       base_url: string;
       schema_family: string[];
-      auth: { type: string; header_name: string; token?: string | null; token_env?: string | null };
+      auth: { type: AuthType; header_name: string; token?: string | null; token_env?: string | null };
       timeout_ms?: number;
     };
+    const savedServer = findSavedProbeServer(body.server_id, body.base_url);
+    if (body.server_id && !savedServer) {
+      reply.code(404).send({ error: 'Inference server not found' });
+      return;
+    }
+    const authHeaders = body.auth.token?.trim() || body.auth.token_env
+      ? buildProbeAuthHeaders(body.auth)
+      : savedServer
+        ? buildInferenceServerAuthHeaders({
+            ...savedServer,
+            auth: {
+              ...savedServer.auth,
+              ...body.auth,
+              token: savedServer.auth.token,
+              token_env: savedServer.auth.token_env
+            }
+          })
+        : buildProbeAuthHeaders(body.auth);
     const result = await probeServer({
       base_url: body.base_url,
       schema_families: body.schema_family,
-      auth_headers: buildProbeAuthHeaders(body.auth),
+      auth_headers: authHeaders,
       timeout_ms: body.timeout_ms
     });
     reply.send({

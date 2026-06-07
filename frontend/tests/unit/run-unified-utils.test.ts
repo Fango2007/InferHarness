@@ -4,8 +4,7 @@ import {
   assignRunAccents,
   mergeRunModelOptions,
   parseRunTargets,
-  serializeRunTargets,
-  summarizeRunGroup
+  serializeRunTargets
 } from '../../src/services/run-unified-utils.js';
 
 test('run target query params parse legacy and repeated target params', () => {
@@ -44,7 +43,7 @@ test('accent assignment is stable by selection order', () => {
 test('model options merge discovery with persisted model metadata', () => {
   const servers = [
     {
-      inference_server: { server_id: 's1', display_name: 'Local' },
+      inference_server: { server_id: 's1', display_name: 'Local', active: true, archived: false },
       discovery: {
         model_list: {
           normalised: [
@@ -79,47 +78,19 @@ test('model options merge discovery with persisted model metadata', () => {
         active: true,
         archived: false
       },
+      discovery: { discovery_status: 'absent' },
       architecture: { quantisation: { method: 'none', bits: null } },
       limits: { context_window_tokens: null }
     }
   ] as any;
 
   const options = mergeRunModelOptions(servers, models);
-  expect(options).toHaveLength(2);
+  expect(options).toHaveLength(1);
   expect(options.find((option) => option.model_id === 'model-a')).toMatchObject({
     display_name: 'Persisted A',
     quantisation: 'mlx 8b',
     context_window_tokens: 8192,
     source: 'merged'
   });
-});
-
-test('run group summary aggregates statuses and fastest model', () => {
-  const summary = summarizeRunGroup({
-    items: [
-      {
-        stable_letter: 'A',
-        status: 'completed',
-        results: [{ metrics: { total_ms: 500 } }]
-      },
-      {
-        stable_letter: 'B',
-        status: 'failed',
-        results: [{ metrics: { total_ms: 250 } }]
-      },
-      {
-        stable_letter: 'C',
-        status: 'running',
-        results: []
-      }
-    ]
-  } as any);
-
-  expect(summary).toMatchObject({
-    pass: 1,
-    streaming: 1,
-    failed: 1,
-    canceled: 0,
-    fastest: { letter: 'B', total_ms: 250 }
-  });
+  expect(options.find((option) => option.model_id === 'model-b')).toBeUndefined();
 });

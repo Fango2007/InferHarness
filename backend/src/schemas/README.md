@@ -52,3 +52,10 @@ Producer/consumer: produced by architecture settings UI/API calls; consumed by i
 Key objects: `trust_remote_code`.
 Persistence/runtime usage: stored as per-model inspection settings and used to guard Hugging Face model loading behavior.
 Compatibility notes: `trust_remote_code` must remain explicit because it changes the execution risk of model inspection.
+
+**`benchmark/*.schema.json`**
+Role: runtime-promoted contract pack for the new benchmark pipeline foundations.
+Producer/consumer: produced by benchmark validation, offline instantiation, and synthetic result persistence; consumed by benchmark foundation APIs before the Python execution engine is wired in.
+Key objects: `model_profile`, `model_snapshot`, `runtime_profile`, `dataset_manifest`, `test_template`, `test_instantiation`, `test_run_result`, and `benchmark_plan`.
+Persistence/runtime usage: `benchmark_test_instantiations` and `benchmark_test_run_results` store validated immutable JSON documents plus stable document hashes.
+Compatibility notes: these schemas stay standalone for the current AJV-by-file validator. Scenario-era template and result schemas remain separate until the benchmark engine replaces that path.

@@ -103,37 +103,6 @@ CREATE TABLE IF NOT EXISTS runs (
   FOREIGN KEY (suite_id) REFERENCES suites(id)
 );
 
-CREATE TABLE IF NOT EXISTS run_groups (
-  id TEXT PRIMARY KEY,
-  status TEXT NOT NULL,
-  selected_template_ids TEXT NOT NULL,
-  test_overrides TEXT,
-  profile_id TEXT,
-  profile_version TEXT,
-  created_at TEXT NOT NULL,
-  started_at TEXT NOT NULL,
-  ended_at TEXT,
-  updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS run_group_items (
-  id TEXT PRIMARY KEY,
-  group_id TEXT NOT NULL,
-  child_run_id TEXT NOT NULL,
-  inference_server_id TEXT NOT NULL,
-  model_id TEXT NOT NULL,
-  stable_letter TEXT NOT NULL,
-  accent_index INTEGER NOT NULL,
-  status TEXT NOT NULL,
-  failure_reason TEXT,
-  created_at TEXT NOT NULL,
-  started_at TEXT,
-  ended_at TEXT,
-  updated_at TEXT NOT NULL,
-  FOREIGN KEY (group_id) REFERENCES run_groups(id) ON DELETE CASCADE,
-  FOREIGN KEY (inference_server_id) REFERENCES inference_servers(server_id)
-);
-
 CREATE TABLE IF NOT EXISTS active_tests (
   id TEXT PRIMARY KEY,
   template_id TEXT NOT NULL,
@@ -190,8 +159,6 @@ CREATE TABLE IF NOT EXISTS metric_samples (
 );
 
 CREATE INDEX IF NOT EXISTS idx_runs_inference_server ON runs(inference_server_id);
-CREATE INDEX IF NOT EXISTS idx_run_group_items_group ON run_group_items(group_id);
-CREATE INDEX IF NOT EXISTS idx_run_group_items_child_run ON run_group_items(child_run_id);
 CREATE INDEX IF NOT EXISTS idx_results_run ON test_results(run_id);
 CREATE INDEX IF NOT EXISTS idx_result_documents_run ON test_result_documents(run_id);
 CREATE INDEX IF NOT EXISTS idx_metrics_result ON metric_samples(test_result_id);
@@ -301,3 +268,47 @@ CREATE TABLE IF NOT EXISTS model_architecture_settings (
   PRIMARY KEY (server_id, model_id),
   FOREIGN KEY (server_id, model_id) REFERENCES models(server_id, model_id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS benchmark_test_instantiations (
+  id                  TEXT PRIMARY KEY,
+  schema_version      TEXT NOT NULL,
+  document_hash       TEXT NOT NULL,
+  template_id         TEXT NOT NULL,
+  template_version    TEXT NOT NULL,
+  server_id           TEXT NOT NULL,
+  model_id            TEXT NOT NULL,
+  dataset_hash        TEXT NOT NULL,
+  status              TEXT NOT NULL DEFAULT 'created',
+  document            TEXT NOT NULL,
+  created_at          TEXT NOT NULL,
+  updated_at          TEXT NOT NULL,
+  FOREIGN KEY (server_id, model_id) REFERENCES models(server_id, model_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_benchmark_instantiations_hash
+  ON benchmark_test_instantiations(document_hash);
+CREATE INDEX IF NOT EXISTS idx_benchmark_instantiations_template
+  ON benchmark_test_instantiations(template_id, template_version);
+CREATE INDEX IF NOT EXISTS idx_benchmark_instantiations_model
+  ON benchmark_test_instantiations(server_id, model_id);
+CREATE INDEX IF NOT EXISTS idx_benchmark_instantiations_dataset
+  ON benchmark_test_instantiations(dataset_hash);
+
+CREATE TABLE IF NOT EXISTS benchmark_test_run_results (
+  id                  TEXT PRIMARY KEY,
+  schema_version      TEXT NOT NULL,
+  document_hash       TEXT NOT NULL,
+  instantiation_id    TEXT NOT NULL,
+  run_id              TEXT NOT NULL,
+  status              TEXT NOT NULL,
+  document            TEXT NOT NULL,
+  created_at          TEXT NOT NULL,
+  FOREIGN KEY (instantiation_id) REFERENCES benchmark_test_instantiations(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_benchmark_results_hash
+  ON benchmark_test_run_results(document_hash);
+CREATE INDEX IF NOT EXISTS idx_benchmark_results_instantiation
+  ON benchmark_test_run_results(instantiation_id);
+CREATE INDEX IF NOT EXISTS idx_benchmark_results_run
+  ON benchmark_test_run_results(run_id);

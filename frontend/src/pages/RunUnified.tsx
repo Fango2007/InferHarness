@@ -4,24 +4,25 @@ import { useSearchParams } from 'react-router-dom';
 import { InferenceServerErrors } from '../components/InferenceServerErrors.js';
 import { InferenceContextBar } from '../components/InferenceContextBar.js';
 import { MergedPageHeader } from '../components/MergedPageHeader.js';
+import {
+  buildBenchmarkSmokePayload,
+  createBenchmarkInstantiation,
+  prepareBenchmarkDatasetManifest,
+  runBenchmarkInstantiation,
+  type BenchmarkDatasetFormat,
+  type BenchmarkInstantiationRecord,
+  type BenchmarkResultRecord
+} from '../services/benchmark-api.js';
+import type { InferenceServerHealth } from '../services/connectivity-api.js';
 import { DEFAULT_INFERENCE_PARAMS, type InferenceParams } from '../services/inference-param-presets-api.js';
 import { InferenceServerRecord, listInferenceServers } from '../services/inference-servers-api.js';
 import { listModels, ModelRecord } from '../services/models-api.js';
-import { TemplateRecord, listTemplates } from '../services/templates-api.js';
-import {
-  cancelRunGroup,
-  createRunGroup,
-  getRunGroup,
-  type RunGroupDetail,
-  type RunGroupItem
-} from '../services/run-groups-api.js';
 import {
   RUN_ACCENTS,
   assignRunAccents,
   mergeRunModelOptions,
   parseRunTargets,
   serializeRunTargets,
-  summarizeRunGroup,
   targetKey,
   type RunModelOption,
   type RunTarget
@@ -32,153 +33,190 @@ function formatMetric(value: unknown, suffix = 'ms'): string {
 }
 
 function formatNumber(value: unknown): string {
-  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(1) : 'N/A';
+  return typeof value === 'number' && Number.isFinite(value) ? String(value) : 'N/A';
 }
 
 function optionLabel(option: RunModelOption): string {
   return `${option.display_name} · ${option.server_name}`;
 }
 
-function extractPrompt(template: TemplateRecord | undefined): string {
-  if (!template) {
-    return 'Select a template to preview the shared prompt.';
+function answerText(result: BenchmarkResultRecord | null): string {
+  if (!result) {
+    return 'Waiting for a benchmark run.';
   }
-  try {
-    const parsed = JSON.parse(template.content) as Record<string, unknown>;
-    const request = (parsed.request as Record<string, unknown>) ?? {};
-    const body = (request.body_template as Record<string, unknown>) ?? {};
-    const messages = Array.isArray(body.messages) ? body.messages : [];
-    const content = messages
-      .map((message) => {
-        if (!message || typeof message !== 'object') {
-          return null;
-        }
-        const record = message as Record<string, unknown>;
-        return typeof record.content === 'string' ? record.content : null;
-      })
-      .filter(Boolean)
-      .join(' ');
-    return content || String(body.prompt ?? parsed.description ?? 'No prompt preview available.');
-  } catch {
-    return 'No prompt preview available.';
+  const normalized = normalizedResponseItems(result)[0]?.response;
+  if (typeof normalized?.answer_text === 'string' && normalized.answer_text.length > 0) {
+    return normalized.answer_text;
   }
+  if (result.document.errors.length > 0) {
+    return result.document.errors
+      .map((error) => String(error.message ?? error.code ?? 'Benchmark item failed.'))
+      .join('\n');
+  }
+  return result.document.status === 'completed' ? 'Completed without answer text.' : result.document.status;
 }
 
-function extractResponseText(item: RunGroupItem | null): string {
-  if (!item) {
-    return 'Waiting for a run.';
-  }
-  const result = item.results[0];
-  const artefacts = result?.artefacts ?? null;
-  const body = artefacts?.response_body;
-  if (typeof body === 'string' && body.trim()) {
-    return body;
-  }
-  const preview = artefacts?.response_preview;
-  if (typeof preview === 'string' && preview.trim()) {
-    return preview;
-  }
-  if (item.status === 'failed') {
-    return item.failure_reason ?? result?.failure_reason ?? 'Run failed.';
-  }
-  if (item.status === 'completed') {
-    return result?.verdict ? `Completed with verdict: ${result.verdict}` : 'Completed.';
-  }
-  return item.status === 'queued' ? 'Queued.' : 'Running.';
+interface NormalizedResponseItem {
+  label: string;
+  response: Record<string, unknown>;
 }
 
-function resultMetrics(item: RunGroupItem | null): Record<string, unknown> {
-  return item?.results[0]?.metrics ?? {};
+function normalizedResponseItems(result: BenchmarkResultRecord | null): NormalizedResponseItem[] {
+  if (!result) {
+    return [];
+  }
+  return result.document.normalized_responses.map((response, index) => {
+    const itemIndex = typeof response.item_index === 'number' ? response.item_index : index;
+    const iteration = typeof response.iteration === 'number' && response.iteration > 1 ? ` · iteration ${response.iteration}` : '';
+    return {
+      label: `item ${itemIndex + 1}${iteration}`,
+      response
+    };
+  });
 }
 
-function tokenProgress(item: RunGroupItem | null): string {
-  const metrics = resultMetrics(item);
-  const tokens = typeof metrics.completion_tokens === 'number' ? metrics.completion_tokens : null;
-  const rate = typeof metrics.tokens_per_sec === 'number' ? metrics.tokens_per_sec : null;
-  if (tokens !== null && rate !== null) {
-    return `${tokens} tokens · ${rate.toFixed(1)} tok/s`;
-  }
-  if (tokens !== null) {
-    return `${tokens} tokens`;
-  }
-  return item?.status === 'queued' ? 'Queued' : 'Streaming response';
+function responseAnswerText(response: Record<string, unknown>): string {
+  return typeof response.answer_text === 'string' && response.answer_text.length > 0
+    ? response.answer_text
+    : 'Completed without answer text.';
 }
 
-function resultAssertions(item: RunGroupItem | null): { passed: number; total: number } {
-  const results = item?.results ?? [];
-  if (results.length === 0) {
-    return { passed: 0, total: 0 };
+function numberValues(rows: Record<string, unknown>[], key: string): number[] {
+  return rows.map((row) => row[key]).filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+}
+
+function sum(values: number[]): number | null {
+  return values.length > 0 ? values.reduce((total, value) => total + value, 0) : null;
+}
+
+function mean(values: number[]): number | null {
+  return values.length > 0 ? sum(values)! / values.length : null;
+}
+
+function benchmarkMetrics(result: BenchmarkResultRecord | null): Record<string, unknown> {
+  const rows = result?.document.metric_results ?? [];
+  if (rows.length === 0) {
+    return {};
+  }
+  if (rows.length === 1) {
+    return rows[0] ?? {};
   }
   return {
-    passed: results.filter((result) => result.verdict === 'pass' || result.verdict === 'skip').length,
-    total: results.length
+    elapsed_ms: mean(numberValues(rows, 'elapsed_ms')),
+    first_token_ms: mean(numberValues(rows, 'first_token_ms')),
+    input_tokens: sum(numberValues(rows, 'input_tokens')),
+    output_tokens: sum(numberValues(rows, 'output_tokens')),
+    total_tokens: sum(numberValues(rows, 'total_tokens')),
+    item_count: rows.length
   };
 }
 
-function findItemForTarget(group: RunGroupDetail | null, target: RunTarget): RunGroupItem | null {
-  return group?.items.find((item) => item.inference_server_id === target.inference_server_id && item.model_id === target.model_id) ?? null;
+function streamSummary(result: BenchmarkResultRecord | null): string {
+  const responses = normalizedResponseItems(result);
+  const streams = responses
+    .map((item) => item.response.stream)
+    .filter((stream) => stream && typeof stream === 'object') as Record<string, unknown>[];
+  if (streams.length === 0) {
+    return 'none';
+  }
+  if (streams.length > 1) {
+    return `${streams.length} item streams`;
+  }
+  const stream = streams[0];
+  const events = Array.isArray(stream.events) ? stream.events.length : 0;
+  return `${String(stream.format ?? 'stream')} · ${events} events · ${stream.done === true ? 'done' : 'open'}`;
+}
+
+type RunDatasetMode = 'inline' | 'manifest_only';
+
+function datasetManifest(instantiation: BenchmarkInstantiationRecord | null): Record<string, unknown> | null {
+  const dataset = instantiation?.document.dataset;
+  return dataset && typeof dataset === 'object' && !Array.isArray(dataset)
+    ? dataset as Record<string, unknown>
+    : null;
+}
+
+function resultStatus(result: BenchmarkResultRecord | null, busy: boolean): string {
+  if (busy) {
+    return 'running';
+  }
+  return result?.document.status ?? 'idle';
 }
 
 function ConfigRail({
   servers,
+  selectableServers,
   options,
   selectedTargets,
-  selectedTemplateIds,
-  templates,
   busy,
   timeoutSec,
   seed,
-  runGroup,
   customServerId,
-  customModelId,
+  prompt,
+  systemPrompt,
+  datasetMode,
+  datasetId,
+  datasetFormat,
+  datasetPath,
   onAddTarget,
   onRemoveTarget,
   onCustomServerChange,
-  onCustomModelChange,
-  onTemplateChange,
   onTimeoutChange,
   onSeedChange,
-  onRun,
-  onStop
+  onPromptChange,
+  onSystemPromptChange,
+  onDatasetModeChange,
+  onDatasetIdChange,
+  onDatasetFormatChange,
+  onDatasetPathChange,
+  onRun
 }: {
   servers: InferenceServerRecord[];
+  selectableServers: InferenceServerRecord[];
   options: RunModelOption[];
   selectedTargets: RunTarget[];
-  selectedTemplateIds: string[];
-  templates: TemplateRecord[];
   busy: boolean;
   timeoutSec: string;
   seed: string;
-  runGroup: RunGroupDetail | null;
   customServerId: string;
-  customModelId: string;
+  prompt: string;
+  systemPrompt: string;
+  datasetMode: RunDatasetMode;
+  datasetId: string;
+  datasetFormat: BenchmarkDatasetFormat;
+  datasetPath: string;
   onAddTarget: (target: RunTarget) => void;
   onRemoveTarget: (target: RunTarget) => void;
   onCustomServerChange: (value: string) => void;
-  onCustomModelChange: (value: string) => void;
-  onTemplateChange: (ids: string[]) => void;
   onTimeoutChange: (value: string) => void;
   onSeedChange: (value: string) => void;
+  onPromptChange: (value: string) => void;
+  onSystemPromptChange: (value: string) => void;
+  onDatasetModeChange: (value: RunDatasetMode) => void;
+  onDatasetIdChange: (value: string) => void;
+  onDatasetFormatChange: (value: BenchmarkDatasetFormat) => void;
+  onDatasetPathChange: (value: string) => void;
   onRun: () => void;
-  onStop: () => void;
 }) {
   const accentedTargets = assignRunAccents(selectedTargets);
   const selectedKeys = new Set(selectedTargets.map(targetKey));
-  const remainingOptions = options.filter((option) => !selectedKeys.has(targetKey(option)));
+  const selectedServer = servers.find((server) => server.inference_server.server_id === customServerId)
+    ?? selectableServers[0]
+    ?? null;
+  const selectedServerId = selectedServer?.inference_server.server_id ?? '';
+  const remainingOptions = options.filter((option) =>
+    option.inference_server_id === selectedServerId && !selectedKeys.has(targetKey(option))
+  );
   const selectedOptions = new Map(options.map((option) => [targetKey(option), option]));
-  const serverLabel = useMemo(() => {
-    const serverIds = Array.from(new Set(selectedTargets.map((target) => target.inference_server_id)));
-    if (serverIds.length === 0) {
-      return servers[0]?.inference_server.display_name ?? 'No server selected';
-    }
-    if (serverIds.length > 1) {
-      return "any · use each model's home server";
-    }
-    return servers.find((server) => server.inference_server.server_id === serverIds[0])?.inference_server.display_name ?? serverIds[0];
-  }, [selectedTargets, servers]);
-  const canRun = selectedTargets.length > 0 && selectedTemplateIds.length > 0 && !busy;
-  const isRunning = runGroup?.status === 'running' || runGroup?.status === 'queued';
-  const canAddCustom = Boolean(customServerId && customModelId.trim() && selectedTargets.length < 8);
+  const target = selectedTargets[0] ?? null;
+  const serverLabel = target
+    ? servers.find((server) => server.inference_server.server_id === target.inference_server_id)?.inference_server.display_name ?? target.inference_server_id
+    : selectedServer?.inference_server.display_name ?? 'No server selected';
+  const canRun = selectedTargets.length >= 1 && !busy && (
+    datasetMode === 'inline'
+      ? prompt.trim().length > 0
+      : datasetId.trim().length > 0 && datasetPath.trim().length > 0
+  );
 
   return (
     <aside className="run-config-rail" aria-label="Run configuration">
@@ -192,7 +230,7 @@ function ConfigRail({
           Inference server
           <select value={customServerId} onChange={(event) => onCustomServerChange(event.target.value)}>
             <option value="">Select an inference server</option>
-            {servers.map((server) => (
+            {selectableServers.map((server) => (
               <option key={server.inference_server.server_id} value={server.inference_server.server_id}>
                 {server.inference_server.display_name}
               </option>
@@ -202,35 +240,31 @@ function ConfigRail({
       </div>
 
       <div className="run-config-step">
-        <div className="run-step-label">Step 2 · model(s)</div>
+        <div className="run-step-label">Step 2 · model</div>
         <div className={selectedTargets.length === 0 ? 'run-chip-cloud is-empty' : 'run-chip-cloud'}>
-          {accentedTargets.map((target) => {
-            const option = selectedOptions.get(targetKey(target));
+          {accentedTargets.map((entry) => {
+            const option = selectedOptions.get(targetKey(entry));
             return (
-              <span className="run-model-chip" key={targetKey(target)}>
-                <span className="run-avatar" style={{ background: target.accent }}>{target.stable_letter}</span>
-                <span title={option?.display_name ?? target.model_id}>{option?.display_name ?? target.model_id}</span>
-                <button type="button" aria-label={`Remove ${option?.display_name ?? target.model_id}`} onClick={() => onRemoveTarget(target)}>x</button>
+              <span className="run-model-chip" key={targetKey(entry)}>
+                <span className="run-avatar" style={{ background: entry.accent }}>{entry.stable_letter}</span>
+                <span title={option?.display_name ?? entry.model_id}>{option?.display_name ?? entry.model_id}</span>
+                <button type="button" aria-label={`Remove ${option?.display_name ?? entry.model_id}`} onClick={() => onRemoveTarget(entry)}>x</button>
               </span>
             );
           })}
           <label className="run-add-model">
-            Add model
+            {selectedTargets.length === 0 ? 'Add model' : 'Add another model'}
             <select
               value=""
               onChange={(event) => {
                 const value = event.target.value;
-                if (!value) {
-                  return;
-                }
+                if (!value) return;
                 const option = options.find((entry) => targetKey(entry) === value);
-                if (option) {
-                  onAddTarget(option);
-                }
+                if (option) onAddTarget(option);
               }}
-              disabled={selectedTargets.length >= 8 || remainingOptions.length === 0}
+              disabled={remainingOptions.length === 0 || selectedTargets.length >= 8}
             >
-              <option value="">{selectedTargets.length >= 8 ? 'Max 8 selected' : 'add another...'}</option>
+              <option value="">{selectedTargets.length >= 8 ? '8 models selected' : remainingOptions.length === 0 ? 'No models found' : 'add model...'}</option>
               {remainingOptions.map((option) => (
                 <option key={targetKey(option)} value={targetKey(option)}>
                   {optionLabel(option)}
@@ -238,68 +272,82 @@ function ConfigRail({
               ))}
             </select>
           </label>
-          <label className="run-custom-model">
-            Model
-            <input
-              value={customModelId}
-              onChange={(event) => onCustomModelChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && canAddCustom) {
-                  event.preventDefault();
-                  onAddTarget({ inference_server_id: customServerId, model_id: customModelId.trim() });
-                  onCustomModelChange('');
-                }
-              }}
-              placeholder="mistral:latest"
-              disabled={selectedTargets.length >= 8}
-            />
-          </label>
-          <button
-            type="button"
-            className="run-add-custom-button"
-            disabled={!canAddCustom}
-            onClick={() => {
-              onAddTarget({ inference_server_id: customServerId, model_id: customModelId.trim() });
-              onCustomModelChange('');
-            }}
-          >
-            Add model
-          </button>
         </div>
-        <div className="run-count-line">
-          {selectedTargets.length} of {options.length} · max 8
-        </div>
-        <p className="run-hint">
-          {selectedTargets.length <= 1
-            ? 'Add a second model to compare side-by-side. Same template, same params.'
-            : `Comparing ${selectedTargets.length} models. Each gets its own column.`}
-        </p>
+        <div className="run-count-line">{selectedTargets.length || 0} of 8 models selected · run executes the first selected model</div>
+        <p className="run-hint">Run one model through either a smoke prompt or a server-side dataset file.</p>
       </div>
 
-      <div className={selectedTargets.length === 0 ? 'run-config-step is-disabled' : 'run-config-step'}>
-        <div className="run-step-label">Step 3 · template</div>
-        <label className="run-template-picker">
-          Templates
-          <select
-            multiple
-            value={selectedTemplateIds}
-            onChange={(event) => onTemplateChange(Array.from(event.target.selectedOptions).map((option) => option.value))}
-            disabled={selectedTargets.length === 0}
-          >
-            {templates.map((template) => (
-              <option key={`${template.id}:${template.version}`} value={template.id}>
-                {template.name} ({template.type.toUpperCase()})
-              </option>
-            ))}
-          </select>
+      <div className="run-config-step">
+        <div className="run-step-label">Step 3 · dataset</div>
+        <div className="segmented-control run-dataset-mode" aria-label="Dataset mode">
+          <button type="button" className={datasetMode === 'inline' ? 'is-active' : ''} onClick={() => onDatasetModeChange('inline')}>
+            Prompt
+          </button>
+          <button type="button" className={datasetMode === 'manifest_only' ? 'is-active' : ''} onClick={() => onDatasetModeChange('manifest_only')}>
+            Server dataset
+          </button>
+        </div>
+        {datasetMode === 'inline' ? (
+          <>
+        <label className="run-prompt-field">
+          Prompt
+          <textarea
+            value={prompt}
+            onChange={(event) => onPromptChange(event.target.value)}
+            rows={5}
+            placeholder="Ask the selected model something small."
+          />
         </label>
+        <label className="run-prompt-field">
+          System prompt
+          <textarea
+            value={systemPrompt}
+            onChange={(event) => onSystemPromptChange(event.target.value)}
+            rows={3}
+            placeholder="Optional"
+          />
+        </label>
+          </>
+        ) : (
+          <>
+            <label className="run-prompt-field">
+              Dataset id
+              <input
+                value={datasetId}
+                onChange={(event) => onDatasetIdChange(event.target.value)}
+                placeholder="codegen-small"
+              />
+            </label>
+            <div className="run-dataset-grid">
+              <label>
+                Format
+                <select
+                  value={datasetFormat}
+                  onChange={(event) => onDatasetFormatChange(event.target.value as BenchmarkDatasetFormat)}
+                >
+                  <option value="jsonl">JSONL</option>
+                  <option value="json">JSON</option>
+                  <option value="csv">CSV</option>
+                </select>
+              </label>
+              <label>
+                Path
+                <input
+                  value={datasetPath}
+                  onChange={(event) => onDatasetPathChange(event.target.value)}
+                  placeholder="codegen-small.jsonl"
+                />
+              </label>
+            </div>
+          </>
+        )}
       </div>
 
       <div className={selectedTargets.length === 0 ? 'run-config-step is-disabled' : 'run-config-step'}>
         <div className="run-step-label">Step 4 · options</div>
         <div className="run-options-grid">
           <label>
-            Iterations
+            Items
             <input value="1" readOnly />
           </label>
           <label>
@@ -319,26 +367,42 @@ function ConfigRail({
 
       <div className="run-actions-row">
         <button type="button" onClick={onRun} disabled={!canRun}>
-          Run · {selectedTargets.length} models × {selectedTemplateIds.length} templates
-        </button>
-        <button type="button" className="run-ghost-button" onClick={onStop} disabled={!isRunning || busy}>
-          Stop
+          {busy ? 'Running benchmark...' : 'Run benchmark'}
         </button>
       </div>
     </aside>
   );
 }
 
-function SharedPromptStrip({ prompt }: { prompt: string }) {
+function PromptStrip({
+  prompt,
+  systemPrompt,
+  datasetMode,
+  datasetId,
+  datasetPath
+}: {
+  prompt: string;
+  systemPrompt: string;
+  datasetMode: RunDatasetMode;
+  datasetId: string;
+  datasetPath: string;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const preview = datasetMode === 'manifest_only'
+    ? `${datasetId.trim() || 'dataset'} · ${datasetPath.trim() || 'server path'}`
+    : prompt.trim() || 'Enter a prompt in the rail.';
   return (
     <div className="run-prompt-strip">
-      <span>Shared prompt</span>
-      <code>{prompt}</code>
+      <span>{datasetMode === 'manifest_only' ? 'Benchmark dataset' : 'Benchmark item'}</span>
+      <code>{preview}</code>
       <button type="button" onClick={() => setExpanded((value) => !value)}>
         {expanded ? 'collapse' : 'expand'}
       </button>
-      {expanded ? <pre>{prompt}</pre> : null}
+      {expanded ? (
+        <pre>{datasetMode === 'manifest_only'
+          ? `manifest_only\n${preview}`
+          : [systemPrompt.trim() ? `system: ${systemPrompt.trim()}` : null, `user: ${preview}`].filter(Boolean).join('\n\n')}</pre>
+      ) : null}
     </div>
   );
 }
@@ -351,79 +415,103 @@ function RunUnifiedEmpty() {
         <span />
         <span />
       </div>
-      <h2>Pick model(s) to run</h2>
-      <p>One Run page handles both a single target and side-by-side comparison. Add one model for detail, or add more to compare the same template and parameters across every target.</p>
-      <div className="actions">
-        <button type="button" disabled>Load saved set</button>
-        <button type="button" disabled>Browse catalog</button>
-      </div>
+      <h2>Pick one model and prompt</h2>
+      <p>The Run page now creates a benchmark instantiation and executes it immediately. Start with one small prompt before using the pipeline for larger benchmark runs.</p>
     </div>
   );
 }
 
-function SingleResponseDetail({
+function BenchmarkDetail({
   target,
   option,
-  item,
-  onRetry
+  instantiation,
+  result,
+  busy
 }: {
   target: RunTarget;
   option: RunModelOption | undefined;
-  item: RunGroupItem | null;
-  onRetry: (targets: RunTarget[]) => void;
+  instantiation: BenchmarkInstantiationRecord | null;
+  result: BenchmarkResultRecord | null;
+  busy: boolean;
 }) {
-  const metrics = resultMetrics(item);
-  const asserts = resultAssertions(item);
-  const letter = 'A';
+  const metrics = benchmarkMetrics(result);
+  const status = resultStatus(result, busy);
+  const manifest = datasetManifest(instantiation);
+  const responses = normalizedResponseItems(result);
   return (
     <div className="run-single-detail">
       <main className="run-transcript">
         <header className="run-response-header">
-          <span className="run-avatar is-large" style={{ background: RUN_ACCENTS[0] }}>{letter}</span>
+          <span className="run-avatar is-large" style={{ background: RUN_ACCENTS[0] }}>A</span>
           <div>
             <strong>{option?.display_name ?? target.model_id}</strong>
             <span>{option?.server_name ?? target.inference_server_id}{option?.quantisation ? ` · ${option.quantisation}` : ''}</span>
           </div>
-          <b className={`run-status-pill status-${item?.status ?? 'idle'}`}>{item?.status ?? 'idle'}</b>
+          <b className={`run-status-pill status-${status}`}>{status}</b>
         </header>
-        {item?.status === 'failed' ? (
+        {result?.document.errors.length ? (
           <div className="run-failure-banner">
-            <strong>Connection lost: {option?.server_name ?? target.inference_server_id}</strong>
-            <span>{item.failure_reason ?? item.results[0]?.failure_reason ?? 'The target failed during this run.'}</span>
-            <button type="button" onClick={() => onRetry([target])}>Retry now</button>
+            <strong>Benchmark completed with errors.</strong>
+            <span>{result.document.errors.map((error) => String(error.message ?? error.code ?? 'Unknown error')).join('; ')}</span>
           </div>
         ) : null}
-        <section className={item?.status === 'running' || item?.status === 'queued' ? 'run-message-card is-streaming' : 'run-message-card'}>
-          <span>assistant · final</span>
-          {(item?.status === 'running' || item?.status === 'queued') ? <small>{tokenProgress(item)}</small> : null}
-          <pre>{extractResponseText(item)}{item?.status === 'running' || item?.status === 'queued' ? <i className="stream-cursor" /> : null}</pre>
-        </section>
-        <section className="run-asserts">
-          <h3>Asserts · {asserts.passed} of {asserts.total} pass</h3>
-          {(item?.results ?? []).map((result) => (
-            <div key={result.id} className={result.verdict === 'fail' ? 'run-assert-row is-fail' : 'run-assert-row'}>
-              <span>{result.verdict === 'fail' ? 'x' : 'ok'}</span>
-              <code>{result.test_id}</code>
-            </div>
+        <div className="run-message-list">
+          {busy || responses.length === 0 ? (
+            <section className={busy ? 'run-message-card is-streaming' : 'run-message-card'}>
+              <span>assistant · final</span>
+              {busy ? <small>Executing synchronous benchmark request</small> : null}
+              <pre>{busy ? 'Running...' : answerText(result)}{busy ? <i className="stream-cursor" /> : null}</pre>
+            </section>
+          ) : responses.map((item) => (
+            <section className="run-message-card" key={`${item.label}:${String(item.response.attempt ?? '')}`}>
+              <span>assistant · final · {item.label}</span>
+              <pre>{responseAnswerText(item.response)}</pre>
+            </section>
           ))}
+        </div>
+        <section className="run-asserts">
+          <h3>Benchmark audit</h3>
+          <div className={result?.document.status === 'completed_with_errors' ? 'run-assert-row is-fail' : 'run-assert-row'}>
+            <span>{result?.document.status === 'completed_with_errors' ? 'x' : 'ok'}</span>
+            <code>{result?.document.status ?? 'not-run'}</code>
+          </div>
+          <div className="run-assert-row">
+            <span>id</span>
+            <code>{instantiation?.id ?? 'no-instantiation'}</code>
+          </div>
+          <div className="run-assert-row">
+            <span>run</span>
+            <code>{result?.run_id ?? 'no-result'}</code>
+          </div>
+          <div className="run-assert-row">
+            <span>items</span>
+            <code>{formatNumber(manifest?.item_count)}</code>
+          </div>
+          <div className="run-assert-row">
+            <span>dataset</span>
+            <code>{String(manifest?.dataset_id ?? 'no-dataset')}</code>
+          </div>
+          <div className="run-assert-row">
+            <span>hash</span>
+            <code>{String(manifest?.dataset_hash ?? 'no-hash')}</code>
+          </div>
         </section>
       </main>
       <aside className="run-side-metrics">
         <h3>Metrics</h3>
         <div className="run-metric-grid">
-          <span><b>latency</b>{formatMetric(metrics.total_ms)}</span>
-          <span><b>throughput</b>{formatNumber(metrics.tokens_per_sec)} tok/s</span>
-          <span><b>tokens in</b>{formatNumber(metrics.prompt_tokens)}</span>
-          <span><b>tokens out</b>{formatNumber(metrics.completion_tokens)}</span>
-          <span><b>cost</b>N/A</span>
-          <span><b>ttft</b>{formatMetric(metrics.ttfb_ms)}</span>
+          <span><b>latency</b>{formatMetric(metrics.elapsed_ms)}</span>
+          <span><b>ttft</b>{formatMetric(metrics.first_token_ms)}</span>
+          <span><b>tokens in</b>{formatNumber(metrics.input_tokens)}</span>
+          <span><b>tokens out</b>{formatNumber(metrics.output_tokens)}</span>
+          <span><b>total tokens</b>{formatNumber(metrics.total_tokens)}</span>
+          <span><b>stream</b>{streamSummary(result)}</span>
         </div>
         <details>
-          <summary>Raw envelope</summary>
-          <pre>{JSON.stringify(item ?? {}, null, 2)}</pre>
+          <summary>Raw benchmark result</summary>
+          <pre>{JSON.stringify(result ?? instantiation ?? {}, null, 2)}</pre>
         </details>
         <div className="run-side-actions">
-          <button type="button" onClick={() => onRetry([target])} disabled={item?.status !== 'failed'}>Re-run with same params</button>
           <button type="button" disabled>Open in Evaluate</button>
           <button type="button" disabled>Copy as cURL</button>
         </div>
@@ -432,206 +520,135 @@ function SingleResponseDetail({
   );
 }
 
-function CompareColumn({
-  target,
-  option,
-  item,
-  index,
-  onRetry
-}: {
-  target: RunTarget;
-  option: RunModelOption | undefined;
-  item: RunGroupItem | null;
-  index: number;
-  onRetry: (targets: RunTarget[]) => void;
-}) {
-  const metrics = resultMetrics(item);
-  const asserts = resultAssertions(item);
-  const status = item?.status ?? 'idle';
-  return (
-    <article className="run-compare-column">
-      <header>
-        <span className="run-avatar" style={{ background: RUN_ACCENTS[index] }}>{String.fromCharCode(65 + index)}</span>
-        <div>
-          <strong>{option?.display_name ?? target.model_id}</strong>
-          <span>{option?.server_name ?? target.inference_server_id}{option?.quantisation ? ` · ${option.quantisation}` : ''}</span>
-        </div>
-        <b className={`run-status-pill status-${status}`}>{status}</b>
-        <div className="run-column-metrics">
-          <span><b>lat</b>{formatMetric(metrics.total_ms)}</span>
-          <span><b>tok/s</b>{formatNumber(metrics.tokens_per_sec)}</span>
-          <span><b>assert</b>{asserts.passed}/{asserts.total}</span>
-        </div>
-      </header>
-      <div className="run-column-body">
-        {status === 'failed' ? (
-          <div className="run-error-card">
-            <strong>{item?.failure_reason ?? item?.results[0]?.failure_reason ?? 'Run failed.'}</strong>
-            <button type="button" onClick={() => onRetry([target])}>Retry</button>
-          </div>
-        ) : null}
-        {status === 'running' || status === 'queued' ? <small>{tokenProgress(item)}</small> : null}
-        <pre>{extractResponseText(item)}{status === 'running' || status === 'queued' ? <i className="stream-cursor" /> : null}</pre>
-      </div>
-    </article>
-  );
-}
-
-function CompareSummary({ group }: { group: RunGroupDetail | null }) {
-  const summary = summarizeRunGroup(group);
-  return (
-    <footer className="run-summary-footer">
-      <span>Summary</span>
-      <code>{summary.pass} pass · {summary.streaming} streaming · {summary.failed} failed · {summary.canceled} canceled</code>
-      {summary.fastest ? <code>fastest: {summary.fastest.letter} · {summary.fastest.total_ms.toFixed(1)}ms</code> : null}
-      <div className="run-diff-toggle" aria-label="Diff view">
-        <button type="button" className="is-active">aligned</button>
-        <button type="button" disabled>raw</button>
-        <button type="button" disabled>diff</button>
-      </div>
-    </footer>
-  );
-}
-
-export function RunUnified() {
+export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot?: Record<string, InferenceServerHealth> }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [servers, setServers] = useState<InferenceServerRecord[]>([]);
   const [models, setModels] = useState<ModelRecord[]>([]);
-  const [templates, setTemplates] = useState<TemplateRecord[]>([]);
-  const [selectedTargets, setSelectedTargets] = useState<RunTarget[]>(() => parseRunTargets(searchParams));
-  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
+  const [selectedTargets, setSelectedTargets] = useState<RunTarget[]>(() => parseRunTargets(searchParams).slice(0, 8));
   const [customServerId, setCustomServerId] = useState('');
-  const [customModelId, setCustomModelId] = useState('');
   const [timeoutSec, setTimeoutSec] = useState('30');
   const [seed, setSeed] = useState('');
+  const [prompt, setPrompt] = useState('Reply with exactly: OK');
+  const [systemPrompt, setSystemPrompt] = useState('You are a concise assistant.');
+  const [datasetMode, setDatasetMode] = useState<RunDatasetMode>('inline');
+  const [datasetId, setDatasetId] = useState('codegen-small');
+  const [datasetFormat, setDatasetFormat] = useState<BenchmarkDatasetFormat>('jsonl');
+  const [datasetPath, setDatasetPath] = useState('codegen-small.jsonl');
   const [inferenceParams, setInferenceParams] = useState<InferenceParams>(DEFAULT_INFERENCE_PARAMS);
-  const [runGroup, setRunGroup] = useState<RunGroupDetail | null>(null);
+  const [instantiation, setInstantiation] = useState<BenchmarkInstantiationRecord | null>(null);
+  const [result, setResult] = useState<BenchmarkResultRecord | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([listInferenceServers(), listModels(), listTemplates()])
-      .then(([serverData, modelData, templateData]) => {
+    Promise.all([listInferenceServers(), listModels()])
+      .then(([serverData, modelData]) => {
         setServers(serverData);
         setModels(modelData);
-        setTemplates(templateData);
         setCustomServerId((current) => current || serverData[0]?.inference_server.server_id || '');
-        setSelectedTemplateIds((current) => current.length > 0 ? current : templateData.slice(0, 1).map((template) => template.id));
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load run configuration.'));
   }, []);
 
   useEffect(() => {
-    setSelectedTargets(parseRunTargets(searchParams));
+    setSelectedTargets(parseRunTargets(searchParams).slice(0, 8));
   }, [searchParams]);
 
   useEffect(() => {
-    const current = parseRunTargets(searchParams);
+    const current = parseRunTargets(searchParams).slice(0, 8);
     if (JSON.stringify(current) === JSON.stringify(selectedTargets)) {
       return;
     }
-    setSearchParams(serializeRunTargets(selectedTargets), { replace: true });
+    setSearchParams(serializeRunTargets(selectedTargets.slice(0, 8)), { replace: true });
   }, [searchParams, selectedTargets, setSearchParams]);
 
+  const options = useMemo(() => mergeRunModelOptions(servers, models), [servers, models]);
+  const selectableServers = useMemo(() => {
+    const selectedServerIds = new Set(selectedTargets.map((target) => target.inference_server_id));
+    return servers.filter((server) => {
+      const id = server.inference_server.server_id;
+      if (selectedServerIds.has(id)) {
+        return true;
+      }
+      return connectivitySnapshot[id]?.ok === true;
+    });
+  }, [connectivitySnapshot, selectedTargets, servers]);
   useEffect(() => {
-    if (!runGroup || (runGroup.status !== 'running' && runGroup.status !== 'queued')) {
+    if (selectedTargets.length > 0 || selectableServers.length === 0) {
       return;
     }
-    let active = true;
-    const intervalId = window.setInterval(() => {
-      getRunGroup(runGroup.id)
-        .then((next) => {
-          if (active) {
-            setRunGroup(next);
-          }
-        })
-        .catch((err) => {
-          if (active) {
-            setError(err instanceof Error ? err.message : 'Unable to refresh run group.');
-          }
-        });
-    }, 1000);
-    return () => {
-      active = false;
-      window.clearInterval(intervalId);
-    };
-  }, [runGroup]);
-
-  const options = useMemo(() => mergeRunModelOptions(servers, models), [servers, models]);
+    if (!selectableServers.some((server) => server.inference_server.server_id === customServerId)) {
+      setCustomServerId(selectableServers[0].inference_server.server_id);
+    }
+  }, [customServerId, selectableServers, selectedTargets.length]);
   const optionMap = useMemo(() => new Map(options.map((option) => [targetKey(option), option])), [options]);
-  const selectedTemplate = templates.find((template) => template.id === selectedTemplateIds[0]);
-  const subtitle = selectedTargets.length <= 1
-    ? `${selectedTargets[0]?.model_id ?? 'No model'} · ${selectedTemplate?.name ?? 'No template'}`
-    : `${selectedTargets.length} models · running ${selectedTemplate?.name ?? 'template set'}`;
+  const selectedTarget = selectedTargets[0] ?? null;
+  const selectedOption = selectedTarget ? optionMap.get(targetKey(selectedTarget)) : undefined;
+  const subtitle = selectedTarget
+    ? `${selectedTarget.model_id} · ${datasetMode === 'manifest_only' ? 'dataset run' : 'benchmark smoke'}`
+    : `No model · ${datasetMode === 'manifest_only' ? 'dataset run' : 'benchmark smoke'}`;
 
   function addTarget(target: RunTarget) {
-    setRunGroup(null);
+    setInstantiation(null);
+    setResult(null);
     setSelectedTargets((current) => {
-      if (current.length >= 8 || current.some((entry) => targetKey(entry) === targetKey(target))) {
+      const key = targetKey(target);
+      if (current.some((entry) => targetKey(entry) === key)) {
         return current;
       }
-      return [...current, target];
+      return [...current, target].slice(0, 8);
     });
   }
 
   function removeTarget(target: RunTarget) {
-    setRunGroup(null);
+    setInstantiation(null);
+    setResult(null);
     setSelectedTargets((current) => current.filter((entry) => targetKey(entry) !== targetKey(target)));
   }
 
-  async function startRun(targets = selectedTargets) {
-    setBusy(true);
-    setError(null);
-    try {
-      const timeoutValue = Number(timeoutSec);
-      const seedValue = Number(seed);
-      const testOverrides: Record<string, unknown> = {};
-      if (Number.isFinite(timeoutValue) && timeoutValue > 0) {
-        testOverrides.request_timeout_sec = timeoutValue;
-      }
-      if (seed.trim() && Number.isFinite(seedValue)) {
-        testOverrides.seed = seedValue;
-      }
-      testOverrides.temperature = inferenceParams.temperature;
-      testOverrides.top_p = inferenceParams.top_p;
-      testOverrides.max_tokens = inferenceParams.max_tokens;
-      testOverrides.quantization_level = inferenceParams.quantization_level;
-      testOverrides.stream = inferenceParams.stream;
-      const group = await createRunGroup({
-        targets,
-        selected_template_ids: selectedTemplateIds,
-        test_overrides: testOverrides
-      });
-      setRunGroup(group);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to start run group.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function handleRun() {
-    await startRun(selectedTargets);
-  }
-
-  async function handleRetry(targets: RunTarget[]) {
-    const failedTargets = targets.filter((target) => {
-      const item = findItemForTarget(runGroup, target);
-      return item?.status === 'failed';
-    });
-    await startRun(failedTargets.length ? failedTargets : targets);
-  }
-
-  async function handleStop() {
-    if (!runGroup) {
+    if (!selectedTarget) {
+      return;
+    }
+    if (datasetMode === 'inline' && prompt.trim().length === 0) {
+      return;
+    }
+    if (datasetMode === 'manifest_only' && (!datasetId.trim() || !datasetPath.trim())) {
       return;
     }
     setBusy(true);
     setError(null);
+    setResult(null);
     try {
-      setRunGroup(await cancelRunGroup(runGroup.id));
+      const preparedDataset = datasetMode === 'manifest_only'
+        ? await prepareBenchmarkDatasetManifest({
+            dataset_id: datasetId.trim(),
+            source: {
+              source_type: 'file',
+              format: datasetFormat,
+              path: datasetPath.trim()
+            },
+            metadata: { source: 'run-page-dataset-path' }
+          })
+        : undefined;
+      const payload = buildBenchmarkSmokePayload({
+        target: selectedTarget,
+        prompt: prompt.trim(),
+        systemPrompt,
+        inferenceParams,
+        timeoutSec,
+        seed,
+        dataset: preparedDataset
+          ? { mode: 'manifest_only', manifest: preparedDataset }
+          : { mode: 'inline', prompt: prompt.trim(), systemPrompt }
+      });
+      const created = await createBenchmarkInstantiation(payload);
+      setInstantiation(created);
+      const completed = await runBenchmarkInstantiation(created.id);
+      setResult(completed);
+      window.dispatchEvent(new CustomEvent('runs:changed'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to stop run group.');
+      setError(err instanceof Error ? err.message : 'Unable to run benchmark.');
     } finally {
       setBusy(false);
     }
@@ -639,79 +656,66 @@ export function RunUnified() {
 
   return (
     <>
-      <MergedPageHeader title="Run" subtitle="1-8 models" />
+      <MergedPageHeader title="Run" subtitle="Benchmark-backed smoke execution" />
       <InferenceContextBar params={inferenceParams} onChange={setInferenceParams} />
       <section className="run-unified-page">
         <InferenceServerErrors message={error} />
         <div className="run-unified-layout">
           <ConfigRail
             servers={servers}
+            selectableServers={selectableServers}
             options={options}
             selectedTargets={selectedTargets}
-            selectedTemplateIds={selectedTemplateIds}
-            templates={templates}
             busy={busy}
             timeoutSec={timeoutSec}
             seed={seed}
-            runGroup={runGroup}
             customServerId={customServerId}
-            customModelId={customModelId}
+            prompt={prompt}
+            systemPrompt={systemPrompt}
+            datasetMode={datasetMode}
+            datasetId={datasetId}
+            datasetFormat={datasetFormat}
+            datasetPath={datasetPath}
             onAddTarget={addTarget}
             onRemoveTarget={removeTarget}
             onCustomServerChange={setCustomServerId}
-            onCustomModelChange={setCustomModelId}
-            onTemplateChange={setSelectedTemplateIds}
             onTimeoutChange={setTimeoutSec}
             onSeedChange={setSeed}
+            onPromptChange={setPrompt}
+            onSystemPromptChange={setSystemPrompt}
+            onDatasetModeChange={setDatasetMode}
+            onDatasetIdChange={setDatasetId}
+            onDatasetFormatChange={setDatasetFormat}
+            onDatasetPathChange={setDatasetPath}
             onRun={handleRun}
-            onStop={handleStop}
           />
           <main className="run-workspace">
             <header className="run-page-header">
               <div>
                 <h1>Run</h1>
-                <p>{subtitle}{runGroup ? ` · ${runGroup.status}` : ''}</p>
+                <p>{subtitle}{result ? ` · ${result.document.status}` : busy ? ' · running' : ''}</p>
               </div>
               <div className="run-header-actions">
-                <button type="button" disabled={selectedTargets.length < 2}>Promote winner</button>
-                <button type="button" disabled>Save as Profile</button>
-                <button type="button" disabled={!runGroup}>Export</button>
+                <button type="button" disabled={!result}>Export</button>
               </div>
             </header>
-            {runGroup?.items.some((item) => item.status === 'failed') ? (
-              <div className="run-failure-banner">
-                <strong>One or more targets failed mid-run.</strong>
-                <span>Partial output is preserved. Retry starts a new run group for the failed target(s) with the same templates and params.</span>
-                <button type="button" onClick={() => handleRetry(selectedTargets)} disabled={busy}>Retry failed</button>
-                <button type="button" onClick={handleStop} disabled={busy}>Stop run</button>
-              </div>
-            ) : null}
-            <SharedPromptStrip prompt={extractPrompt(selectedTemplate)} />
-            {selectedTargets.length === 0 ? (
+            <PromptStrip
+              prompt={prompt}
+              systemPrompt={systemPrompt}
+              datasetMode={datasetMode}
+              datasetId={datasetId}
+              datasetPath={datasetPath}
+            />
+            {!selectedTarget ? (
               <RunUnifiedEmpty />
-            ) : selectedTargets.length === 1 ? (
-              <SingleResponseDetail
-                target={selectedTargets[0]}
-                option={optionMap.get(targetKey(selectedTargets[0]))}
-                item={findItemForTarget(runGroup, selectedTargets[0])}
-                onRetry={handleRetry}
-              />
             ) : (
-              <>
-                <div className="run-compare-grid" style={{ gridTemplateColumns: `repeat(${selectedTargets.length}, minmax(220px, 1fr))` }}>
-                  {selectedTargets.map((target, index) => (
-                    <CompareColumn
-                      key={targetKey(target)}
-                      target={target}
-                      option={optionMap.get(targetKey(target))}
-                      item={findItemForTarget(runGroup, target)}
-                      index={index}
-                      onRetry={handleRetry}
-                    />
-                  ))}
-                </div>
-                <CompareSummary group={runGroup} />
-              </>
+              <BenchmarkDetail
+                target={selectedTarget}
+                option={selectedOption}
+                instantiation={instantiation}
+                result={result}
+                busy={busy}
+              />
             )}
           </main>
         </div>

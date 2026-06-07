@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://inferharness.local/schemas/benchmark/benchmark_plan.schema.json",
+  "title": "Benchmark BenchmarkPlan",
+  "description": "Orchestration plan for creating and running multiple TestInstantiations.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "plan_id", "template_ref", "dataset_ref", "runtime_profile_ref", "model_profile_refs", "execution"],
+  "properties": {
+    "kind": { "type": "string", "const": "benchmark_plan" },
+    "schema_version": { "type": "string", "const": "benchmark_plan_v1" },
+    "plan_id": { "type": "string", "minLength": 1 },
+    "template_ref": { "type": "string", "minLength": 1 },
+    "dataset_ref": { "type": "string", "minLength": 1 },
+    "runtime_profile_ref": { "type": "string", "minLength": 1 },
+    "model_profile_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "continue_on_model_error"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["sequential", "parallel"] },
+        "continue_on_model_error": { "type": "boolean" },
+        "concurrency": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "metadata": { "type": "object", "additionalProperties": true },
+    "extensions": { "type": "object", "additionalProperties": true }
+  }
+}

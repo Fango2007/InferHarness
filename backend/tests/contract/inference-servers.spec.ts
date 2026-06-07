@@ -104,6 +104,115 @@ describe('inference servers contract', () => {
     expect(JSON.stringify(listed)).not.toContain('secret-token-value');
   });
 
+  it('uses stored bearer auth when probing an existing server with a masked token', async () => {
+    const app = createServer();
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/inference-servers',
+      headers: AUTH_HEADERS,
+      payload: buildCreatePayload({
+        auth: {
+          type: 'bearer',
+          header_name: 'Authorization',
+          token: 'secret-token-value',
+          token_env: null
+        }
+      })
+    });
+    expect(createResponse.statusCode).toBe(201);
+    const created = createResponse.json();
+    const fetchMock = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => ({ data: [{ id: 'mistral-test' }] })
+        }) as any
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const probeResponse = await app.inject({
+      method: 'POST',
+      url: '/inference-servers/probe',
+      headers: AUTH_HEADERS,
+      payload: {
+        server_id: created.inference_server.server_id,
+        base_url: 'https://api.mistral.ai',
+        schema_family: ['openai-compatible'],
+        auth: {
+          type: 'bearer',
+          header_name: 'Authorization',
+          token: null,
+          token_env: null
+        }
+      }
+    });
+
+    expect(probeResponse.statusCode).toBe(200);
+    expect(probeResponse.json().ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.mistral.ai/v1/models',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer secret-token-value' }
+      })
+    );
+  });
+
+  it('falls back to stored bearer auth for a probe payload that only matches a saved base URL', async () => {
+    const app = createServer();
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/inference-servers',
+      headers: AUTH_HEADERS,
+      payload: buildCreatePayload({
+        endpoints: { base_url: 'https://api.mistral.ai/' },
+        auth: {
+          type: 'bearer',
+          header_name: 'Authorization',
+          token: 'secret-token-value',
+          token_env: null
+        }
+      })
+    });
+    expect(createResponse.statusCode).toBe(201);
+    const fetchMock = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => ({ data: [{ id: 'mistral-test' }] })
+        }) as any
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const probeResponse = await app.inject({
+      method: 'POST',
+      url: '/inference-servers/probe',
+      headers: AUTH_HEADERS,
+      payload: {
+        base_url: 'https://api.mistral.ai',
+        schema_family: ['openai-compatible'],
+        auth: {
+          type: 'bearer',
+          header_name: 'Authorization',
+          token: null,
+          token_env: null
+        }
+      }
+    });
+
+    expect(probeResponse.statusCode).toBe(200);
+    expect(probeResponse.json().ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.mistral.ai/v1/models',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer secret-token-value' }
+      })
+    );
+  });
+
   it('validates enums and rejects invalid values', async () => {
     const app = createServer();
     const response = await app.inject({
@@ -234,8 +343,53 @@ describe('inference servers contract', () => {
       throw new Error(`create inference server failed: ${createResponse.statusCode} ${createResponse.body}`);
     }
     const created = createResponse.json();
-    const modelId = 'inferencerlabs/Qwen3-Coder-30B-A3B-Instruct-MLX-6.5bit';
-    const payload = { data: [{ id: modelId }] };
+    const modelId = 'codestral-latest';
+    const payload = {
+      data: [
+        {
+          id: modelId,
+          object: 'model',
+          owned_by: 'mistralai',
+          name: 'codestral-2508',
+          description: 'Our cutting-edge language model for coding released August 2025.',
+          max_context_length: 256000,
+          aliases: ['codestral-2508', 'mistral-code-latest'],
+          deprecation: null,
+          deprecation_replacement_model: null,
+          default_model_temperature: 0.3,
+          type: 'base',
+          capabilities: {
+            completion_chat: true,
+            function_calling: true,
+            reasoning: false,
+            completion_fim: true,
+            fine_tuning: false,
+            vision: false,
+            audio: false,
+            audio_transcription: false,
+            audio_transcription_realtime: false,
+            audio_speech: false
+          }
+        },
+        {
+          id: 'mistral-embed',
+          object: 'model',
+          owned_by: 'mistralai',
+          name: 'mistral-embed-2312',
+          max_context_length: 8192,
+          aliases: ['mistral-embed-2312'],
+          default_model_temperature: null,
+          capabilities: {
+            completion_chat: false,
+            function_calling: false,
+            reasoning: false,
+            completion_fim: false,
+            vision: false,
+            audio: false
+          }
+        }
+      ]
+    };
     vi.stubGlobal(
       'fetch',
       vi.fn(
@@ -260,18 +414,22 @@ describe('inference servers contract', () => {
       url: '/models',
       headers: AUTH_HEADERS
     });
-    const [model] = modelsResponse.json();
-    expect(model.model.base_model_name).toBe('Qwen3-Coder');
-    expect(model.identity.quantized_provider).toBe('inferencerlabs');
-    expect(model.architecture.parameter_count).toBe(30_000_000_000);
-    expect(model.architecture.parameter_count_label).toBe('30B');
-    expect(model.architecture.active_parameter_label).toBe('A3B');
-    expect(model.architecture.format).toBe('MLX');
-    expect(model.architecture.quantisation.method).toBe('mlx');
-    expect(model.architecture.quantisation.bits).toBe(6.5);
-    expect(model.capabilities.use_case.instruct).toBe(true);
+    const models = modelsResponse.json();
+    const model = models.find((entry: { model: { model_id: string } }) => entry.model.model_id === modelId);
+    const embed = models.find((entry: { model: { model_id: string } }) => entry.model.model_id === 'mistral-embed');
+    expect(model.model.base_model_name).toBe('codestral-2508');
+    expect(model.identity.provider).toBe('mistral');
+    expect(model.limits.context_window_tokens).toBe(256000);
+    expect(model.configuration.default_parameters.temperature).toBe(0.3);
+    expect(model.capabilities.generation.text).toBe(true);
+    expect(model.capabilities.generation.tools).toBe(true);
+    expect(model.capabilities.reasoning.supported).toBe(false);
     expect(model.capabilities.use_case.coding).toBe(true);
-    expect(model.capabilities.use_case.mixture_of_experts).toBe(true);
+    expect(model.raw.discovery_model.aliases).toEqual(['codestral-2508', 'mistral-code-latest']);
+    expect(model.raw.discovery_model.description).toContain('coding');
+    expect(embed.identity.provider).toBe('mistral');
+    expect(embed.capabilities.generation.embeddings).toBe(true);
+    expect(embed.modalities.output).toContain('embedding');
 
     const patchResponse = await app.inject({
       method: 'PATCH',

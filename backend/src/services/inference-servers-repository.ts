@@ -285,8 +285,8 @@ export function createInferenceServerRecord(input: InferenceServerInput): Infere
   if (!endpointsInput?.base_url) {
     throw new InvalidInferenceServerError('endpoints.base_url is required');
   }
-  const endpoints = { ...defaultEndpoints(endpointsInput.base_url), ...input.endpoints };
-  endpoints.https = validateBaseUrl(endpoints.base_url).https;
+  const { normalized, https } = validateBaseUrl(endpointsInput.base_url);
+  const endpoints = { ...defaultEndpoints(normalized), ...input.endpoints, base_url: normalized, https };
 
   const serverId = input.inference_server?.server_id ?? crypto.randomUUID();
   if (getInferenceServerById(serverId)) {

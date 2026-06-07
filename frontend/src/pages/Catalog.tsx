@@ -126,6 +126,16 @@ function runtimeLabel(server: InferenceServerRecord): string {
   return version ? `${name} · ${version}` : name;
 }
 
+function visibleModelPills(model: CatalogModel): string[] {
+  return [
+    model.family,
+    model.quantization,
+    model.format,
+    model.context,
+    model.parameterCountLabel
+  ].filter((entry): entry is string => typeof entry === 'string' && entry.trim().toLowerCase() !== 'unknown');
+}
+
 function buildCatalogModels(servers: InferenceServerRecord[], modelRecords: ModelRecord[]): CatalogModel[] {
   const recordMap = new Map(modelRecords.map((record) => [`${record.model.server_id}:${record.model.model_id}`, record]));
   const entries = new Map<string, CatalogModel>();
@@ -138,6 +148,15 @@ function buildCatalogModels(servers: InferenceServerRecord[], modelRecords: Mode
       ?? (record?.architecture.quantisation.bits ? `${record.architecture.quantisation.bits}-bit` : null)
       ?? (record ? quantLabel : null)
       ?? 'Unknown';
+    const capabilityLabels = record
+      ? [
+          record.capabilities.generation.tools ? 'tools' : null,
+          record.capabilities.generation.embeddings ? 'embeddings' : null,
+          record.capabilities.multimodal.vision ? 'vision' : null,
+          record.capabilities.multimodal.audio ? 'audio' : null,
+          record.capabilities.reasoning.supported ? 'reasoning' : null
+        ].filter((entry): entry is string => Boolean(entry))
+      : [];
     const key = `${server.inference_server.server_id}:${modelId}`;
     entries.set(key, {
       key,
@@ -150,14 +169,17 @@ function buildCatalogModels(servers: InferenceServerRecord[], modelRecords: Mode
       quantization,
       format,
       context: (record?.limits.context_window_tokens ?? context) ? `${record?.limits.context_window_tokens ?? context} ctx` : 'ctx unknown',
-      tools: server.capabilities.generation.tools,
+      tools: record?.capabilities.generation.tools ?? server.capabilities.generation.tools,
       streaming: server.capabilities.server.streaming,
       parameterCount: record?.architecture.parameter_count ?? null,
       parameterCountLabel: record?.architecture.parameter_count_label ?? null,
       capabilities: record
-        ? Object.entries(record.capabilities.use_case)
+        ? [
+            ...Object.entries(record.capabilities.use_case)
             .filter(([, v]) => v)
-            .map(([k]) => k.replace(/_/g, ' '))
+            .map(([k]) => k.replace(/_/g, ' ')),
+            ...capabilityLabels
+          ]
         : [],
       discoveryStatus: record?.discovery?.discovery_status ?? null
     });
@@ -870,6 +892,7 @@ function ModelsCatalog(props: {
           <div className="catalog-model-grid">
             {props.visibleModels.map((model) => {
               const absent = model.discoveryStatus === 'absent';
+              const pills = visibleModelPills(model);
               return (
                 <article key={model.key} className={`catalog-model-card${absent ? ' is-absent' : ''}`}>
                   <div className="catalog-card-top">
@@ -879,13 +902,9 @@ function ModelsCatalog(props: {
                       : <span className="catalog-select-dot">✓</span>}
                   </div>
                   <div className="catalog-model-pills">
-                    <span>{model.family}</span>
-                    <span>{model.quantization}</span>
-                    <span>{model.format}</span>
-                    <span>{model.context}</span>
-                    {model.parameterCountLabel ? <span>{model.parameterCountLabel}</span> : null}
+                    {pills.map((pill, index) => <span key={`${pill}-${index}`}>{pill}</span>)}
                   </div>
-                  <p>{[model.tools ? 'tools' : null, model.streaming ? 'streaming' : null].filter(Boolean).join(' · ') || 'standard generation'}</p>
+                  <p>{[...model.capabilities.slice(0, 4), model.streaming ? 'streaming' : null].filter(Boolean).join(' · ') || 'standard generation'}</p>
                   <div className="catalog-card-footer">
                     <span className="server-chip">{model.serverName}</span>
                     <button type="button" className="btn btn--ghost btn--sm" onClick={() => props.onInspect(model.serverId, model.modelId)} disabled={absent}>Inspect</button>
@@ -1189,6 +1208,7 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
     try {
       const input = buildInput();
       const result = await testServerConnection({
+        server_id: editing?.inference_server.server_id,
         base_url: input.endpoints?.base_url ?? baseUrl,
         schema_family: (input.runtime?.api?.schema_family as string[]) ?? ['openai-compatible'],
         auth: {

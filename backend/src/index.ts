@@ -3,7 +3,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import dotenv from 'dotenv';
-import { configureInferenceProxyFromEnv } from './services/inference-proxy.js';
+import {
+  configureInferenceProxyFromEnv,
+  resolveInferenceProxyConfig,
+  shouldDisableInferenceTlsVerification
+} from './services/inference-proxy.js';
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(moduleDir, '..', '..');
@@ -17,7 +21,12 @@ if (fs.existsSync(envPath)) {
 }
 
 if (configureInferenceProxyFromEnv()) {
-  console.info('[env] Inference server outbound proxy enabled via INFERHARNESS_INFERENCE_PROXY');
+  if (resolveInferenceProxyConfig()) {
+    console.info('[env] Inference server outbound proxy enabled via INFERHARNESS_INFERENCE_PROXY');
+  }
+  if (shouldDisableInferenceTlsVerification()) {
+    console.warn('[env] Inference server TLS certificate verification disabled via INFERHARNESS_INFERENCE_TLS_INSECURE');
+  }
 }
 
 import { createServer } from './api/server.js';

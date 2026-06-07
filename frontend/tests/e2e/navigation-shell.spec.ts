@@ -9,7 +9,7 @@ function catalogServer(serverId: string, name: string, modelId: string) {
       archived: false,
       created_at: '2026-01-01T00:00:00.000Z',
       updated_at: '2026-01-01T00:00:00.000Z',
-      archived_at: null
+      archived_at: null as string | null
     },
     runtime: {
       retrieved_at: '2026-01-01T00:00:00.000Z',
@@ -90,7 +90,12 @@ function catalogModel(serverId: string, modelId: string, provider: string, forma
 type CatalogServerFixture = ReturnType<typeof catalogServer>;
 type CatalogModelFixture = ReturnType<typeof catalogModel>;
 
-async function mockCatalogRoutes(page: Page, servers: CatalogServerFixture[], models: CatalogModelFixture[]) {
+async function mockCatalogRoutes(
+  page: Page,
+  servers: CatalogServerFixture[],
+  models: CatalogModelFixture[],
+  health: Record<string, boolean> = {}
+) {
   await page.route('**/system/connectivity-config', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ poll_interval_ms: 60000 }) });
   });
@@ -98,7 +103,15 @@ async function mockCatalogRoutes(page: Page, servers: CatalogServerFixture[], mo
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ results: servers.map((server) => ({ server_id: server.inference_server.server_id, ok: true, status_code: 200, response_time_ms: 12, checked_at: '2026-01-01T00:00:00.000Z' })) })
+      body: JSON.stringify({
+        results: servers.map((server) => ({
+          server_id: server.inference_server.server_id,
+          ok: health[server.inference_server.server_id] ?? true,
+          status_code: (health[server.inference_server.server_id] ?? true) ? 200 : 503,
+          response_time_ms: 12,
+          checked_at: '2026-01-01T00:00:00.000Z'
+        }))
+      })
     });
   });
   await page.route('**/inference-servers?*', async (route) => {
@@ -270,6 +283,27 @@ test('run keeps page and workspace headers', async ({ page }) => {
   await expect(page.locator('.run-page-header').getByRole('heading', { name: 'Run' })).toBeVisible();
 });
 
+test('run server and model selectors only offer online server models', async ({ page }) => {
+  const online = catalogServer('srv-online', 'Online Server', 'online-model');
+  const offline = catalogServer('srv-offline', 'Offline Server', 'offline-model');
+  const models = [
+    catalogModel('srv-online', 'online-model', 'mistral', 'MLX'),
+    catalogModel('srv-offline', 'offline-model', 'mistral', 'MLX')
+  ];
+  await mockCatalogRoutes(page, [online, offline], models, { 'srv-online': true, 'srv-offline': false });
+
+  await page.goto('/run');
+
+  const serverSelect = page.getByRole('combobox', { name: 'Inference server', exact: true });
+  await expect(serverSelect).toBeVisible();
+  await expect(serverSelect).toContainText('Online Server');
+  await expect(serverSelect).not.toContainText('Offline Server');
+
+  const modelSelect = page.getByRole('combobox', { name: 'Add model', exact: true });
+  await expect(modelSelect).toContainText('online-model · Online Server');
+  await expect(modelSelect).not.toContainText('offline-model');
+});
+
 test('catalog models funnel aligns staged rail controls', async ({ page }) => {
   const servers = [
     catalogServer('srv-a', 'Inferencer', 'mistral:latest'),
@@ -306,4 +340,23 @@ test('catalog models funnel aligns staged rail controls', async ({ page }) => {
   await modelFilterRail.getByRole('button', { name: 'Clear' }).click();
   await expect(page.locator('.catalog-server-stage .server-filter-row').filter({ hasText: 'srv-a.local' }).getByRole('checkbox')).toBeChecked();
   await expect(page.getByLabel('Mistral')).not.toBeChecked();
+});
+
+test('catalog model cards use model-level provider and capability metadata', async ({ page }) => {
+  const servers = [catalogServer('srv-mistral', 'Mistral', 'codestral-latest')];
+  const codestral = catalogModel('srv-mistral', 'codestral-latest', 'mistral', 'Unknown');
+  codestral.model.base_model_name = 'codestral-2508';
+  codestral.capabilities.generation.tools = true;
+  codestral.capabilities.use_case.coding = true;
+  codestral.limits.context_window_tokens = 256000;
+  await mockCatalogRoutes(page, servers, [codestral]);
+
+  await page.goto('/catalog?tab=models&servers=srv-mistral');
+
+  const card = page.locator('.catalog-model-card').filter({ hasText: 'codestral-2508' });
+  await expect(card).toBeVisible();
+  await expect(card.locator('.catalog-model-pills')).toContainText('Mistral');
+  await expect(card.locator('.catalog-model-pills')).toContainText('256000 ctx');
+  await expect(card.locator('.catalog-model-pills')).not.toContainText('Unknown');
+  await expect(card).toContainText('coding · tools · streaming');
 });

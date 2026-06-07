@@ -1031,16 +1031,14 @@ button.is-pending::after {
   box-shadow: none;
 }
 
-.run-server-select,
-.run-custom-model {
+.run-server-select {
   margin: 0;
   color: var(--ink-3);
   font-family: var(--font-mono);
   font-size: 10px;
 }
 
-.run-server-select select,
-.run-custom-model input {
+.run-server-select select {
   font-family: var(--font-mono);
   font-size: 12px;
 }
@@ -1116,17 +1114,6 @@ button.is-pending::after {
   font-size: 12px;
 }
 
-.run-custom-model {
-  flex: 1 1 150px;
-}
-
-.run-add-custom-button {
-  align-self: end;
-  padding: 7px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-}
-
 .run-hint {
   margin: 0;
   color: var(--ink-3);
@@ -1140,6 +1127,58 @@ button.is-pending::after {
 
 .run-template-picker select {
   min-height: 96px;
+}
+
+.run-prompt-field {
+  margin: 0;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.run-prompt-field textarea {
+  min-height: 0;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  resize: vertical;
+  text-transform: none;
+}
+
+.run-prompt-field input,
+.run-dataset-grid input,
+.run-dataset-grid select {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: none;
+}
+
+.run-dataset-mode {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+}
+
+.run-dataset-mode button {
+  min-height: 32px;
+  font-size: 11px;
+  white-space: normal;
+}
+
+.run-dataset-grid {
+  display: grid;
+  grid-template-columns: minmax(84px, 0.45fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.run-dataset-grid label {
+  margin: 0;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
 }
 
 .run-options-grid {
@@ -1356,11 +1395,21 @@ button.is-pending::after {
   padding: 14px;
   border: 1px solid var(--paper-7);
   border-radius: 8px;
-  background: var(--paper-1);
+  background: var(--ink-9);
+}
+
+.run-message-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.run-message-list .run-message-card {
+  margin-top: 0;
 }
 
 .run-message-card span {
-  color: var(--ink-3);
+  color: var(--paper-5);
   font-family: var(--font-mono);
   font-size: 10px;
   text-transform: uppercase;
@@ -1371,12 +1420,28 @@ button.is-pending::after {
 .run-side-metrics pre {
   overflow: auto;
   margin: 8px 0 0;
-  color: var(--ink-8);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.run-message-card pre {
+  color: var(--paper-1);
+}
+
+.run-column-body pre,
+.run-side-metrics pre {
+  color: var(--ink-6);
+}
+
+.run-side-metrics details pre {
+  padding: 10px;
+  border: 1px solid var(--paper-7);
+  border-radius: 8px;
+  background: var(--ink-9);
+  color: var(--paper-1);
 }
 
 .run-asserts {

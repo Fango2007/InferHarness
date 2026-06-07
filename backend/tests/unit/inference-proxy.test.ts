@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const undiciMock = vi.hoisted(() => ({
+  Agent: vi.fn(function (this: { options?: unknown }, options?: unknown) {
+    this.options = options;
+  }),
   EnvHttpProxyAgent: vi.fn(function (this: { options?: unknown }, options?: unknown) {
     this.options = options;
   }),
@@ -13,13 +16,15 @@ vi.mock('undici', () => undiciMock);
 import {
   backendFetch,
   configureInferenceProxyFromEnv,
-  resolveInferenceProxyConfig
+  resolveInferenceProxyConfig,
+  shouldDisableInferenceTlsVerification
 } from '../../src/services/inference-proxy.js';
 
 describe('inference proxy configuration', () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
+    undiciMock.Agent.mockClear();
     undiciMock.EnvHttpProxyAgent.mockClear();
     undiciMock.fetch.mockClear();
     undiciMock.setGlobalDispatcher.mockClear();
@@ -52,6 +57,13 @@ describe('inference proxy configuration', () => {
     });
   });
 
+  it('parses the backend-specific insecure TLS opt-in', () => {
+    expect(shouldDisableInferenceTlsVerification({})).toBe(false);
+    expect(shouldDisableInferenceTlsVerification({ INFERHARNESS_INFERENCE_TLS_INSECURE: 'false' })).toBe(false);
+    expect(shouldDisableInferenceTlsVerification({ INFERHARNESS_INFERENCE_TLS_INSECURE: '1' })).toBe(true);
+    expect(shouldDisableInferenceTlsVerification({ INFERHARNESS_INFERENCE_TLS_INSECURE: ' true ' })).toBe(true);
+  });
+
   it('configures a global Undici dispatcher for backend fetch calls', () => {
     const configured = configureInferenceProxyFromEnv({
       INFERHARNESS_INFERENCE_PROXY: 'http://proxy.example:8080',
@@ -68,6 +80,38 @@ describe('inference proxy configuration', () => {
     expect(undiciMock.setGlobalDispatcher).toHaveBeenCalledTimes(1);
     expect(undiciMock.setGlobalDispatcher).toHaveBeenCalledWith(
       undiciMock.EnvHttpProxyAgent.mock.instances[0]
+    );
+    expect(globalThis.fetch).toBe(backendFetch);
+  });
+
+  it('can disable TLS verification for proxied inference requests', () => {
+    const configured = configureInferenceProxyFromEnv({
+      INFERHARNESS_INFERENCE_PROXY: 'http://proxy.example:8080',
+      INFERHARNESS_INFERENCE_TLS_INSECURE: 'true'
+    });
+
+    expect(configured).toBe(true);
+    expect(undiciMock.EnvHttpProxyAgent).toHaveBeenCalledWith({
+      httpProxy: 'http://proxy.example:8080',
+      httpsProxy: 'http://proxy.example:8080',
+      noProxy: '',
+      proxyTunnel: false,
+      requestTls: { rejectUnauthorized: false },
+      proxyTls: { rejectUnauthorized: false }
+    });
+  });
+
+  it('can disable TLS verification for direct inference requests', () => {
+    const configured = configureInferenceProxyFromEnv({
+      INFERHARNESS_INFERENCE_TLS_INSECURE: 'true'
+    });
+
+    expect(configured).toBe(true);
+    expect(undiciMock.Agent).toHaveBeenCalledWith({
+      connect: { rejectUnauthorized: false }
+    });
+    expect(undiciMock.setGlobalDispatcher).toHaveBeenCalledWith(
+      undiciMock.Agent.mock.instances[0]
     );
     expect(globalThis.fetch).toBe(backendFetch);
   });

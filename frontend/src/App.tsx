@@ -120,8 +120,8 @@ function ResultsRoute({ runCount }: { runCount: number | null }) {
   return <ResultsUnified runCount={runCount} />;
 }
 
-function RunRoute() {
-  return <RunUnified />;
+function RunRoute({ connectivity }: { connectivity: Record<string, InferenceServerHealth> }) {
+  return <RunUnified connectivitySnapshot={connectivity} />;
 }
 
 export function App() {
@@ -369,7 +369,7 @@ export function App() {
           <Route path="/catalog" element={<CatalogRoute servers={servers} connectivity={connectivity} />} />
           <Route path="/catalog/models/:id" element={<CatalogModelDetailsRoute servers={servers} connectivity={connectivity} />} />
           <Route path="/templates" element={<Templates />} />
-          <Route path="/run" element={<RunRoute />} />
+          <Route path="/run" element={<RunRoute connectivity={connectivity} />} />
           <Route path="/results" element={<ResultsRoute runCount={runCount} />} />
           <Route path="/runs/:id" element={<Navigate to={{ pathname: '/results', search: resultsSearch('history') }} replace />} />
           <Route path="/evaluate" element={<Evaluate />} />

@@ -80,6 +80,11 @@ export interface InferenceServerRecord {
             }
           | string
           | null;
+        provider?: string | null;
+        base_model_name?: string | null;
+        default_temperature?: number | null;
+        capabilities?: Record<string, boolean>;
+        raw?: Record<string, unknown>;
       }>;
     };
   };
@@ -147,6 +152,7 @@ export async function refreshInferenceServerDiscovery(id: string): Promise<Infer
 }
 
 export interface ProbeConnectionInput {
+  server_id?: string;
   base_url: string;
   schema_family: string[];
   auth: { type: string; header_name: string; token?: string | null; token_env?: string | null };

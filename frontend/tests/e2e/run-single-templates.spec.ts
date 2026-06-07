@@ -1,64 +1,88 @@
-import path from 'node:path';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import http from 'node:http';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { expect, test } from '@playwright/test';
-import { loadEnv } from 'vite';
 
 import {
   archiveInferenceServer,
-  cleanupTemplateIds,
+  createModel,
   createInferenceServer,
   findInferenceServerByName
 } from './helpers.js';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(dirname, '../../..');
-const rawEnv = loadEnv(process.env.NODE_ENV ?? 'test', repoRoot, '');
-const env = { ...rawEnv, ...process.env };
-const API_BASE_URL = env.E2E_API_BASE_URL ?? 'http://localhost:8080';
-const API_TOKEN = env.INFERHARNESS_API_TOKEN ?? env.VITE_INFERHARNESS_API_TOKEN;
-const authHeaders = API_TOKEN ? { 'x-api-token': API_TOKEN } : undefined;
+const datasetDir = path.join(repoRoot, 'backend/data/datasets');
 
-function buildJsonTemplateContent(id: string, name: string, version = '1.0.0') {
-  return JSON.stringify(
-    {
-      id,
-      version,
-      name,
-      description: 'Template description',
-      protocols: [],
-      request: { method: 'POST', path: '/v1/chat/completions', body_template: {} },
-      assertions: [],
-      metrics: {}
-    },
-    null,
-    2
-  );
+interface MockChatServer {
+  baseUrl: string;
+  requests: Array<Record<string, unknown>>;
+  close: () => Promise<void>;
 }
 
-test('instantiates templates in Run', async ({ page, request }) => {
-  const serverDisplayName = `E2E Template Server ${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
-  const server = await createInferenceServer(request, {
-    display_name: serverDisplayName
+async function startMockOpenAiChatServer(): Promise<MockChatServer> {
+  const requests: Array<Record<string, unknown>> = [];
+  const server = http.createServer((request, response) => {
+    if (request.method !== 'POST' || request.url !== '/v1/chat/completions') {
+      response.writeHead(404).end();
+      return;
+    }
+
+    let rawBody = '';
+    request.setEncoding('utf8');
+    request.on('data', (chunk) => {
+      rawBody += chunk;
+    });
+    request.on('end', () => {
+      requests.push(JSON.parse(rawBody) as Record<string, unknown>);
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: 'OK' } }],
+        usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 }
+      }));
+    });
   });
-  const suffix = Date.now();
-  const templateId = `e2e-template-${suffix}`;
-  const templateName = `E2E Template Run ${suffix}`;
+
+  await new Promise<void>((resolve) => {
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Unable to start mock OpenAI chat server.');
+  }
+
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    requests,
+    close: () => new Promise((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    })
+  };
+}
+
+test('configures a benchmark smoke run from inline prompt inputs', async ({ page, request }) => {
+  const mockChat = await startMockOpenAiChatServer();
+  const serverDisplayName = `E2E Benchmark Run ${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+  const server = await createInferenceServer(request, {
+    display_name: serverDisplayName,
+    base_url: mockChat.baseUrl,
+    schema_family: ['openai-compatible']
+  });
+  await createModel(request, server.inference_server.server_id, {
+    model_id: 'gpt-4o-mini',
+    display_name: 'gpt-4o-mini'
+  });
 
   try {
-    const templateResponse = await request.post(`${API_BASE_URL}/templates`, {
-      headers: authHeaders,
-      data: {
-        id: templateId,
-        name: templateName,
-        type: 'json',
-        version: '1.0.0',
-        content: buildJsonTemplateContent(templateId, templateName)
-      }
-    });
-    expect(templateResponse.ok()).toBeTruthy();
-
     await expect
       .poll(async () => {
         const listed = await findInferenceServerByName(request, serverDisplayName);
@@ -77,7 +101,7 @@ test('instantiates templates in Run', async ({ page, request }) => {
 
     const inferenceServerSelect = page.getByRole('combobox', { name: 'Inference server', exact: true });
     await expect(inferenceServerSelect).toBeVisible();
-    const getServerLabels = () => inferenceServerSelect.evaluate((element) => {
+    const availableServerLabels = await inferenceServerSelect.evaluate((element) => {
       if (!(element instanceof HTMLSelectElement)) {
         return [];
       }
@@ -85,34 +109,118 @@ test('instantiates templates in Run', async ({ page, request }) => {
         .map((option) => option.text.trim())
         .filter((label) => label.length > 0 && label !== 'Select an inference server');
     });
-    await expect.poll(async () => (await getServerLabels()).length).toBeGreaterThan(0);
-    const availableServerLabels = await getServerLabels();
-    if (availableServerLabels.includes(serverDisplayName)) {
-      await inferenceServerSelect.selectOption({ label: serverDisplayName });
-    } else {
-      const fallbackLabel = availableServerLabels[0];
-      if (!fallbackLabel) {
-        throw new Error('No inference server options available in Run page.');
-      }
-      await inferenceServerSelect.selectOption({ label: fallbackLabel });
-    }
-    await page.getByRole('textbox', { name: 'Model', exact: true }).fill('gpt-4o-mini');
-    await page.getByRole('button', { name: 'Add model', exact: true }).click();
-    const templatesSelect = page.getByRole('listbox', { name: 'Templates', exact: true });
-    const availableTemplateLabels = await templatesSelect.evaluate((element) => {
-      if (!(element instanceof HTMLSelectElement)) {
-        return [];
-      }
-      return Array.from(element.options).map((option) => option.text.trim());
-    });
-    const templateOptionLabel = availableTemplateLabels.find((label) => label.includes(templateName));
-    expect(templateOptionLabel).toBeTruthy();
-    await templatesSelect.selectOption({ label: templateOptionLabel! });
+    expect(availableServerLabels.length).toBeGreaterThan(0);
+    await inferenceServerSelect.selectOption({ label: availableServerLabels.includes(serverDisplayName) ? serverDisplayName : availableServerLabels[0] });
+    await page.getByRole('combobox', { name: 'Add model', exact: true }).selectOption({ label: `gpt-4o-mini · ${serverDisplayName}` });
+    await page.getByRole('textbox', { name: 'Prompt', exact: true }).fill('Reply with exactly: OK');
 
     await expect(page.getByTitle('gpt-4o-mini')).toBeVisible();
-    await expect(page.getByRole('button', { name: /Run · 1 models × 1 templates/ })).toBeEnabled();
+    const runButton = page.getByRole('button', { name: 'Run benchmark' });
+    await expect(runButton).toBeEnabled();
+
+    const createInstantiation = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response.url().includes('/benchmark/instantiations') &&
+        !response.url().includes('/run') &&
+        response.status() === 201
+    );
+    const runInstantiation = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        /\/benchmark\/instantiations\/[^/]+\/run$/.test(new URL(response.url()).pathname) &&
+        response.status() === 201
+    );
+    await runButton.click();
+    await createInstantiation;
+    await runInstantiation;
+
+    await expect(page.locator('.run-message-card pre')).toHaveText('OK');
+    await expect(page.locator('.run-status-pill')).toHaveText('completed');
+    await expect(page.locator('.run-asserts')).toContainText('completed');
+    await expect(page.locator('.run-asserts')).not.toContainText('no-instantiation');
+    await expect(page.locator('.run-asserts')).not.toContainText('no-result');
+    await expect(page.locator('.run-metric-grid')).toContainText('5');
+    await expect(page.locator('.run-metric-grid')).toContainText('1');
+    await expect(page.locator('.run-metric-grid')).toContainText('6');
+
+    expect(mockChat.requests).toHaveLength(1);
+    const [chatRequest] = mockChat.requests;
+    expect(chatRequest.model).toBe('gpt-4o-mini');
+    expect(chatRequest.messages).toEqual([
+      { role: 'system', content: 'You are a concise assistant.' },
+      { role: 'user', content: 'Reply with exactly: OK' }
+    ]);
   } finally {
-    await cleanupTemplateIds(request, [templateId]);
     await archiveInferenceServer(request, server.inference_server.server_id);
+    await mockChat.close();
+  }
+});
+
+test('runs a server-side JSONL dataset from the Run page', async ({ page, request }) => {
+  const mockChat = await startMockOpenAiChatServer();
+  const serverDisplayName = `E2E Dataset Run ${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+  const datasetName = `e2e-codegen-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.jsonl`;
+  const datasetPath = path.join(datasetDir, datasetName);
+  fs.mkdirSync(datasetDir, { recursive: true });
+  fs.writeFileSync(
+    datasetPath,
+    [
+      JSON.stringify({ id: 'codegen-1', prompt: 'Write a JavaScript add function.' }),
+      JSON.stringify({ id: 'codegen-2', prompt: 'Write a Python is_even function.' })
+    ].join('\n') + '\n',
+    'utf8'
+  );
+  const server = await createInferenceServer(request, {
+    display_name: serverDisplayName,
+    base_url: mockChat.baseUrl,
+    schema_family: ['openai-compatible']
+  });
+  await createModel(request, server.inference_server.server_id, {
+    model_id: 'gpt-4o-mini',
+    display_name: 'gpt-4o-mini'
+  });
+
+  try {
+    await page.goto('/run');
+    const inferenceServerSelect = page.getByRole('combobox', { name: 'Inference server', exact: true });
+    await expect(inferenceServerSelect).toBeVisible();
+    await inferenceServerSelect.selectOption({ label: serverDisplayName });
+    await page.getByRole('combobox', { name: 'Add model', exact: true }).selectOption({ label: `gpt-4o-mini · ${serverDisplayName}` });
+    await page.getByRole('button', { name: 'Server dataset' }).click();
+    await page.getByRole('textbox', { name: 'Dataset id' }).fill('e2e-codegen');
+    await page.getByRole('textbox', { name: 'Path' }).fill(datasetPath);
+
+    const runButton = page.getByRole('button', { name: 'Run benchmark' });
+    await expect(runButton).toBeEnabled();
+    const prepareManifest = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        response.url().includes('/benchmark/datasets/manifest') &&
+        response.ok()
+    );
+    const runInstantiation = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        /\/benchmark\/instantiations\/[^/]+\/run$/.test(new URL(response.url()).pathname) &&
+        response.status() === 201
+    );
+    await runButton.click();
+    await prepareManifest;
+    await runInstantiation;
+
+    await expect(page.locator('.run-status-pill')).toHaveText('completed');
+    await expect(page.locator('.run-message-card pre')).toHaveCount(2);
+    await expect(page.locator('.run-asserts')).toContainText('e2e-codegen');
+    await expect(page.locator('.run-asserts')).toContainText('2');
+    expect(mockChat.requests).toHaveLength(2);
+    expect(mockChat.requests.map((entry) => entry.messages)).toEqual([
+      [{ role: 'user', content: 'Write a JavaScript add function.' }],
+      [{ role: 'user', content: 'Write a Python is_even function.' }]
+    ]);
+  } finally {
+    await archiveInferenceServer(request, server.inference_server.server_id);
+    await mockChat.close();
+    fs.rmSync(datasetPath, { force: true });
   }
 });
