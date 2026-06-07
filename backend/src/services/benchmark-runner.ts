@@ -488,8 +488,10 @@ async function executeItem(
       if (effectiveStreaming && response.body) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-        while (true) {
-          const { value, done } = await reader.read();
+        let done = false;
+        while (!done) {
+          const { value, done: chunkDone } = await reader.read();
+          done = chunkDone;
           if (done) {
             break;
           }
