@@ -191,17 +191,38 @@ Model formats supported in the catalog include `GGUF`, `MLX`, `GPTQ`, `AWQ`, and
 
 ## Screenshots
 
-<p align="center">
-  <img src=".github/assets/1-Catalog-servers-page-06082026.png" width="49%" alt="Catalog - Servers" />
-  <img src=".github/assets/2-Catalog-models-page-06082026.png" width="49%" alt="Catalog - Models" />
-</p>
-<p align="center">
-  <img src=".github/assets/3-Templates-page.png" width="49%" alt="Templates" />
-  <img src=".github/assets/4-Run-page06082026.png" width="49%" alt="Run" />
-</p>
-<p align="center">
-  <img src=".github/assets/5-Results-page.png" width="49%" alt="Results" />
-</p>
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src=".github/assets/1-Catalog-servers-page-06082026.png" width="100%" alt="Catalog — Servers" /><br>
+      <b>Catalog — Servers</b> · Browse, add, and probe inference servers
+    </td>
+    <td align="center" width="50%">
+      <img src=".github/assets/2-Catalog-models-page-06082026.png" width="100%" alt="Catalog — Models" /><br>
+      <b>Catalog — Models</b> · Filter and inspect discovered models
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src=".github/assets/3-Templates-page.png" width="100%" alt="Templates" /><br>
+      <b>Templates</b> · Author reusable JSON and Python test templates
+    </td>
+    <td align="center">
+      <img src=".github/assets/4-Run-page-06082026.png" width="100%" alt="Run" /><br>
+      <b>Run</b> · Execute templates against one or more models
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src=".github/assets/5-Results-page.png" width="100%" alt="Results" /><br>
+      <b>Results</b> · Dashboard, history, and leaderboard
+    </td>
+    <td align="center">
+      <img src=".github/assets/Evaluate-page.png" width="100%" alt="Evaluate" /><br>
+      <b>Evaluate</b> · Score model responses on five qualitative dimensions
+    </td>
+  </tr>
+</table>
 
 ---
 
