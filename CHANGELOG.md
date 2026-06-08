@@ -6,12 +6,26 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-08
+
 ### Added
 
+- **Benchmark test pipeline (phase 1)** — new `POST /benchmark` route accepts structured benchmark plans and dispatches dataset-backed test runs against registered inference servers.
+- Seven JSON schemas for benchmark documents: `model_profile`, `model_snapshot`, `runtime_profile`, `dataset_manifest`, `test_template`, `test_instantiation`, `test_run_result`, and `benchmark_plan`, with schema-version-based kind inference.
+- `benchmark-schemas` service exposing `validateBenchmarkDocument`, `benchmarkKindFromDocument`, and `benchmarkSchemaPath` for typed document validation.
+- `benchmark-datasets` service for loading, validating, and caching dataset manifests, with support for embedded, compressed-blob, and manifest-only dataset formats.
+- `benchmark-foundation` service for creating, storing, and reloading structured benchmark results against the SQLite schema.
+- `benchmark-runner` service orchestrating full benchmark plan execution: instantiation, dataset injection, per-model inference dispatch, and result persistence.
+- `INFERHARNESS_BENCHMARK_DATASET_ROOT` environment variable for server-side benchmark dataset file resolution.
+- `INFERHARNESS_INFERENCE_TLS_INSECURE` environment variable (default `false`) to disable TLS certificate verification for outbound inference requests, equivalent to `curl --insecure`.
 - `POST /inference-servers/probe` endpoint tests connection and lists models without writing to DB, used by the server creation drawer before saving.
 - Per-server refresh icon button on server cards triggers `refreshInferenceServerDiscovery` for that server on demand.
 - Refresh-all icon button in the servers section header re-probes all active servers in parallel.
 - `probeServer()` now accepts `parseModels: false` for lightweight health checks that confirm reachability without parsing the model list.
+- Capabilities filter (thinking / coding / instruct / MoE) on the Catalog model rail, with URL-backed `capabilities` query parameter.
+- Parameter count upper-bound slider on the Catalog model rail, with URL-backed `maxParams` query parameter and inline label.
+- Parameter count label pill displayed on model cards.
+- GPU cores field added to the inference server create/edit drawer, collected through the extended server schema.
 
 ### Changed
 
@@ -21,10 +35,16 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - `CONNECTIVITY_POLL_INTERVAL_MS` renamed to `INFERHARNESS_HEALTH_POLL_INTERVAL` and now accepts seconds instead of milliseconds (default: 30).
 - `probeServer()` extracted into a dedicated `inference-server-probe.ts` service, eliminating duplicated HTTP probe logic across `refreshDiscovery` and `checkInferenceServerHealth`.
 - "Last probe" timestamp removed from server cards and the server detail rail.
+- Capabilities and `maxParams` filters cleared on server deselect and rail clear.
+- Server create/edit drawer now uses dropdown fields and a two-column layout.
+- Mistral `/v1/models` discovery now keeps only canonical entries where `id == name`, dropping alias rows before DB persistence.
+- Run-groups endpoints and data model removed; benchmark pipeline replaces the former grouped-run concept.
 
 ### Fixed
 
 - Deleting an inference server no longer throws a FOREIGN KEY constraint error; child records (metric samples, test results, runs, evaluations, models) are now deleted in dependency order within a transaction.
+- Contract and integration tests for benchmark schemas now reference committed fixture files instead of the gitignored `specs/` directory, fixing all 26 CI failures.
+- Root-level `vitest` run no longer fails due to missing or misrouted test configuration.
 
 ## [0.4.1] - 2026-05-11
 
