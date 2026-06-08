@@ -1,0 +1,12 @@
+{
+  "kind": "runtime_profile",
+  "schema_version": "benchmark_runtime_profile_v1",
+  "runtime_parameters": {
+    "temperature": 0.2,
+    "top_p": 0.9,
+    "max_tokens": 512,
+    "stream": false,
+    "timeout_ms": 300000,
+    "unsupported_parameter_policy": "strict"
+  }
+}
