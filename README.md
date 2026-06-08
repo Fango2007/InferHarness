@@ -172,9 +172,11 @@ Score models with the same prompts and compare results over time.
 
 ---
 
-## Supported Inference Servers
+## Supported Inference Servers and Cloud Providers
 
-InferHarness works with servers that expose an OpenAI-compatible or Ollama-compatible HTTP API.
+InferHarness supports local inference servers and native cloud provider APIs.
+
+**Local inference servers**
 
 | Server | API family | Notes |
 |---|---|---|
@@ -184,6 +186,24 @@ InferHarness works with servers that expose an OpenAI-compatible or Ollama-compa
 | [vLLM](https://github.com/vllm-project/vllm) | OpenAI-compatible | High-throughput GPU inference |
 | [Inferencer](https://github.com/inferencerlabs/inferencer-feedback) | OpenAI-compatible + Ollama | High-end MLX inference server |
 | Any OpenAI/Ollama-compatible server | OpenAI/Ollama-compatible | Custom auth header and token supported |
+
+**Cloud providers**
+
+| Provider | API family | Discovery endpoint | Auth |
+|---|---|---|---|
+| [Anthropic](https://www.anthropic.com) | Anthropic native | `/v1/models` | `x-api-key` header |
+| [Google Gemini](https://ai.google.dev) | Gemini native | `/v1beta/models` | `x-goog-api-key` header |
+| [OpenAI](https://platform.openai.com) | OpenAI-compatible | `/v1/models` | Bearer token |
+| [Mistral](https://mistral.ai) | OpenAI-compatible | `/v1/models` | Bearer token |
+| [Groq](https://groq.com) | OpenAI-compatible | `/v1/models` | Bearer token |
+| [Together AI](https://www.together.ai) | OpenAI-compatible | `/v1/models` | Bearer token |
+| [Fireworks AI](https://fireworks.ai) | OpenAI-compatible | `/v1/models` | Bearer token |
+| [OpenRouter](https://openrouter.ai) | OpenAI-compatible | `/v1/models` | Bearer token |
+| [DeepSeek](https://www.deepseek.com) | OpenAI-compatible | `/v1/models` | Bearer token |
+| [xAI](https://x.ai) | OpenAI-compatible | `/v1/models` | Bearer token |
+| [Cerebras](https://cerebras.ai) | OpenAI-compatible | `/v1/models` | Bearer token |
+
+Cloud providers use the direct public API (not Bedrock or Vertex AI). Tokens are never stored in plaintext; use the `token_env` field to reference an environment variable.
 
 Model formats supported in the catalog include `GGUF`, `MLX`, `GPTQ`, `AWQ`, and `SafeTensors`.
 
@@ -368,7 +388,7 @@ SQLite stores application data. Local files store templates, cached metadata, an
 Used when a feature needs Python tooling, such as architecture inspection or Python-based test logic. Architecture inspection reads model configuration or GGUF metadata without loading model weights.
 
 **Inference servers**
-External local or remote servers provide model inference through OpenAI-compatible or Ollama-compatible HTTP APIs.
+External local or remote servers provide model inference through OpenAI-compatible, Ollama-compatible, Anthropic native, or Gemini native HTTP APIs.
 
 ---
 
