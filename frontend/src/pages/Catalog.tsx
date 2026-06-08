@@ -1714,6 +1714,8 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
                   {([
                     ['openai-compatible', 'OpenAI'],
                     ['ollama', 'Ollama'],
+                    ['anthropic', 'Anthropic'],
+                    ['gemini', 'Gemini'],
                     ['custom', 'Custom']
                   ] as Array<[ApiSchemaFamily, string]>).map(([value, label]) => (
                     <label key={value} className="catalog-checkbox">
