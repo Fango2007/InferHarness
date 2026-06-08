@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { EmptyState } from '../components/EmptyState.js';
-import { InferenceContextBar } from '../components/InferenceContextBar.js';
 import { MergedPageHeader } from '../components/MergedPageHeader.js';
 import { TemplateEditor } from '../components/TemplateEditor.js';
-import { DEFAULT_INFERENCE_PARAMS } from '../services/inference-param-presets-api.js';
 import {
   TemplateInput,
   TemplateRecord,
@@ -42,7 +40,6 @@ export function Templates() {
   const [typeFilter, setTypeFilter] = useState<'all' | TemplateType>('all');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [params, setParams] = useState(DEFAULT_INFERENCE_PARAMS);
 
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === selectedId) ?? null,
@@ -117,7 +114,6 @@ export function Templates() {
   return (
     <>
       <MergedPageHeader title="Templates" subtitle="JSON and Python test definitions." />
-      <InferenceContextBar params={params} onChange={setParams} visible={Boolean(selectedTemplate || mode.kind !== 'preview')} />
       <section className="page templates-page templates-page--polish">
         {error ? <div className="error">{error}</div> : null}
         {templates.length === 0 && mode.kind === 'preview' ? (

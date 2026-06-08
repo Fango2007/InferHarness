@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { EmptyState } from '../components/EmptyState.js';
-import { InferenceContextBar } from '../components/InferenceContextBar.js';
 import { MergedPageHeader } from '../components/MergedPageHeader.js';
 import { RunDetailDisplay } from '../components/RunDetailDisplay.js';
 import {
@@ -16,7 +15,6 @@ import {
   skipEvaluationQueueItem,
   validateQueueScores
 } from '../services/evaluation-queue-api.js';
-import { DEFAULT_INFERENCE_PARAMS } from '../services/inference-param-presets-api.js';
 
 const SCORE_FIELDS: Array<{ key: keyof EvaluationQueueScoreInput; label: string }> = [
   { key: 'accuracy_score', label: 'Accuracy' },
@@ -57,7 +55,6 @@ export function Evaluate() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const selectedParams = detail?.inference_config ?? DEFAULT_INFERENCE_PARAMS;
   const selectedIndex = useMemo(() => items.findIndex((item) => item.test_result_id === selectedId), [items, selectedId]);
 
   const loadQueue = useCallback(async (nextStatus = status) => {
@@ -180,7 +177,6 @@ export function Evaluate() {
         subtitle="Score completed run outputs against the five-field leaderboard rubric."
         action={<button type="button" className="btn btn--ghost" onClick={() => loadQueue(status)} disabled={loading || busy}>Refresh</button>}
       />
-      <InferenceContextBar params={selectedParams} readOnly />
       <section className="page evaluate-queue-page">
         {error ? <div className="error">{error}</div> : null}
         {loading ? <p className="muted">Loading evaluation queue...</p> : null}

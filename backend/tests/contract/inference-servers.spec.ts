@@ -72,6 +72,118 @@ describe('inference servers contract', () => {
     expect(servers).toHaveLength(1);
   });
 
+  it('deletes an inference server with dependent run data', async () => {
+    const app = createServer();
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/inference-servers',
+      headers: AUTH_HEADERS,
+      payload: buildCreatePayload()
+    });
+    expect(createResponse.statusCode).toBe(201);
+    const created = createResponse.json();
+    const db = getDb();
+    const now = '2026-01-01T00:00:00.000Z';
+    const json = JSON.stringify({});
+    db.prepare(`
+      INSERT INTO models (
+        server_id, model_id, display_name, active, archived, created_at, updated_at,
+        base_model_name, model_schema_version, identity, architecture, modalities,
+        capabilities, limits, performance, configuration, discovery, raw
+      ) VALUES (?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      created.inference_server.server_id,
+      'model-delete-cascade',
+      'Model Delete Cascade',
+      now,
+      now,
+      'model-delete-cascade',
+      '1.0.0',
+      json,
+      json,
+      json,
+      json,
+      json,
+      json,
+      json,
+      json,
+      json
+    );
+    db.prepare(`
+      INSERT INTO benchmark_test_instantiations (
+        id, schema_version, document_hash, template_id, template_version,
+        server_id, model_id, dataset_hash, status, document, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      'instantiation-delete-cascade',
+      '1.0.0',
+      'hash-delete-cascade',
+      'template-delete-cascade',
+      '1',
+      created.inference_server.server_id,
+      'model-delete-cascade',
+      'dataset-delete-cascade',
+      'created',
+      json,
+      now,
+      now
+    );
+    db.prepare(`
+      INSERT INTO runs (
+        id, inference_server_id, suite_id, test_id, profile_id, profile_version,
+        status, started_at, ended_at, environment_snapshot, retention_days
+      ) VALUES (?, ?, NULL, ?, NULL, NULL, ?, ?, NULL, NULL, NULL)
+    `).run('run-delete-cascade', created.inference_server.server_id, 'test-delete', 'completed', now);
+    db.prepare(`
+      INSERT INTO benchmark_test_run_results (
+        id, schema_version, document_hash, instantiation_id, run_id, status, document, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      'benchmark-result-delete-cascade',
+      '1.0.0',
+      'result-hash-delete-cascade',
+      'instantiation-delete-cascade',
+      'run-delete-cascade',
+      'completed',
+      json,
+      now
+    );
+
+    const deleteResponse = await app.inject({
+      method: 'DELETE',
+      url: `/inference-servers/${created.inference_server.server_id}`,
+      headers: AUTH_HEADERS
+    });
+
+    expect(deleteResponse.statusCode).toBe(204);
+    expect(db.prepare('SELECT COUNT(1) as count FROM runs WHERE inference_server_id = ?').get(created.inference_server.server_id)).toMatchObject({ count: 0 });
+    expect(db.prepare('SELECT COUNT(1) as count FROM benchmark_test_instantiations WHERE server_id = ?').get(created.inference_server.server_id)).toMatchObject({ count: 0 });
+    expect(db.prepare('SELECT COUNT(1) as count FROM benchmark_test_run_results WHERE instantiation_id = ?').get('instantiation-delete-cascade')).toMatchObject({ count: 0 });
+    expect(db.prepare('SELECT COUNT(1) as count FROM models WHERE server_id = ?').get(created.inference_server.server_id)).toMatchObject({ count: 0 });
+    expect(db.prepare('SELECT COUNT(1) as count FROM inference_servers WHERE server_id = ?').get(created.inference_server.server_id)).toMatchObject({ count: 0 });
+  });
+
+  it('drops legacy run-group tables during server startup', async () => {
+    const db = getDb();
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS run_groups (
+        id TEXT PRIMARY KEY
+      );
+      CREATE TABLE IF NOT EXISTS run_group_items (
+        id TEXT PRIMARY KEY,
+        group_id TEXT NOT NULL,
+        inference_server_id TEXT NOT NULL,
+        FOREIGN KEY (group_id) REFERENCES run_groups(id),
+        FOREIGN KEY (inference_server_id) REFERENCES inference_servers(server_id)
+      );
+    `);
+
+    createServer();
+
+    expect(db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'run_groups'").get()).toBeUndefined();
+    expect(db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'run_group_items'").get()).toBeUndefined();
+  });
+
   it('stores raw auth tokens without returning them in API payloads', async () => {
     const app = createServer();
     const createResponse = await app.inject({
@@ -465,6 +577,8 @@ describe('inference servers contract', () => {
     expect(embedAlias).toBeUndefined();
     expect(model.model.base_model_name).toBe('codestral-2508');
     expect(model.identity.provider).toBe('mistral');
+    expect(model.architecture.precision).toBe('bf16');
+    expect(model.architecture.quantisation.method).toBe('none');
     expect(model.limits.context_window_tokens).toBe(256000);
     expect(model.configuration.default_parameters.temperature).toBe(0.3);
     expect(model.capabilities.generation.text).toBe(true);
@@ -474,6 +588,8 @@ describe('inference servers contract', () => {
     expect(model.raw.discovery_model.aliases).toEqual(['codestral-latest', 'mistral-code-latest']);
     expect(model.raw.discovery_model.description).toContain('coding');
     expect(embed.identity.provider).toBe('mistral');
+    expect(embed.architecture.precision).toBe('bf16');
+    expect(embed.architecture.quantisation.method).toBe('none');
     expect(embed.capabilities.generation.embeddings).toBe(true);
     expect(embed.modalities.output).toContain('embedding');
 

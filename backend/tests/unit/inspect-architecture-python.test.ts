@@ -2,9 +2,12 @@ import { execFileSync, spawnSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-const SCRIPT = path.resolve(process.cwd(), 'src/scripts/inspect_architecture.py');
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const backendRoot = path.resolve(moduleDir, '../..');
+const SCRIPT = path.resolve(backendRoot, 'src/scripts/inspect_architecture.py');
 
 function writeConfig(dir: string, config: Record<string, unknown>): void {
   fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(config), 'utf8');
@@ -12,7 +15,7 @@ function writeConfig(dir: string, config: Record<string, unknown>): void {
 
 function inspect(dir: string, format = 'gptq') {
   const stdout = execFileSync('python3', [SCRIPT, '--model_id', 'local/model', '--format', format, '--model_path', dir], {
-    cwd: path.resolve(process.cwd(), '..'),
+    cwd: path.resolve(backendRoot, '..'),
     encoding: 'utf8',
   });
   return JSON.parse(stdout) as Record<string, any>;
@@ -123,7 +126,7 @@ describe('inspect_architecture.py config fallback', () => {
     });
 
     const result = spawnSync('python3', [SCRIPT, '--model_id', 'local/model', '--format', 'gptq', '--model_path', tmpDir], {
-      cwd: path.resolve(process.cwd(), '..'),
+      cwd: path.resolve(backendRoot, '..'),
       encoding: 'utf8',
     });
 

@@ -205,8 +205,8 @@ test('merged Results dashboard filter and render flow', async ({ page }) => {
   await expect(page.locator('.results-funnel-stage--collapsed')).toHaveCount(0);
   const railOffset = await page.evaluate(() => {
     const pageRect = document.querySelector('.results-page')?.getBoundingClientRect();
-    const barRect = document.querySelector('.context-bar')?.getBoundingClientRect();
-    return pageRect && barRect ? Math.abs(pageRect.left - barRect.left) : 999;
+    const headerRect = document.querySelector('.merged-page-header')?.getBoundingClientRect();
+    return pageRect && headerRect ? Math.abs(pageRect.left - headerRect.left) : 999;
   });
   expect(railOffset).toBeLessThan(2);
 

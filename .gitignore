@@ -64,3 +64,4 @@ backend/data/model/
 /specs
 /.cli
 /UI_design
+/trace

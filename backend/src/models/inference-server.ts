@@ -315,10 +315,21 @@ export function deleteInferenceServer(id: string): boolean {
   const db = getDb();
   const deleted = db.transaction(() => {
     db.prepare(`
+      DELETE FROM benchmark_test_run_results WHERE instantiation_id IN (
+        SELECT id FROM benchmark_test_instantiations WHERE server_id = ?
+      )
+    `).run(id);
+    db.prepare('DELETE FROM benchmark_test_instantiations WHERE server_id = ?').run(id);
+    db.prepare(`
       DELETE FROM metric_samples WHERE test_result_id IN (
         SELECT id FROM test_results WHERE run_id IN (
           SELECT id FROM runs WHERE inference_server_id = ?
         )
+      )
+    `).run(id);
+    db.prepare(`
+      DELETE FROM test_result_documents WHERE run_id IN (
+        SELECT id FROM runs WHERE inference_server_id = ?
       )
     `).run(id);
     db.prepare(`
@@ -328,6 +339,7 @@ export function deleteInferenceServer(id: string): boolean {
     `).run(id);
     db.prepare('DELETE FROM runs WHERE inference_server_id = ?').run(id);
     db.prepare('DELETE FROM evaluations WHERE server_id = ?').run(id);
+    db.prepare('DELETE FROM active_tests WHERE inference_server_id = ?').run(id);
     db.prepare('DELETE FROM models WHERE server_id = ?').run(id);
     const result = db.prepare('DELETE FROM inference_servers WHERE server_id = ?').run(id);
     return result.changes > 0;

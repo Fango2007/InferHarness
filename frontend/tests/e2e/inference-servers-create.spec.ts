@@ -3,13 +3,72 @@ import crypto from 'node:crypto';
 
 import { archiveInferenceServer, findInferenceServerByName } from './helpers.js';
 
+test('populates safe cloud provider defaults without filling the bearer token', async ({ page }) => {
+  await page.goto('/catalog?tab=servers');
+
+  await page.getByRole('button', { name: '+ Add server' }).click();
+
+  const createDrawer = page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('heading', { name: 'Add inference server' }) });
+  await expect(createDrawer).toBeVisible();
+  const createForm = createDrawer.locator('form');
+  const presetSelect = createForm.getByTestId('provider-preset-select');
+
+  const providerOptions = await presetSelect.locator('option').evaluateAll((options) => options.map((option) => option.textContent?.trim()));
+  expect(providerOptions).toEqual([
+    'Local / custom inference server',
+    'OpenAI',
+    'Mistral',
+    'Groq',
+    'Together AI',
+    'Fireworks AI',
+    'OpenRouter',
+    'DeepSeek',
+    'xAI',
+    'Cerebras'
+  ]);
+
+  await presetSelect.selectOption('openai');
+
+  await expect(createForm.getByLabel('Display name')).toHaveValue('OpenAI');
+  await expect(createForm.getByLabel('Base URL')).toHaveValue('https://api.openai.com/v1');
+  await expect(createForm.getByLabel('Software')).toHaveValue('OpenAI');
+  await expect(createForm.getByLabel('Auth type')).toHaveValue('bearer');
+  await expect(createForm.getByLabel('Auth header name')).toHaveValue('Authorization');
+  await expect(createForm.getByLabel('Auth token')).toHaveValue('');
+  await expect(createForm.getByLabel('Streaming')).toBeChecked();
+  await expect(createForm.getByLabel('Models endpoint')).toBeChecked();
+  await expect(createForm.getByLabel('Tool calls')).toBeChecked();
+  await expect(createForm.getByLabel('Embeddings')).toBeChecked();
+  await expect(createForm.getByLabel('JSON schema')).toBeChecked();
+  await expect(createForm.getByLabel('Reasoning')).toBeChecked();
+  await expect(createForm.getByLabel('Parallel requests')).toBeChecked();
+
+  await presetSelect.selectOption('mistral');
+
+  await expect(createForm.getByLabel('Display name')).toHaveValue('Mistral');
+  await expect(createForm.getByLabel('Base URL')).toHaveValue('https://api.mistral.ai/v1');
+  await expect(createForm.getByLabel('Software')).toHaveValue('Mistral');
+  await expect(createForm.getByLabel('Auth type')).toHaveValue('bearer');
+  await expect(createForm.getByLabel('Auth header name')).toHaveValue('Authorization');
+  await expect(createForm.getByLabel('Auth token')).toHaveValue('');
+  await expect(createForm.getByLabel('Streaming')).toBeChecked();
+  await expect(createForm.getByLabel('Models endpoint')).toBeChecked();
+  await expect(createForm.getByLabel('Tool calls')).toBeChecked();
+  await expect(createForm.getByLabel('Embeddings')).toBeChecked();
+  await expect(createForm.getByLabel('JSON schema')).toBeChecked();
+  await expect(createForm.getByLabel('Reasoning')).toBeChecked();
+  await expect(createForm.getByLabel('Parallel requests')).toBeChecked();
+});
+
 test('creates a new inference server from the dashboard', async ({ page, request }) => {
   const displayName = `E2E Server ${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
   const baseUrl = 'http://localhost:8080';
 
   await page.goto('/catalog?tab=servers');
 
-  await page.locator('.catalog-section-title').filter({ hasText: 'Inference servers' }).getByRole('button', { name: '+ Add server' }).click();
+  await page.getByRole('button', { name: '+ Add server' }).click();
 
   const createDrawer = page
     .getByRole('dialog')

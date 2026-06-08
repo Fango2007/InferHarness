@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { MergedPageHeader } from '../components/MergedPageHeader.js';
 import { EmptyState } from '../components/EmptyState.js';
-import { InferenceContextBar } from '../components/InferenceContextBar.js';
 import { RegLight } from '../components/RegLight.js';
 import { catalogSearch, normalizeCatalogTab } from '../navigation.js';
 import { InferenceServerHealth } from '../services/connectivity-api.js';
@@ -26,7 +25,6 @@ import {
   updateInferenceServer
 } from '../services/inference-servers-api.js';
 import { ModelFormat, ModelRecord, listModels } from '../services/models-api.js';
-import { DEFAULT_INFERENCE_PARAMS, type InferenceParams } from '../services/inference-param-presets-api.js';
 import { relativeTime } from '../utils.js';
 
 type CatalogModel = {
@@ -45,15 +43,188 @@ type CatalogModel = {
   parameterCount: number | null;
   parameterCountLabel: string | null;
   capabilities: string[];
+  filterCapabilities: string[];
   discoveryStatus: 'present' | 'absent' | null;
+  sortKey: CatalogModelSortKey;
 };
 
 type ServerStatus = 'healthy' | 'degraded' | 'down' | 'unknown';
 
 type DrawerMode = { kind: 'create' } | { kind: 'edit'; server: InferenceServerRecord };
+type CatalogModelSortKey = {
+  family: string;
+  series: string;
+  release: number;
+  parameterCount: number;
+  quantizationRank: number;
+  displayName: string;
+};
+type ProviderPresetId =
+  | 'local-manual'
+  | 'openai'
+  | 'mistral'
+  | 'groq'
+  | 'together'
+  | 'fireworks'
+  | 'openrouter'
+  | 'deepseek'
+  | 'xai'
+  | 'cerebras';
+type ProviderPreset = {
+  id: ProviderPresetId;
+  label: string;
+  providerKind: 'local' | 'cloud';
+  displayName: string;
+  baseUrl: string;
+  software: string;
+  version: string;
+  schemaFamilies: ApiSchemaFamily[];
+  authType: 'none' | 'bearer' | 'header';
+  authHeader: string;
+  capabilities: {
+    streaming: boolean;
+    modelsEndpoint: boolean;
+    tools: boolean;
+    embeddings: boolean;
+    jsonSchema: boolean;
+    visionInput: boolean;
+    audioInput: boolean;
+    reasoning: boolean;
+    tokenBudget: boolean;
+    parallelRequests: boolean;
+  };
+  platform: {
+    gpuVendor: GpuVendor;
+    gpuModel: string;
+    gpuVramGb: string;
+    cpuVendorHint: string;
+    cpuModel: string;
+    cpuCores: string;
+    ramGb: string;
+    osName: OsName;
+    osVersion: string;
+    osArch: OsArch;
+    containerType: ContainerType;
+    containerImage: string;
+  };
+};
 
 const SERVER_STAGE_STORAGE_KEY = 'catalog.serverStageCollapsed';
 const MODEL_FILTER_STAGE_STORAGE_KEY = 'catalog.modelFilterStageCollapsed';
+const MODEL_CAPABILITY_FILTER_OPTIONS = [
+  'text',
+  'json schema output',
+  'tools',
+  'embeddings',
+  'vision',
+  'audio',
+  'reasoning',
+  'explicit tokens',
+  'thinking',
+  'coding',
+  'instruct',
+  'mixture of experts'
+];
+const MODEL_SORT_COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+const UNKNOWN_SORT_NUMBER = Number.POSITIVE_INFINITY;
+const DEFAULT_CLOUD_PLATFORM: ProviderPreset['platform'] = {
+  gpuVendor: 'unknown',
+  gpuModel: '',
+  gpuVramGb: '',
+  cpuVendorHint: 'other',
+  cpuModel: '',
+  cpuCores: '',
+  ramGb: '',
+  osName: 'unknown',
+  osVersion: '',
+  osArch: 'unknown',
+  containerType: 'none',
+  containerImage: ''
+};
+const DEFAULT_OPENAI_COMPATIBLE_CAPABILITIES: ProviderPreset['capabilities'] = {
+  streaming: true,
+  modelsEndpoint: true,
+  tools: true,
+  embeddings: true,
+  jsonSchema: true,
+  visionInput: true,
+  audioInput: false,
+  reasoning: false,
+  tokenBudget: false,
+  parallelRequests: true
+};
+
+function openAiCompatibleCloudPreset(
+  id: Exclude<ProviderPresetId, 'local-manual'>,
+  label: string,
+  baseUrl: string,
+  overrides: Partial<ProviderPreset['capabilities']> = {}
+): ProviderPreset {
+  return {
+    id,
+    label,
+    providerKind: 'cloud',
+    displayName: label,
+    baseUrl,
+    software: label,
+    version: '',
+    schemaFamilies: ['openai-compatible'],
+    authType: 'bearer',
+    authHeader: 'Authorization',
+    capabilities: { ...DEFAULT_OPENAI_COMPATIBLE_CAPABILITIES, ...overrides },
+    platform: DEFAULT_CLOUD_PLATFORM
+  };
+}
+
+const PROVIDER_PRESETS: ProviderPreset[] = [
+  {
+    id: 'local-manual',
+    label: 'Local / custom inference server',
+    providerKind: 'local',
+    displayName: '',
+    baseUrl: '',
+    software: '',
+    version: '',
+    schemaFamilies: ['openai-compatible'],
+    authType: 'none',
+    authHeader: 'Authorization',
+    capabilities: {
+      streaming: false,
+      modelsEndpoint: false,
+      tools: false,
+      embeddings: false,
+      jsonSchema: false,
+      visionInput: false,
+      audioInput: false,
+      reasoning: false,
+      tokenBudget: false,
+      parallelRequests: false
+    },
+    platform: {
+      gpuVendor: 'unknown',
+      gpuModel: '',
+      gpuVramGb: '',
+      cpuVendorHint: 'other',
+      cpuModel: '',
+      cpuCores: '',
+      ramGb: '',
+      osName: 'unknown',
+      osVersion: '',
+      osArch: 'unknown',
+      containerType: 'none',
+      containerImage: ''
+    }
+  },
+  openAiCompatibleCloudPreset('openai', 'OpenAI', 'https://api.openai.com/v1', { reasoning: true, audioInput: true }),
+  openAiCompatibleCloudPreset('mistral', 'Mistral', 'https://api.mistral.ai/v1', { reasoning: true }),
+  openAiCompatibleCloudPreset('groq', 'Groq', 'https://api.groq.com/openai/v1', { embeddings: false, visionInput: false }),
+  openAiCompatibleCloudPreset('together', 'Together AI', 'https://api.together.xyz/v1'),
+  openAiCompatibleCloudPreset('fireworks', 'Fireworks AI', 'https://api.fireworks.ai/inference/v1'),
+  openAiCompatibleCloudPreset('openrouter', 'OpenRouter', 'https://openrouter.ai/api/v1'),
+  openAiCompatibleCloudPreset('deepseek', 'DeepSeek', 'https://api.deepseek.com/v1', { embeddings: false, visionInput: false }),
+  openAiCompatibleCloudPreset('xai', 'xAI', 'https://api.x.ai/v1', { embeddings: false }),
+  openAiCompatibleCloudPreset('cerebras', 'Cerebras', 'https://api.cerebras.ai/v1', { embeddings: false, visionInput: false })
+];
 
 function parseCsv(value: string | null): string[] {
   return value?.split(',').map((item) => item.trim()).filter(Boolean) ?? [];
@@ -136,6 +307,126 @@ function visibleModelPills(model: CatalogModel): string[] {
   ].filter((entry): entry is string => typeof entry === 'string' && entry.trim().toLowerCase() !== 'unknown');
 }
 
+function normalizeSortText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[_/]+/g, '-')
+    .replace(/[^a-z0-9.]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function parameterCountFromText(text: string): number | null {
+  const match = text.match(/\b(\d+(?:\.\d+)?)(b|bn|billion|m|million)\b/i);
+  if (!match) return null;
+  const value = Number.parseFloat(match[1]);
+  if (!Number.isFinite(value)) return null;
+  const unit = match[2].toLowerCase();
+  return value * (unit.startsWith('b') ? 1_000_000_000 : 1_000_000);
+}
+
+function quantizationRank(text: string): number {
+  const normalized = text.toLowerCase();
+  if (/\b(?:bf16|fp16|f16)\b/.test(normalized)) return 16;
+  if (/\bfp32\b/.test(normalized)) return 32;
+  const bitMatch = normalized.match(/\b(\d+(?:\.\d+)?)\s*-?\s*bit\b/);
+  if (bitMatch) {
+    const value = Number.parseFloat(bitMatch[1]);
+    return Number.isFinite(value) ? value : 0;
+  }
+  const qMatch = normalized.match(/\bq(\d+(?:\.\d+)?)/);
+  if (qMatch) {
+    const value = Number.parseFloat(qMatch[1]);
+    return Number.isFinite(value) ? value : 0;
+  }
+  return 0;
+}
+
+function releaseKey(providerFamily: string, text: string): number {
+  if (providerFamily === 'Mistral') {
+    const dateTokens = Array.from(text.matchAll(/(?:^|[^0-9])(\d{4})(?:[^0-9]|$)/g))
+      .map((match) => match[1])
+      .filter((token) => {
+        const month = Number.parseInt(token.slice(2), 10);
+        return month >= 1 && month <= 12;
+      });
+    const latest = dateTokens.length ? dateTokens[dateTokens.length - 1] : null;
+    if (latest) {
+      return (2000 + Number.parseInt(latest.slice(0, 2), 10)) * 100 + Number.parseInt(latest.slice(2), 10);
+    }
+  }
+
+  if (providerFamily === 'Qwen') {
+    const qwenVersion = text.match(/\bqwen\s*-?\s*(\d+(?:\.\d+)?)/i);
+    if (qwenVersion) {
+      const value = Number.parseFloat(qwenVersion[1]);
+      if (Number.isFinite(value)) return value;
+    }
+  }
+
+  return 0;
+}
+
+function modelSeriesName(providerFamily: string, text: string): string {
+  let series = text
+    .replace(/^\/?[^/]+\//, '')
+    .replace(/\b(20)?\d{2}(0[1-9]|1[0-2])\b/g, ' ')
+    .replace(/\b\d+(?:\.\d+)?\s*(?:b|bn|billion|m|million)\b/gi, ' ')
+    .replace(/\ba\d+(?:\.\d+)?\s*(?:b|bn|billion|m|million)\b/gi, ' ')
+    .replace(/\b(?:mlx|gguf|gcuf|gptq|awq|safetensors|bf16|fp16|fp32|int4|int8)\b/gi, ' ')
+    .replace(/\bq\d+(?:_k_[sml]|_[0-3])?\b/gi, ' ')
+    .replace(/\b\d+(?:\.\d+)?\s*-?\s*bit\b/gi, ' ')
+    .replace(/\b(?:instruct|chat)\b/gi, ' ');
+
+  if (providerFamily === 'Qwen') {
+    series = series.replace(/\bqwen\s*-?\s*\d+(?:\.\d+)?/i, 'qwen ');
+  }
+
+  return normalizeSortText(series) || normalizeSortText(text);
+}
+
+function buildModelSortKey(record: ModelRecord | undefined, model: {
+  family: string;
+  displayName: string;
+  modelId: string;
+  quantization: string;
+  parameterCount: number | null;
+  parameterCountLabel: string | null;
+}): CatalogModelSortKey {
+  const sourceText = [
+    record?.model.base_model_name,
+    record?.model.model_id,
+    model.displayName,
+    model.modelId
+  ].filter(Boolean).join(' ');
+  const parameterCount =
+    model.parameterCount
+    ?? parameterCountFromText(model.parameterCountLabel ?? '')
+    ?? parameterCountFromText(sourceText)
+    ?? UNKNOWN_SORT_NUMBER;
+
+  return {
+    family: normalizeSortText(model.family),
+    series: modelSeriesName(model.family, sourceText),
+    release: releaseKey(model.family, sourceText),
+    parameterCount,
+    quantizationRank: quantizationRank(model.quantization),
+    displayName: normalizeSortText(model.displayName)
+  };
+}
+
+function compareCatalogModels(a: CatalogModel, b: CatalogModel): number {
+  return (
+    MODEL_SORT_COLLATOR.compare(a.sortKey.family, b.sortKey.family)
+    || MODEL_SORT_COLLATOR.compare(a.sortKey.series, b.sortKey.series)
+    || a.sortKey.release - b.sortKey.release
+    || a.sortKey.parameterCount - b.sortKey.parameterCount
+    || b.sortKey.quantizationRank - a.sortKey.quantizationRank
+    || MODEL_SORT_COLLATOR.compare(a.sortKey.displayName, b.sortKey.displayName)
+    || MODEL_SORT_COLLATOR.compare(a.modelId, b.modelId)
+  );
+}
+
 function buildCatalogModels(servers: InferenceServerRecord[], modelRecords: ModelRecord[]): CatalogModel[] {
   const recordMap = new Map(modelRecords.map((record) => [`${record.model.server_id}:${record.model.model_id}`, record]));
   const entries = new Map<string, CatalogModel>();
@@ -146,9 +437,12 @@ function buildCatalogModels(servers: InferenceServerRecord[], modelRecords: Mode
     const quantization =
       record?.architecture.quantisation.weight_format
       ?? (record?.architecture.quantisation.bits ? `${record.architecture.quantisation.bits}-bit` : null)
+      ?? (record?.architecture.precision && record.architecture.precision !== 'unknown' ? record.architecture.precision.toUpperCase() : null)
       ?? (record ? quantLabel : null)
       ?? 'Unknown';
-    const capabilityLabels = record
+    const parameterCount = record?.architecture.parameter_count ?? null;
+    const parameterCountLabel = record?.architecture.parameter_count_label ?? null;
+    const displayCapabilityLabels = record
       ? [
           record.capabilities.generation.tools ? 'tools' : null,
           record.capabilities.generation.embeddings ? 'embeddings' : null,
@@ -171,17 +465,33 @@ function buildCatalogModels(servers: InferenceServerRecord[], modelRecords: Mode
       context: (record?.limits.context_window_tokens ?? context) ? `${record?.limits.context_window_tokens ?? context} ctx` : 'ctx unknown',
       tools: record?.capabilities.generation.tools ?? server.capabilities.generation.tools,
       streaming: server.capabilities.server.streaming,
-      parameterCount: record?.architecture.parameter_count ?? null,
-      parameterCountLabel: record?.architecture.parameter_count_label ?? null,
+      parameterCount,
+      parameterCountLabel,
       capabilities: record
         ? [
             ...Object.entries(record.capabilities.use_case)
             .filter(([, v]) => v)
             .map(([k]) => k.replace(/_/g, ' ')),
-            ...capabilityLabels
+            ...displayCapabilityLabels
           ]
         : [],
-      discoveryStatus: record?.discovery?.discovery_status ?? null
+      filterCapabilities: record
+        ? [
+            record.capabilities.generation.text ? 'text' : null,
+            record.capabilities.generation.json_schema_output ? 'json schema output' : null,
+            record.capabilities.generation.tools ? 'tools' : null,
+            record.capabilities.generation.embeddings ? 'embeddings' : null,
+            record.capabilities.multimodal.vision ? 'vision' : null,
+            record.capabilities.multimodal.audio ? 'audio' : null,
+            record.capabilities.reasoning.supported ? 'reasoning' : null,
+            record.capabilities.reasoning.explicit_tokens ? 'explicit tokens' : null,
+            ...Object.entries(record.capabilities.use_case)
+              .filter(([, v]) => v)
+              .map(([k]) => k.replace(/_/g, ' '))
+          ].filter((entry): entry is string => Boolean(entry))
+        : [],
+      discoveryStatus: record?.discovery?.discovery_status ?? null,
+      sortKey: buildModelSortKey(record, { family: formatProvider(record?.identity.provider ?? 'unknown'), displayName: label, modelId, quantization, parameterCount, parameterCountLabel })
     });
   };
 
@@ -201,7 +511,7 @@ function buildCatalogModels(servers: InferenceServerRecord[], modelRecords: Mode
     put(server, record.model.model_id, record.model.display_name, record.limits.context_window_tokens);
   }
 
-  return Array.from(entries.values()).sort((a, b) => a.displayName.localeCompare(b.displayName));
+  return Array.from(entries.values()).sort(compareCatalogModels);
 }
 
 function toggleSetValue(set: Set<string>, value: string): Set<string> {
@@ -239,9 +549,8 @@ export function Catalog({
   const [showArchivedOnly, setShowArchivedOnly] = useState(false);
   const [serverStageCollapsed, setServerStageCollapsed] = useState(() => localStorage.getItem(SERVER_STAGE_STORAGE_KEY) === 'true');
   const [serverFilters, setServerFilters] = useState({ status: new Set<string>(), runtime: new Set<string>(), gpu: new Set<string>() });
-  const [inferenceParams, setInferenceParams] = useState<InferenceParams>(DEFAULT_INFERENCE_PARAMS);
 
-const selectedServers = useMemo(() => new Set(parseCsv(searchParams.get('servers'))), [searchParams]);
+  const selectedServers = useMemo(() => new Set(parseCsv(searchParams.get('servers'))), [searchParams]);
   const selectedFamilies = useMemo(() => new Set(parseCsv(searchParams.get('family'))), [searchParams]);
   const selectedQuantizations = useMemo(() => new Set(parseCsv(searchParams.get('quantization'))), [searchParams]);
   const selectedFormats = useMemo(() => new Set(parseCsv(searchParams.get('format'))), [searchParams]);
@@ -308,7 +617,7 @@ const selectedServers = useMemo(() => new Set(parseCsv(searchParams.get('servers
   const familyOptions = useMemo(() => Array.from(new Set(catalogModels.filter((model) => selectedServers.has(model.serverId)).map((model) => model.family))).sort(), [catalogModels, selectedServers]);
   const quantizationOptions = useMemo(() => Array.from(new Set(catalogModels.filter((model) => selectedServers.has(model.serverId)).map((model) => model.quantization))).sort(), [catalogModels, selectedServers]);
   const formatOptions = useMemo(() => Array.from(new Set(catalogModels.filter((model) => selectedServers.has(model.serverId)).map((model) => model.format))).sort(), [catalogModels, selectedServers]);
-  const capabilityOptions = ['thinking', 'coding', 'instruct', 'mixture of experts'];
+  const capabilityOptions = MODEL_CAPABILITY_FILTER_OPTIONS;
   const paramCountSteps = useMemo(() => {
     const counts = catalogModels
       .filter((m) => selectedServers.has(m.serverId) && m.parameterCount !== null)
@@ -341,11 +650,11 @@ const selectedServers = useMemo(() => new Set(parseCsv(searchParams.get('servers
       if (selectedFamilies.size && !selectedFamilies.has(model.family)) return false;
       if (selectedQuantizations.size && !selectedQuantizations.has(model.quantization)) return false;
       if (selectedFormats.size && !selectedFormats.has(model.format)) return false;
-      if (selectedCapabilities.size && !model.capabilities.some((c) => selectedCapabilities.has(c))) return false;
+      if (selectedCapabilities.size && !model.filterCapabilities.some((c) => selectedCapabilities.has(c))) return false;
       if (maxParamCount !== null && model.parameterCount !== null && model.parameterCount > maxParamCount) return false;
       return true;
     });
-  }, [catalogModels, selectedFamilies, selectedFormats, selectedQuantizations, selectedServers]);
+  }, [catalogModels, maxParamCount, selectedCapabilities, selectedFamilies, selectedFormats, selectedQuantizations, selectedServers]);
 
   function updateQuery(mutator: (params: URLSearchParams) => void, replace = false) {
     const next = new URLSearchParams(searchParams);
@@ -410,7 +719,6 @@ const selectedServers = useMemo(() => new Set(parseCsv(searchParams.get('servers
         activeTab={activeTab}
         onTabChange={changeTab}
       />
-      <InferenceContextBar params={inferenceParams} onChange={setInferenceParams} />
       {error ? <div className="catalog-error error">{error}</div> : null}
       {loading ? <p className="catalog-loading muted">Loading catalog...</p> : null}
       {activeTab === 'servers' ? (
@@ -1083,11 +1391,12 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
   mode: DrawerMode;
   onClose: () => void;
   onSaved: (server: InferenceServerRecord, openModels: boolean) => Promise<void>;
-  onDelete?: () => void;
+  onDelete?: () => Promise<void>;
 }) {
   const editing = mode.kind === 'edit' ? mode.server : null;
 
   // ── Inference server fields ──
+  const [providerPresetId, setProviderPresetId] = useState<ProviderPresetId>('local-manual');
   const [displayName, setDisplayName] = useState(editing?.inference_server.display_name ?? '');
   const [baseUrl, setBaseUrl] = useState(editing?.endpoints.base_url ?? '');
   const [software, setSoftware] = useState(editing?.runtime.server_software.name ?? '');
@@ -1100,6 +1409,7 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
   // ── Capabilities ──
   const caps = editing?.capabilities;
   const [capStreaming,        setCapStreaming]        = useState(caps?.server?.streaming ?? false);
+  const [capModelsEndpoint,   setCapModelsEndpoint]   = useState(caps?.server?.models_endpoint ?? false);
   const [capTools,            setCapTools]            = useState(caps?.generation?.tools ?? false);
   const [capEmbeddings,       setCapEmbeddings]       = useState(caps?.generation?.embeddings ?? false);
   const [capJsonSchema,       setCapJsonSchema]       = useState(caps?.generation?.json_schema_output ?? false);
@@ -1146,13 +1456,54 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
   const [busy,       setBusy]       = useState(false);
   const [probeState, setProbeState] = useState<'idle' | 'probing' | 'probe-ok' | 'probe-failed'>('idle');
   const [probeError, setProbeError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [discovered, setDiscovered] = useState<string[]>([]);
 
   function toggleFamily(value: ApiSchemaFamily) {
     setSchemaFamilies((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
   }
 
+  function applyProviderPreset(presetId: ProviderPresetId) {
+    const preset = PROVIDER_PRESETS.find((entry) => entry.id === presetId) ?? PROVIDER_PRESETS[0];
+    setProviderPresetId(preset.id);
+    setDisplayName(preset.displayName);
+    setBaseUrl(preset.baseUrl);
+    setSoftware(preset.software);
+    setVersion(preset.version);
+    setSchemaFamilies(preset.schemaFamilies);
+    setAuthType(preset.authType);
+    setAuthHeader(preset.authHeader);
+    setAuthToken('');
+    setCapStreaming(preset.capabilities.streaming);
+    setCapModelsEndpoint(preset.capabilities.modelsEndpoint);
+    setCapTools(preset.capabilities.tools);
+    setCapEmbeddings(preset.capabilities.embeddings);
+    setCapJsonSchema(preset.capabilities.jsonSchema);
+    setCapVisionInput(preset.capabilities.visionInput);
+    setCapAudioInput(preset.capabilities.audioInput);
+    setCapReasoning(preset.capabilities.reasoning);
+    setCapTokenBudget(preset.capabilities.tokenBudget);
+    setCapParallelRequests(preset.capabilities.parallelRequests);
+    setGpuVendor(preset.platform.gpuVendor);
+    setGpuModel(preset.platform.gpuModel);
+    setGpuVramGb(preset.platform.gpuVramGb);
+    setCpuVendorHint(preset.platform.cpuVendorHint);
+    setCpuModel(preset.platform.cpuModel);
+    setCpuCores(preset.platform.cpuCores);
+    setRamGb(preset.platform.ramGb);
+    setOsName(preset.platform.osName);
+    setOsVersion(preset.platform.osVersion);
+    setOsArch(preset.platform.osArch);
+    setContainerType(preset.platform.containerType);
+    setContainerImage(preset.platform.containerImage);
+    setProbeState('idle');
+    setProbeError(null);
+    setDiscovered([]);
+  }
+
   function buildInput(): InferenceServerInput {
+    const selectedPreset = PROVIDER_PRESETS.find((entry) => entry.id === providerPresetId) ?? PROVIDER_PRESETS[0];
     const authPayload: InferenceServerInput['auth'] = {
       type: authType === 'header' ? 'custom' as AuthType : authType,
       header_name: authHeader || 'Authorization'
@@ -1164,7 +1515,7 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
       authPayload.token = authToken.trim();
       authPayload.token_env = null;
     }
-    return {
+    const input: InferenceServerInput = {
       inference_server: { display_name: displayName, active: true, archived: false },
       endpoints: { base_url: baseUrl },
       runtime: {
@@ -1187,7 +1538,7 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
       },
       auth: authPayload,
       capabilities: {
-        server:     { streaming: capStreaming, models_endpoint: false },
+        server:     { streaming: capStreaming, models_endpoint: capModelsEndpoint },
         generation: { text: true, json_schema_output: capJsonSchema, tools: capTools, embeddings: capEmbeddings },
         multimodal: {
           vision: { input_images: capVisionInput, output_images: false },
@@ -1196,8 +1547,15 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
         reasoning:   { exposed: capReasoning, token_budget_configurable: capTokenBudget },
         concurrency: { parallel_requests: capParallelRequests, parallel_tool_calls: false, max_concurrent_requests: null },
         enforcement: 'server',
-      },
+      }
     };
+    if (!editing) {
+      input.raw = {
+        provider_preset: selectedPreset.id,
+        provider_kind: selectedPreset.providerKind
+      };
+    }
+    return input;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -1248,6 +1606,18 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
     }
   }
 
+  async function handleDeleteClick() {
+    if (!onDelete) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      await onDelete();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Unable to delete inference server');
+      setDeleteBusy(false);
+    }
+  }
+
   return (
     <div className="drawer-overlay" role="dialog" aria-modal="true">
       <aside className="server-drawer">
@@ -1264,6 +1634,15 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
             {/* ── LEFT: Inference Server ── */}
             <div className="drawer-col">
               <div className="form-field-label">Connection</div>
+              {!editing ? (
+                <label>Connection type
+                  <select data-testid="provider-preset-select" value={providerPresetId} onChange={(event) => applyProviderPreset(event.target.value as ProviderPresetId)}>
+                    {PROVIDER_PRESETS.map((preset) => (
+                      <option key={preset.id} value={preset.id}>{preset.label}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               <label>Display name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} required /></label>
               <label>Base URL<input className="input--mono" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder="https://api.example.com" required /></label>
               <div className="drawer-two-col">
@@ -1308,6 +1687,7 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
               <div className="chip-field">
                 {([
                   ['Streaming',         capStreaming,        setCapStreaming],
+                  ['Models endpoint',   capModelsEndpoint,   setCapModelsEndpoint],
                   ['Tool calls',        capTools,            setCapTools],
                   ['Embeddings',        capEmbeddings,       setCapEmbeddings],
                   ['JSON schema',       capJsonSchema,       setCapJsonSchema],
@@ -1434,7 +1814,10 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
           </div>
 
           <div className="drawer-footer">
-            {onDelete ? <button type="button" className="btn btn--danger" onClick={onDelete}>Delete server</button> : <span />}
+            <div>
+              {onDelete ? <button type="button" className="btn btn--danger" onClick={handleDeleteClick} disabled={deleteBusy}>{deleteBusy ? 'Deleting...' : 'Delete server'}</button> : <span />}
+              {deleteError ? <div className="error">{deleteError}</div> : null}
+            </div>
             <div className="actions">
               <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
               {probeState === 'probe-ok' || probeState === 'probe-failed' ? (

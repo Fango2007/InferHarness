@@ -7,7 +7,6 @@ import {
   createInferenceServerRecord,
   fetchInferenceServer,
   fetchInferenceServers,
-  canDeleteInferenceServer,
   unarchiveInferenceServer,
   updateInferenceServerRecord
 } from '../../services/inference-servers-repository.js';
@@ -181,11 +180,6 @@ export function registerInferenceServersRoutes(app: FastifyInstance): void {
     const server = fetchInferenceServer(serverId);
     if (!server) {
       reply.code(404).send({ error: 'Inference server not found' });
-      return;
-    }
-    const canDelete = canDeleteInferenceServer(serverId);
-    if (!canDelete.ok) {
-      reply.code(409).send({ error: canDelete.reason ?? 'Inference server cannot be deleted' });
       return;
     }
     const deleted = deleteInferenceServer(serverId);

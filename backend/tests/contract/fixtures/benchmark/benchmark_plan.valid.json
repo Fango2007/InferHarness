@@ -1,0 +1,14 @@
+{
+  "kind": "benchmark_plan",
+  "schema_version": "benchmark_plan_v1",
+  "plan_id": "compare_models_verbosity_v1",
+  "template_ref": "verbosity_ratio_v1",
+  "dataset_ref": "verbosity_prompts_v1",
+  "runtime_profile_ref": "deterministic_generation_v1",
+  "model_profile_refs": ["ollama_qwen25_7b", "ollama_mistral_7b"],
+  "execution": {
+    "mode": "sequential",
+    "continue_on_model_error": true
+  },
+  "metadata": {}
+}

@@ -12,7 +12,7 @@ import {
 } from '../../src/services/benchmark-schemas.js';
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-const examplesDir = path.resolve(moduleDir, '../../../specs/011-new-python-test-schema-and-logic/examples');
+const examplesDir = path.resolve(moduleDir, 'fixtures/benchmark');
 
 const validExamples: Array<{ file: string; kind: BenchmarkKind }> = [
   { file: 'model_profile.minimal.valid.json', kind: 'model_profile' },
