@@ -30,6 +30,8 @@ export function InferenceServerEditForm({ server, onSave, onCancel }: InferenceS
   const schemaFamilyOptions: Array<{ value: ApiSchemaFamily; label: string }> = [
     { value: 'openai-compatible', label: 'OpenAI-compatible' },
     { value: 'ollama', label: 'Ollama' },
+    { value: 'anthropic', label: 'Anthropic' },
+    { value: 'gemini', label: 'Gemini' },
     { value: 'custom', label: 'Custom' }
   ];
 
