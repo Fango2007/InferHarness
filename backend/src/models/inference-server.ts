@@ -2,7 +2,7 @@ import { getDb } from './db.js';
 import { nowIso, parseJson, serializeJson } from './repositories.js';
 
 export type RuntimeSource = 'server' | 'client' | 'mixed';
-export type ApiSchemaFamily = 'openai-compatible' | 'ollama' | 'custom';
+export type ApiSchemaFamily = 'openai-compatible' | 'ollama' | 'anthropic' | 'gemini' | 'custom';
 export type OsName = 'macos' | 'linux' | 'windows' | 'unknown';
 export type OsArch = 'arm64' | 'x86_64' | 'unknown';
 export type ContainerType = 'docker' | 'podman' | 'none' | 'unknown';

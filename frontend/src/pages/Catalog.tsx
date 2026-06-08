@@ -63,6 +63,8 @@ type ProviderPresetId =
   | 'local-manual'
   | 'openai'
   | 'mistral'
+  | 'anthropic'
+  | 'gemini'
   | 'groq'
   | 'together'
   | 'fireworks'
@@ -217,6 +219,56 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
   },
   openAiCompatibleCloudPreset('openai', 'OpenAI', 'https://api.openai.com/v1', { reasoning: true, audioInput: true }),
   openAiCompatibleCloudPreset('mistral', 'Mistral', 'https://api.mistral.ai/v1', { reasoning: true }),
+  {
+    id: 'anthropic' as ProviderPresetId,
+    label: 'Anthropic',
+    providerKind: 'cloud',
+    displayName: 'Anthropic',
+    baseUrl: 'https://api.anthropic.com',
+    software: 'Anthropic',
+    version: '',
+    schemaFamilies: ['anthropic'] as ApiSchemaFamily[],
+    authType: 'header' as const,
+    authHeader: 'x-api-key',
+    capabilities: {
+      streaming: true,
+      modelsEndpoint: true,
+      tools: true,
+      embeddings: false,
+      jsonSchema: true,
+      visionInput: true,
+      audioInput: false,
+      reasoning: true,
+      tokenBudget: true,
+      parallelRequests: true
+    },
+    platform: DEFAULT_CLOUD_PLATFORM
+  },
+  {
+    id: 'gemini' as ProviderPresetId,
+    label: 'Google Gemini',
+    providerKind: 'cloud',
+    displayName: 'Google Gemini',
+    baseUrl: 'https://generativelanguage.googleapis.com',
+    software: 'Gemini',
+    version: '',
+    schemaFamilies: ['gemini'] as ApiSchemaFamily[],
+    authType: 'header' as const,
+    authHeader: 'x-goog-api-key',
+    capabilities: {
+      streaming: true,
+      modelsEndpoint: true,
+      tools: true,
+      embeddings: true,
+      jsonSchema: true,
+      visionInput: true,
+      audioInput: true,
+      reasoning: true,
+      tokenBudget: false,
+      parallelRequests: true
+    },
+    platform: DEFAULT_CLOUD_PLATFORM
+  },
   openAiCompatibleCloudPreset('groq', 'Groq', 'https://api.groq.com/openai/v1', { embeddings: false, visionInput: false }),
   openAiCompatibleCloudPreset('together', 'Together AI', 'https://api.together.xyz/v1'),
   openAiCompatibleCloudPreset('fireworks', 'Fireworks AI', 'https://api.fireworks.ai/inference/v1'),
@@ -250,7 +302,7 @@ function formatProvider(provider: string): string {
   if (provider === 'meta') return 'Llama';
   if (provider === 'qwen') return 'Qwen';
   if (provider === 'mistral') return 'Mistral';
-  if (provider === 'google') return 'Gemma';
+  if (provider === 'google') return 'Google';
   if (provider === 'unknown') return 'Custom';
   return provider.charAt(0).toUpperCase() + provider.slice(1);
 }

@@ -58,9 +58,9 @@ export function registerInferenceServersRoutes(app: FastifyInstance): void {
     const query = request.query as {
       active?: string;
       archived?: string;
-      schema_family?: 'openai-compatible' | 'ollama' | 'custom';
+      schema_family?: 'openai-compatible' | 'ollama' | 'anthropic' | 'gemini' | 'custom';
     };
-    const filters: { active?: boolean; archived?: boolean; schema_family?: 'openai-compatible' | 'ollama' | 'custom' } = {};
+    const filters: { active?: boolean; archived?: boolean; schema_family?: 'openai-compatible' | 'ollama' | 'anthropic' | 'gemini' | 'custom' } = {};
     if (query.active !== undefined) {
       filters.active = query.active === 'true';
     }

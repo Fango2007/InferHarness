@@ -98,6 +98,59 @@ export function normalizeOpenAiModels(payload: Record<string, unknown>): Normali
   return keepCanonicalMistralModels(models);
 }
 
+export function normalizeAnthropicModels(payload: Record<string, unknown>): NormalizedProbeModel[] {
+  const entries = Array.isArray(payload.data) ? payload.data : [];
+  return (entries as Record<string, unknown>[])
+    .map((entry) => {
+      const modelId = typeof entry.id === 'string' ? entry.id : '';
+      const displayName = typeof entry.display_name === 'string' && entry.display_name.trim()
+        ? entry.display_name.trim()
+        : modelId || null;
+      return {
+        model_id: modelId,
+        display_name: displayName,
+        context_window_tokens: null,
+        quantisation: null,
+        provider: 'anthropic',
+        base_model_name: displayName,
+        raw: entry
+      };
+    })
+    .filter((entry) => entry.model_id);
+}
+
+export function normalizeGeminiModels(payload: Record<string, unknown>): NormalizedProbeModel[] {
+  const entries = Array.isArray(payload.models) ? payload.models : [];
+  return (entries as Record<string, unknown>[])
+    .map((entry) => {
+      const rawName = typeof entry.name === 'string' ? entry.name : '';
+      const modelId = rawName.startsWith('models/') ? rawName.slice('models/'.length) : rawName;
+      const displayName = typeof entry.displayName === 'string' && entry.displayName.trim()
+        ? entry.displayName.trim()
+        : modelId || null;
+      const contextWindow = typeof entry.inputTokenLimit === 'number' ? entry.inputTokenLimit : null;
+      const supportedMethods = Array.isArray(entry.supportedGenerationMethods)
+        ? (entry.supportedGenerationMethods as string[])
+        : [];
+      const capabilities: Record<string, boolean> = {
+        generateContent: supportedMethods.includes('generateContent'),
+        embedContent: supportedMethods.includes('embedContent'),
+        countTokens: supportedMethods.includes('countTokens')
+      };
+      return {
+        model_id: modelId,
+        display_name: displayName,
+        context_window_tokens: contextWindow,
+        quantisation: null,
+        provider: 'google',
+        base_model_name: displayName,
+        capabilities,
+        raw: entry
+      };
+    })
+    .filter((entry) => entry.model_id);
+}
+
 export function normalizeOllamaModels(payload: Record<string, unknown>): NormalizedProbeModel[] {
   const entries = Array.isArray(payload.models) ? payload.models : [];
   return (entries as Record<string, unknown>[])
@@ -146,15 +199,27 @@ export async function probeServer(params: ProbeParams): Promise<ProbeResult> {
   const startedAt = Date.now();
 
   for (const schemaFamily of supportedFamilies) {
-    const path = schemaFamily === 'openai-compatible' ? '/v1/models' : '/api/tags';
+    let path: string;
+    if (schemaFamily === 'openai-compatible' || schemaFamily === 'anthropic') {
+      path = '/v1/models';
+    } else if (schemaFamily === 'gemini') {
+      path = '/v1beta/models';
+    } else {
+      path = '/api/tags';
+    }
     const url = new URL(path, base_url).toString();
     if (!firstAttemptedUrl) firstAttemptedUrl = url;
+
+    const requestHeaders: Record<string, string> = { ...auth_headers };
+    if (schemaFamily === 'anthropic') {
+      requestHeaders['anthropic-version'] = '2023-06-01';
+    }
 
     const controller = new AbortController();
     const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
-      response = await backendFetch(url, { method: 'GET', headers: auth_headers, signal: controller.signal });
+      response = await backendFetch(url, { method: 'GET', headers: requestHeaders, signal: controller.signal });
     } catch (error) {
       errors.push(`${schemaFamily}: ${error instanceof Error ? error.message : 'Network error'}`);
       continue;
@@ -189,9 +254,16 @@ export async function probeServer(params: ProbeParams): Promise<ProbeResult> {
 
     const payload = (await response.json()) as Record<string, unknown>;
     rawPayloads[schemaFamily] = payload;
-    const normalised = schemaFamily === 'openai-compatible'
-      ? normalizeOpenAiModels(payload)
-      : normalizeOllamaModels(payload);
+    let normalised: NormalizedProbeModel[];
+    if (schemaFamily === 'anthropic') {
+      normalised = normalizeAnthropicModels(payload);
+    } else if (schemaFamily === 'gemini') {
+      normalised = normalizeGeminiModels(payload);
+    } else if (schemaFamily === 'openai-compatible') {
+      normalised = normalizeOpenAiModels(payload);
+    } else {
+      normalised = normalizeOllamaModels(payload);
+    }
     for (const entry of normalised) {
       if (!modelMap.has(entry.model_id)) {
         modelMap.set(entry.model_id, entry);
