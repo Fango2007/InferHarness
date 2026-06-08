@@ -13,7 +13,7 @@ import { createModel } from '../../src/models/model.js';
 
 const AUTH_HEADERS = { 'x-api-token': 'test-token' };
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-const examplesDir = path.resolve(moduleDir, '../../../specs/011-new-python-test-schema-and-logic/examples');
+const examplesDir = path.resolve(moduleDir, '../contract/fixtures/benchmark');
 
 function readExample(file: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(path.join(examplesDir, file), 'utf8')) as Record<string, unknown>;
