@@ -44,6 +44,14 @@ function applyColumnMigrations(): void {
   `);
 }
 
+function dropLegacyRunGroupTables(): void {
+  const db = getDb();
+  db.exec(`
+    DROP TABLE IF EXISTS run_group_items;
+    DROP TABLE IF EXISTS run_groups;
+  `);
+}
+
 export function createServer() {
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' });
 
@@ -52,6 +60,7 @@ export function createServer() {
   if (fs.existsSync(schemaPath)) {
     runSchema(fs.readFileSync(schemaPath, 'utf8'));
   }
+  dropLegacyRunGroupTables();
   applyColumnMigrations();
   if (process.env.INFERHARNESS_E2E === '1' && process.env.INFERHARNESS_E2E_MARKER_PATH) {
     fs.mkdirSync(path.dirname(process.env.INFERHARNESS_E2E_MARKER_PATH), { recursive: true });

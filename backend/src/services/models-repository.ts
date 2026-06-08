@@ -313,6 +313,26 @@ function normaliseProvider(value: string | null | undefined): ModelProvider | nu
   return null;
 }
 
+function isCloudModelProvider(provider: ModelProvider | null): boolean {
+  return Boolean(provider && provider !== 'custom' && provider !== 'unknown');
+}
+
+function fullPrecisionForCloudProvider(
+  discoveryProvider: ModelProvider | null,
+  guessed: ReturnType<typeof guessModelCharacteristics>,
+  input: DiscoveredModelInput
+): ModelArchitecture['precision'] | null {
+  const hasQuantization =
+    Boolean(input.quantisation) ||
+    Boolean(guessed.quantisation.method) ||
+    Boolean(guessed.quantisation.bits != null) ||
+    Boolean(guessed.format);
+  if (hasQuantization || !isCloudModelProvider(discoveryProvider)) {
+    return null;
+  }
+  return 'bf16';
+}
+
 function providerCapabilities(input: DiscoveredModelInput): ModelInput['capabilities'] {
   const capabilities = input.capabilities ?? {};
   const lowerId = input.model_id.toLowerCase();
@@ -364,11 +384,14 @@ function providerModalities(input: DiscoveredModelInput): Partial<ModelModalitie
 function inferredModelInput(input: DiscoveredModelInput): ModelInput {
   const guessed = guessModelCharacteristics(input.model_id);
   const providerCaps = providerCapabilities(input);
+  const discoveryProvider = normaliseProvider(input.provider);
+  const provider = discoveryProvider ?? guessed.provider ?? 'unknown';
+  const inferredPrecision = guessed.precision ?? fullPrecisionForCloudProvider(discoveryProvider, guessed, input) ?? 'unknown';
   const discoveredMethod = input.quantisation?.method;
   const quantisationMethod =
     discoveredMethod && discoveredMethod !== 'unknown'
       ? discoveredMethod
-      : guessed.quantisation.method ?? 'unknown';
+      : guessed.quantisation.method ?? (inferredPrecision === 'bf16' ? 'none' : 'unknown');
   return {
     model: {
       model_id: input.model_id,
@@ -377,13 +400,14 @@ function inferredModelInput(input: DiscoveredModelInput): ModelInput {
       base_model_name: input.base_model_name?.trim() || extractBaseModelName(input.model_id)
     },
     identity: {
-      provider: normaliseProvider(input.provider) ?? guessed.provider ?? 'unknown',
+      provider,
       quantized_provider: guessed.quantized_provider
     },
     architecture: {
       parameter_count: guessed.parameter_count,
       parameter_count_label: guessed.parameter_count_label,
       active_parameter_label: guessed.active_parameter_label,
+      precision: inferredPrecision,
       format: guessed.format,
       quantisation: {
         method: quantisationMethod as ModelArchitecture['quantisation']['method'],
@@ -441,6 +465,13 @@ function fillMissingModelInput(existing: ModelRecord, inferred: ModelInput): Mod
   }
   if (existing.architecture.format == null && inferred.architecture?.format) {
     updates.architecture = { ...(updates.architecture ?? {}), format: inferred.architecture.format };
+  }
+  if (
+    (existing.architecture.precision === 'unknown' || existing.architecture.precision == null) &&
+    inferred.architecture?.precision &&
+    inferred.architecture.precision !== 'unknown'
+  ) {
+    updates.architecture = { ...(updates.architecture ?? {}), precision: inferred.architecture.precision };
   }
   if (inferred.architecture?.quantisation) {
     const quantUpdates: Partial<ModelArchitecture['quantisation']> = {};

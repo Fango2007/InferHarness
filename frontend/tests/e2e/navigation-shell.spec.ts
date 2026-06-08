@@ -64,11 +64,11 @@ function catalogModel(serverId: string, modelId: string, provider: string, forma
     },
     architecture: {
       type: 'unknown',
-      parameter_count: null,
-      parameter_count_label: null,
+      parameter_count: null as number | null,
+      parameter_count_label: null as string | null,
       active_parameter_label: null,
       precision: 'unknown',
-      quantisation: { method: 'mlx', bits: null, group_size: null, weight_format: 'MLX' },
+      quantisation: { method: 'mlx', bits: null as number | null, group_size: null, weight_format: 'MLX' as string | null },
       format
     },
     capabilities: {
@@ -152,7 +152,7 @@ test('sidebar exposes five top-level destinations and follows active routes', as
 
 test('merged page sub-tabs preserve route state', async ({ page }) => {
   await page.goto('/catalog?tab=servers');
-  await expect(page.locator('.context-bar').getByText('Params')).toBeVisible();
+  await expect(page.locator('.context-bar')).toHaveCount(0);
   await page.getByRole('tab', { name: /Models/ }).click();
   await expect(page).toHaveURL(/\/catalog\?tab=models/);
 
@@ -279,7 +279,7 @@ test('settings opens from the sidebar footer', async ({ page }) => {
 test('run keeps page and workspace headers', async ({ page }) => {
   await page.goto('/run');
   await expect(page.locator('.merged-page-header').getByRole('heading', { name: 'Run' })).toBeVisible();
-  await expect(page.locator('.context-bar').getByText('Params')).toBeVisible();
+  await expect(page.locator('.context-bar')).toHaveCount(0);
   await expect(page.locator('.run-page-header').getByRole('heading', { name: 'Run' })).toBeVisible();
 });
 
@@ -346,8 +346,15 @@ test('catalog model cards use model-level provider and capability metadata', asy
   const servers = [catalogServer('srv-mistral', 'Mistral', 'codestral-latest')];
   const codestral = catalogModel('srv-mistral', 'codestral-latest', 'mistral', 'Unknown');
   codestral.model.base_model_name = 'codestral-2508';
+  codestral.capabilities.generation.json_schema_output = true;
   codestral.capabilities.generation.tools = true;
+  codestral.capabilities.multimodal.vision = true;
+  codestral.capabilities.reasoning.supported = true;
+  codestral.capabilities.reasoning.explicit_tokens = true;
   codestral.capabilities.use_case.coding = true;
+  codestral.architecture.precision = 'bf16';
+  codestral.architecture.quantisation.method = 'none';
+  codestral.architecture.quantisation.weight_format = null;
   codestral.limits.context_window_tokens = 256000;
   await mockCatalogRoutes(page, servers, [codestral]);
 
@@ -356,7 +363,63 @@ test('catalog model cards use model-level provider and capability metadata', asy
   const card = page.locator('.catalog-model-card').filter({ hasText: 'codestral-2508' });
   await expect(card).toBeVisible();
   await expect(card.locator('.catalog-model-pills')).toContainText('Mistral');
+  await expect(card.locator('.catalog-model-pills')).toContainText('BF16');
   await expect(card.locator('.catalog-model-pills')).toContainText('256000 ctx');
   await expect(card.locator('.catalog-model-pills')).not.toContainText('Unknown');
-  await expect(card).toContainText('coding · tools · streaming');
+  await expect(card).toContainText('coding');
+  await expect(card).toContainText('tools');
+  await expect(card).toContainText('streaming');
+
+  const modelFilterRail = page.locator('.catalog-model-filter-stage');
+  for (const label of ['text', 'json schema output', 'tools', 'embeddings', 'vision', 'audio', 'reasoning', 'explicit tokens', 'thinking', 'coding', 'instruct', 'mixture of experts']) {
+    await expect(modelFilterRail.getByLabel(label)).toBeVisible();
+  }
+  await modelFilterRail.getByLabel('vision').check();
+  await expect(card).toBeVisible();
+  await modelFilterRail.getByLabel('vision').uncheck();
+  await modelFilterRail.getByLabel('audio').check();
+  await expect(page.locator('.catalog-model-card')).toHaveCount(0);
+});
+
+test('catalog model cards sort by provider taxonomy, date, parameters, and quantization', async ({ page }) => {
+  const servers = [catalogServer('srv-sort', 'Sort Server', 'placeholder')];
+  servers[0].discovery.model_list.normalised = [];
+  const model = (id: string, provider: string, baseName: string, parameterCount: number, parameterLabel: string, quantBits: number) => {
+    const record = catalogModel('srv-sort', id, provider, 'MLX');
+    record.model.base_model_name = baseName;
+    record.architecture.parameter_count = parameterCount;
+    record.architecture.parameter_count_label = parameterLabel;
+    record.architecture.quantisation.bits = quantBits;
+    record.architecture.quantisation.weight_format = `${quantBits}bit`;
+    return record;
+  };
+  const models = [
+    model('qwen3.6-27b-mlx-9bit', 'qwen', 'Qwen3.6', 27_000_000_000, '27B', 9),
+    model('devstral-2512-24b-mlx-4bit', 'mistral', 'Devstral-2512', 24_000_000_000, '24B', 4),
+    model('devstral-2512-7b-mlx-4bit', 'mistral', 'Devstral-2512', 7_000_000_000, '7B', 4),
+    model('qwen3-coder-next-6bit', 'qwen', 'Qwen3-Coder-Next', 30_000_000_000, '30B', 6),
+    model('devstral-2508-7b-mlx-8bit', 'mistral', 'Devstral-2508', 7_000_000_000, '7B', 8),
+    model('devstral-2512-24b-mlx-8bit', 'mistral', 'Devstral-2512', 24_000_000_000, '24B', 8)
+  ];
+  await mockCatalogRoutes(page, servers, models);
+
+  await page.goto('/catalog?tab=models&servers=srv-sort');
+  await expect(page.locator('.catalog-model-card')).toHaveCount(6);
+
+  const cardSummaries = await page.locator('.catalog-model-card').evaluateAll((cards) =>
+    cards.map((card) => {
+      const title = card.querySelector('.catalog-card-top strong')?.textContent?.trim() ?? '';
+      const pills = Array.from(card.querySelectorAll('.catalog-model-pills span')).map((pill) => pill.textContent?.trim() ?? '');
+      return `${title} | ${pills.join(' ')}`;
+    })
+  );
+
+  expect(cardSummaries).toEqual([
+    'Devstral-2508 | Mistral 8bit MLX 4096 ctx 7B',
+    'Devstral-2512 | Mistral 4bit MLX 4096 ctx 7B',
+    'Devstral-2512 | Mistral 8bit MLX 4096 ctx 24B',
+    'Devstral-2512 | Mistral 4bit MLX 4096 ctx 24B',
+    'Qwen3-Coder-Next | Qwen 6bit MLX 4096 ctx 30B',
+    'Qwen3.6 | Qwen 9bit MLX 4096 ctx 27B'
+  ]);
 });

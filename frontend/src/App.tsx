@@ -2,7 +2,6 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import packageInfo from '../package.json' with { type: 'json' };
-import { InferenceContextBar } from './components/InferenceContextBar.js';
 import { MergedPageHeader } from './components/MergedPageHeader.js';
 import { Sidebar } from './components/Sidebar.js';
 import { Catalog } from './pages/Catalog.js';
@@ -15,7 +14,6 @@ import { legacyRedirectSearch, normalizeResultsTab, resultsSearch } from './navi
 import { apiGet } from './services/api.js';
 import { InferenceServerHealth, getConnectivityConfig, getInferenceServerHealth } from './services/connectivity-api.js';
 import { InferenceServerRecord, listInferenceServers } from './services/inference-servers-api.js';
-import { DEFAULT_INFERENCE_PARAMS, type InferenceParams } from './services/inference-param-presets-api.js';
 import { listModels } from './services/models-api.js';
 import { clearDatabase, EnvEntry, listEnvEntries, setEnvEntry } from './services/system-api.js';
 import { listTemplates } from './services/templates-api.js';
@@ -45,7 +43,6 @@ function CatalogModelDetailsRoute({
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [inferenceParams, setInferenceParams] = useState<InferenceParams>(DEFAULT_INFERENCE_PARAMS);
   const [modelCount, setModelCount] = useState<number | null>(null);
   const serverId = searchParams.get('serverId');
   const reachable = servers.filter((server) => connectivity[server.inference_server.server_id]?.ok).length;
@@ -78,7 +75,6 @@ function CatalogModelDetailsRoute({
         activeTab="models"
         onTabChange={(tab) => navigate({ pathname: '/catalog', search: `?tab=${tab}` })}
       />
-      <InferenceContextBar params={inferenceParams} onChange={setInferenceParams} />
       {content}
     </>
   );

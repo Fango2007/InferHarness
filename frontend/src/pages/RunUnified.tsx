@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import { InferenceServerErrors } from '../components/InferenceServerErrors.js';
-import { InferenceContextBar } from '../components/InferenceContextBar.js';
 import { MergedPageHeader } from '../components/MergedPageHeader.js';
 import {
   buildBenchmarkSmokePayload,
@@ -14,7 +13,7 @@ import {
   type BenchmarkResultRecord
 } from '../services/benchmark-api.js';
 import type { InferenceServerHealth } from '../services/connectivity-api.js';
-import { DEFAULT_INFERENCE_PARAMS, type InferenceParams } from '../services/inference-param-presets-api.js';
+import { DEFAULT_INFERENCE_PARAMS } from '../services/inference-param-presets-api.js';
 import { InferenceServerRecord, listInferenceServers } from '../services/inference-servers-api.js';
 import { listModels, ModelRecord } from '../services/models-api.js';
 import {
@@ -534,7 +533,7 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
   const [datasetId, setDatasetId] = useState('codegen-small');
   const [datasetFormat, setDatasetFormat] = useState<BenchmarkDatasetFormat>('jsonl');
   const [datasetPath, setDatasetPath] = useState('codegen-small.jsonl');
-  const [inferenceParams, setInferenceParams] = useState<InferenceParams>(DEFAULT_INFERENCE_PARAMS);
+  const inferenceParams = DEFAULT_INFERENCE_PARAMS;
   const [instantiation, setInstantiation] = useState<BenchmarkInstantiationRecord | null>(null);
   const [result, setResult] = useState<BenchmarkResultRecord | null>(null);
   const [busy, setBusy] = useState(false);
@@ -657,7 +656,6 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
   return (
     <>
       <MergedPageHeader title="Run" subtitle="Benchmark-backed smoke execution" />
-      <InferenceContextBar params={inferenceParams} onChange={setInferenceParams} />
       <section className="run-unified-page">
         <InferenceServerErrors message={error} />
         <div className="run-unified-layout">
