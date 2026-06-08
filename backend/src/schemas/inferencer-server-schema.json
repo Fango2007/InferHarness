@@ -67,7 +67,7 @@
             "schema_family": {
               "type": "array",
               "minItems": 1,
-              "items": { "type": "string", "enum": ["openai-compatible", "ollama", "custom"] }
+              "items": { "type": "string", "enum": ["openai-compatible", "ollama", "anthropic", "gemini", "custom"] }
             },
             "api_version": { "type": ["string", "null"] }
           }
