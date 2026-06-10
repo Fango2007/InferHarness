@@ -6,6 +6,8 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-10
+
 ### Added
 
 - **Benchmark metrics & aggregation** — new `benchmark-metrics` service computing the full schema-advertised metric set per item (`tokens_per_second`, `output_input_token_ratio`, `exact_match`, `contains_required_terms`, `json_valid`, `schema_valid`, `regex_match`, and tool-call metrics) plus run-level aggregations (`mean`/`median`/`min`/`max`/`sum`/`count`/`p50`/`p90`/`p95`/`p99`/`stddev`/`variance`), with boolean metrics surfaced as `success_rate` and partial-execution sample accounting.
@@ -19,6 +21,10 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - Response normalizer now surfaces `tool_calls` so tool-call metrics can be computed.
 - Run page smoke template requests `tokens_per_second`, `decode_tokens_per_second`, `prefill_tokens_per_second`, and `p95`/`count` aggregations.
 - Run page metrics panel labels clarified: `latency` → `duration` (total request time, distinct from `ttft`).
+
+### Security
+
+- Upgraded `shell-quote` to `^1.8.4` via a root override to remediate a known advisory.
 
 ## [0.5.0] - 2026-06-08
 
