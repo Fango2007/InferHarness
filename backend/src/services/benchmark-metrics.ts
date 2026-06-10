@@ -46,6 +46,24 @@ export function computeItemMetrics(args: ItemMetricInputs): Record<string, numbe
         result.tokens_per_second = out !== null && ms !== null && ms > 0 ? out / (ms / 1000) : null;
         break;
       }
+      case 'decode_tokens_per_second': {
+        const out = timing.output_tokens;
+        const ms = timing.elapsed_ms;
+        const ttft = timing.first_token_ms;
+        const decodeMs = ms !== null && ttft !== null ? ms - ttft : null;
+        result.decode_tokens_per_second = out !== null && decodeMs !== null && decodeMs > 0
+          ? out / (decodeMs / 1000)
+          : null;
+        break;
+      }
+      case 'prefill_tokens_per_second': {
+        const inp = timing.input_tokens;
+        const ttft = timing.first_token_ms;
+        result.prefill_tokens_per_second = inp !== null && ttft !== null && ttft > 0
+          ? inp / (ttft / 1000)
+          : null;
+        break;
+      }
       case 'output_input_token_ratio': {
         const out = timing.output_tokens;
         const inp = timing.input_tokens;
