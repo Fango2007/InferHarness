@@ -348,7 +348,8 @@ describe('benchmark runner API', () => {
     expect(result.document.raw_responses).toHaveLength(1);
     expect(result.document.normalized_responses[0].answer_text).toBe('benchmark answer');
     expect(result.document.metric_results[0].total_tokens).toBe(7);
-    expect(result.document.aggregated_metrics.count).toBe(1);
+    expect(result.document.metric_version).toBe('metrics-v1');
+    expect(result.document.aggregated_metrics.elapsed_ms.valid_sample_count).toBe(1);
     expect(mockServer.requests).toHaveLength(1);
     expect((mockServer.requests[0] as Record<string, unknown>).model).toBe('mock-chat');
 
@@ -673,7 +674,7 @@ describe('benchmark runner API', () => {
     const result = runResponse.json();
     expect(result.document.status).toBe('completed');
     expect(result.document.metric_results).toHaveLength(2);
-    expect(result.document.aggregated_metrics.count).toBe(2);
+    expect(result.document.aggregated_metrics.elapsed_ms.valid_sample_count).toBe(2);
     expect(mockServer.requests).toHaveLength(2);
     await app.close();
   });
