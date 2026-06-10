@@ -110,6 +110,43 @@ function benchmarkMetrics(result: BenchmarkResultRecord | null): Record<string, 
   };
 }
 
+function aggStat(result: BenchmarkResultRecord | null, metric: string, stat: string): number | null {
+  const agg = result?.document.aggregated_metrics as Record<string, Record<string, unknown>> | undefined;
+  const entry = agg?.[metric];
+  const value = entry?.[stat];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+interface CorrectnessMetric {
+  label: string;
+  successRate: number;
+  count: number;
+}
+
+const CORRECTNESS_METRIC_LABELS: Record<string, string> = {
+  exact_match: 'exact match',
+  json_valid: 'JSON valid',
+  schema_valid: 'schema valid',
+  regex_match: 'regex match',
+  contains_required_terms: 'terms found',
+  tool_selected_correctly: 'tool selected',
+  tool_arguments_valid: 'tool args valid',
+  missing_tool_call: 'missing tool',
+  hallucinated_tool_call: 'hallucinated tool'
+};
+
+function correctnessMetrics(result: BenchmarkResultRecord | null): CorrectnessMetric[] {
+  const agg = result?.document.aggregated_metrics as Record<string, Record<string, unknown>> | undefined;
+  if (!agg) return [];
+  return Object.entries(agg)
+    .filter(([key, entry]) => key in CORRECTNESS_METRIC_LABELS && typeof entry?.success_rate === 'number')
+    .map(([key, entry]) => ({
+      label: CORRECTNESS_METRIC_LABELS[key] ?? key,
+      successRate: entry.success_rate as number,
+      count: typeof entry.count === 'number' ? entry.count : 0
+    }));
+}
+
 function streamSummary(result: BenchmarkResultRecord | null): string {
   const responses = normalizedResponseItems(result);
   const streams = responses
@@ -437,6 +474,10 @@ function BenchmarkDetail({
   const status = resultStatus(result, busy);
   const manifest = datasetManifest(instantiation);
   const responses = normalizedResponseItems(result);
+  const itemCount = aggStat(result, 'elapsed_ms', 'count');
+  const tokensPerSec = aggStat(result, 'tokens_per_second', 'mean');
+  const latencyP95 = aggStat(result, 'elapsed_ms', 'p95');
+  const correctness = correctnessMetrics(result);
   return (
     <div className="run-single-detail">
       <main className="run-transcript">
@@ -505,7 +546,32 @@ function BenchmarkDetail({
           <span><b>tokens out</b>{formatNumber(metrics.output_tokens)}</span>
           <span><b>total tokens</b>{formatNumber(metrics.total_tokens)}</span>
           <span><b>stream</b>{streamSummary(result)}</span>
+          {tokensPerSec !== null && (
+            <span><b>tok / s</b>{formatMetric(tokensPerSec, 'tok/s')}</span>
+          )}
+          {latencyP95 !== null && itemCount !== null && itemCount > 1 && (
+            <span><b>latency p95</b>{formatMetric(latencyP95)}</span>
+          )}
+          {itemCount !== null && itemCount > 1 && (
+            <span><b>items</b>{String(itemCount)}</span>
+          )}
         </div>
+        {correctness.length > 0 && (
+          <>
+            <h3 style={{ marginTop: '16px' }}>Correctness</h3>
+            <div className="run-metric-grid">
+              {correctness.map(({ label, successRate, count }) => (
+                <span key={label}>
+                  <b>{label}</b>
+                  {`${(successRate * 100).toFixed(0)}%`}
+                  <span style={{ display: 'block', color: 'var(--ink-3)', fontSize: '9px' }}>
+                    {`${Math.round(successRate * count)} / ${count}`}
+                  </span>
+                </span>
+              ))}
+            </div>
+          </>
+        )}
         <details>
           <summary>Raw benchmark result</summary>
           <pre>{JSON.stringify(result ?? instantiation ?? {}, null, 2)}</pre>

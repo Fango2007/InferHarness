@@ -13,6 +13,7 @@ import { buildInferenceServerAuthHeaders } from './inference-server-auth.js';
 import { backendFetch } from './inference-proxy.js';
 import { sha256Document, validateBenchmarkDocument } from './benchmark-schemas.js';
 import { parseSseEvents } from './sse-parser.js';
+import { aggregateMetrics as computeAggregations, computeItemMetrics } from './benchmark-metrics.js';
 
 const ENGINE_VERSION = 'benchmark-runner-v1';
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -57,6 +58,7 @@ interface NormalizedResponse {
   input_tokens: number | null;
   output_tokens: number | null;
   total_tokens: number | null;
+  tool_calls: unknown[] | null;
   body: unknown;
   text: string | null;
   stream?: Record<string, unknown> | null;
@@ -132,6 +134,27 @@ function stagesFromInstantiation(instantiation: Record<string, unknown>): Benchm
       stop_on_error: typeof record.stop_on_error === 'boolean' ? record.stop_on_error : false
     };
   });
+}
+
+function templateMetricsFromInstantiation(instantiation: Record<string, unknown>): string[] {
+  const snapshot = objectAt(objectAt(instantiation, 'template'), 'snapshot');
+  const metrics = snapshot?.metrics;
+  return Array.isArray(metrics) ? (metrics as string[]) : ['elapsed_ms', 'input_tokens', 'output_tokens', 'total_tokens'];
+}
+
+function templateAggregationsFromInstantiation(instantiation: Record<string, unknown>): string[] {
+  const snapshot = objectAt(objectAt(instantiation, 'template'), 'snapshot');
+  const aggs = snapshot?.aggregations;
+  return Array.isArray(aggs) ? (aggs as string[]) : ['mean', 'count'];
+}
+
+function expectedSampleCount(stages: BenchmarkStage[], itemCount: number): number {
+  return stages
+    .filter((s) => s.record_metrics !== false)
+    .reduce((sum, s) => {
+      const itemsForStage = s.type === 'single_request' ? 1 : itemCount;
+      return sum + itemsForStage * (s.iterations_per_item ?? 1);
+    }, 0);
 }
 
 function modelIdFromInstantiation(instantiation: Record<string, unknown>): string {
@@ -395,6 +418,7 @@ function normalizeStreamResponse(protocol: unknown, contentType: string, respons
     input_tokens: stream.input_tokens,
     output_tokens: stream.output_tokens,
     total_tokens: stream.total_tokens,
+    tool_calls: null,
     body: stream.final_metadata,
     text: null,
     stream: {
@@ -424,6 +448,7 @@ function normalizeResponse(body: unknown, text: string | null): NormalizedRespon
     const evalCount = typeof record.eval_count === 'number' ? record.eval_count : null;
     const inputTokens = typeof usage?.prompt_tokens === 'number' ? usage.prompt_tokens : promptEvalCount;
     const outputTokens = typeof usage?.completion_tokens === 'number' ? usage.completion_tokens : evalCount;
+    const toolCalls = Array.isArray(message?.tool_calls) ? (message.tool_calls as unknown[]) : null;
     return {
       answer_text: textFromValue(message?.content) ?? textFromValue(ollamaMessage?.content) ?? textFromValue(record.response) ?? '',
       input_tokens: inputTokens,
@@ -431,6 +456,7 @@ function normalizeResponse(body: unknown, text: string | null): NormalizedRespon
       total_tokens: typeof usage?.total_tokens === 'number'
         ? usage.total_tokens
         : inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null,
+      tool_calls: toolCalls,
       body,
       text: null
     };
@@ -440,6 +466,7 @@ function normalizeResponse(body: unknown, text: string | null): NormalizedRespon
     input_tokens: null,
     output_tokens: null,
     total_tokens: null,
+    tool_calls: null,
     body,
     text
   };
@@ -450,7 +477,8 @@ async function executeItem(
   stage: BenchmarkStage,
   executable: ExecutableItem,
   policy: ExecutionPolicy,
-  authHeaders: Record<string, string>
+  authHeaders: Record<string, string>,
+  requestedMetrics: string[]
 ): Promise<{
   result: Record<string, unknown>;
   rawResponse: Record<string, unknown> | null;
@@ -596,7 +624,7 @@ async function executeItem(
         text: responseBody === null ? responseText : null,
         stream: normalized.stream ?? null
       };
-      const metrics = {
+      const baseMetrics = {
         stage_id: stage.id,
         item_index: executable.itemIndex,
         iteration: executable.iteration,
@@ -606,6 +634,14 @@ async function executeItem(
         output_tokens: normalized.output_tokens,
         total_tokens: normalized.total_tokens
       };
+      const computedMetrics = computeItemMetrics({
+        requestedMetrics,
+        timing: baseMetrics,
+        answerText: normalized.answer_text,
+        toolCalls: normalized.tool_calls,
+        item: executable.item
+      });
+      const metrics = { ...baseMetrics, ...computedMetrics };
       const errorCode = response.ok ? null : `http_${response.status}`;
       if (!errorCode) {
         return {
@@ -784,6 +820,8 @@ export async function runBenchmarkInstantiation(instantiationId: string) {
   const items = resolveBenchmarkDatasetItems(record.document);
   const stages = stagesFromInstantiation(record.document);
   const policy = parseExecutionPolicy(record.document);
+  const requestedMetrics = templateMetricsFromInstantiation(record.document);
+  const requestedAggregations = templateAggregationsFromInstantiation(record.document);
   const server = getInferenceServerById(record.server_id);
   if (!server) {
     throw new BenchmarkNotFoundError(`Inference server not found: ${record.server_id}`);
@@ -811,11 +849,11 @@ export async function runBenchmarkInstantiation(instantiationId: string) {
         results.push(skippedResult(item, cancellation));
         continue;
       }
-      const execution = await executeItem(record.document, stage, item, policy, authHeaders);
+      const execution = await executeItem(record.document, stage, item, policy, authHeaders, requestedMetrics);
       results.push(execution.result);
       if (execution.rawResponse) rawResponses.push(execution.rawResponse);
       if (execution.normalizedResponse) normalizedResponses.push(execution.normalizedResponse);
-      if (execution.metrics) metricResults.push(execution.metrics);
+      if (execution.metrics && (stage.record_metrics !== false)) metricResults.push(execution.metrics);
       if (execution.error) {
         stageErrors.push(execution.error);
         errors.push(execution.error);
@@ -871,10 +909,10 @@ export async function runBenchmarkInstantiation(instantiationId: string) {
     raw_responses: rawResponses,
     normalized_responses: normalizedResponses,
     metric_results: metricResults,
-    aggregated_metrics: aggregateMetrics(metricResults),
+    aggregated_metrics: computeAggregations(metricResults, requestedAggregations, expectedSampleCount(stages, items.length)),
     errors,
     warnings,
-    metric_version: 'basic-v1',
+    metric_version: 'metrics-v1',
     normalizer_version: 'chat-v1',
     metadata: runCancelled ? { cancellation_reason: cancellation } : {}
   };
@@ -884,14 +922,4 @@ export async function runBenchmarkInstantiation(instantiationId: string) {
 
 function cryptoRandomId(): string {
   return crypto.randomUUID();
-}
-
-function aggregateMetrics(metrics: Record<string, unknown>[]): Record<string, unknown> {
-  const elapsed = metrics.map((metric) => metric.elapsed_ms).filter((value): value is number => typeof value === 'number');
-  const outputTokens = metrics.map((metric) => metric.output_tokens).filter((value): value is number => typeof value === 'number');
-  return {
-    count: metrics.length,
-    elapsed_ms_mean: elapsed.length > 0 ? elapsed.reduce((sum, value) => sum + value, 0) / elapsed.length : null,
-    output_tokens_sum: outputTokens.length > 0 ? outputTokens.reduce((sum, value) => sum + value, 0) : null
-  };
 }
