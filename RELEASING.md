@@ -10,10 +10,13 @@ It does not currently publish standalone installers or a compiled backend bundle
 3. Run `pip install -r backend/src/scripts/requirements.txt`.
 4. Run `npm run release:check`.
 5. Commit the release changes.
-6. Create and push the tag (replace `X.Y.Z` with the version from `package.json`):
+6. Create and push the tag (replace `X.Y.Z` with the version from `package.json`).
+   Use an **annotated** tag (`-a`): `--follow-tags` only pushes annotated tags, so a
+   lightweight `git tag vX.Y.Z` would be silently skipped and the release workflow would
+   not trigger.
 
 ```bash
-git tag vX.Y.Z
+git tag -a vX.Y.Z -m "Release X.Y.Z"
 git push origin main --follow-tags
 ```
 
