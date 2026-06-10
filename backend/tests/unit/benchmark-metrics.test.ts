@@ -85,6 +85,63 @@ describe('computeItemMetrics', () => {
       expect(result.tokens_per_second).toBeNull();
     });
 
+    it('computes decode_tokens_per_second using the post-ttft window', () => {
+      const result = computeItemMetrics({
+        requestedMetrics: ['decode_tokens_per_second'],
+        timing: { ...BASE_TIMING, output_tokens: 90, elapsed_ms: 2000, first_token_ms: 500 },
+        answerText: '',
+        toolCalls: null,
+        item: {}
+      });
+      // 90 tokens over (2000 - 500) = 1500ms => 60 tok/s
+      expect(result.decode_tokens_per_second).toBeCloseTo(60);
+    });
+
+    it('decode_tokens_per_second is null when first_token_ms is missing (non-streaming)', () => {
+      const result = computeItemMetrics({
+        requestedMetrics: ['decode_tokens_per_second'],
+        timing: { ...BASE_TIMING, first_token_ms: null },
+        answerText: '',
+        toolCalls: null,
+        item: {}
+      });
+      expect(result.decode_tokens_per_second).toBeNull();
+    });
+
+    it('decode_tokens_per_second is null when decode window is non-positive', () => {
+      const result = computeItemMetrics({
+        requestedMetrics: ['decode_tokens_per_second'],
+        timing: { ...BASE_TIMING, elapsed_ms: 500, first_token_ms: 500 },
+        answerText: '',
+        toolCalls: null,
+        item: {}
+      });
+      expect(result.decode_tokens_per_second).toBeNull();
+    });
+
+    it('computes prefill_tokens_per_second from input tokens over ttft', () => {
+      const result = computeItemMetrics({
+        requestedMetrics: ['prefill_tokens_per_second'],
+        timing: { ...BASE_TIMING, input_tokens: 100, first_token_ms: 250 },
+        answerText: '',
+        toolCalls: null,
+        item: {}
+      });
+      // 100 tokens over 250ms => 400 tok/s
+      expect(result.prefill_tokens_per_second).toBeCloseTo(400);
+    });
+
+    it('prefill_tokens_per_second is null when first_token_ms is missing', () => {
+      const result = computeItemMetrics({
+        requestedMetrics: ['prefill_tokens_per_second'],
+        timing: { ...BASE_TIMING, first_token_ms: null },
+        answerText: '',
+        toolCalls: null,
+        item: {}
+      });
+      expect(result.prefill_tokens_per_second).toBeNull();
+    });
+
     it('computes output_input_token_ratio', () => {
       const result = computeItemMetrics({
         requestedMetrics: ['output_input_token_ratio'],

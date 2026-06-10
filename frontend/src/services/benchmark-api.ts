@@ -158,7 +158,7 @@ export function buildBenchmarkSmokePayload(input: BuildBenchmarkSmokeInput): Cre
           stop_on_error: false
         }
       ],
-      metrics: ['input_tokens', 'output_tokens', 'total_tokens', 'elapsed_ms', 'first_token_ms', 'tokens_per_second'],
+      metrics: ['input_tokens', 'output_tokens', 'total_tokens', 'elapsed_ms', 'first_token_ms', 'tokens_per_second', 'decode_tokens_per_second', 'prefill_tokens_per_second'],
       aggregations: ['mean', 'p95', 'count']
     },
     server_id: input.target.inference_server_id,

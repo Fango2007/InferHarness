@@ -9,13 +9,16 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ### Added
 
 - **Benchmark metrics & aggregation** — new `benchmark-metrics` service computing the full schema-advertised metric set per item (`tokens_per_second`, `output_input_token_ratio`, `exact_match`, `contains_required_terms`, `json_valid`, `schema_valid`, `regex_match`, and tool-call metrics) plus run-level aggregations (`mean`/`median`/`min`/`max`/`sum`/`count`/`p50`/`p90`/`p95`/`p99`/`stddev`/`variance`), with boolean metrics surfaced as `success_rate` and partial-execution sample accounting.
-- Run page right-side metrics panel now shows tokens-per-second, latency `p95` and item count for multi-item runs, and a correctness section (per-metric success rate) when the template requests correctness metrics.
+- Run page right-side metrics panel now shows tokens-per-second, duration `p95` and item count for multi-item runs, and a correctness section (per-metric success rate) when the template requests correctness metrics.
+- Generation parameters (temperature, top_p, max_tokens, stream) editable inline in the Run page Step 4 options grid; previously hardcoded to defaults.
+- Decode-aware throughput metrics `decode_tokens_per_second` (`output_tokens / (elapsed_ms − first_token_ms)`) and `prefill_tokens_per_second` (`input_tokens / first_token_ms`), isolating generation speed from prompt prefill on streaming runs; both null on non-streaming runs. Metrics panel shows decode / overall / prefill tok/s separately.
 
 ### Changed
 
 - Benchmark runner replaces the stub aggregator (`count`/`elapsed_ms_mean`/`output_tokens_sum`) with template-driven metric computation and aggregation; `metric_version` bumped from `basic-v1` to `metrics-v1`.
 - Response normalizer now surfaces `tool_calls` so tool-call metrics can be computed.
-- Run page smoke template requests `tokens_per_second` and `p95`/`count` aggregations.
+- Run page smoke template requests `tokens_per_second`, `decode_tokens_per_second`, `prefill_tokens_per_second`, and `p95`/`count` aggregations.
+- Run page metrics panel labels clarified: `latency` → `duration` (total request time, distinct from `ttft`).
 
 ## [0.5.0] - 2026-06-08
 

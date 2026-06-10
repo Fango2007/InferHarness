@@ -13,7 +13,7 @@ import {
   type BenchmarkResultRecord
 } from '../services/benchmark-api.js';
 import type { InferenceServerHealth } from '../services/connectivity-api.js';
-import { DEFAULT_INFERENCE_PARAMS } from '../services/inference-param-presets-api.js';
+import { DEFAULT_INFERENCE_PARAMS, type InferenceParams } from '../services/inference-param-presets-api.js';
 import { InferenceServerRecord, listInferenceServers } from '../services/inference-servers-api.js';
 import { listModels, ModelRecord } from '../services/models-api.js';
 import {
@@ -194,11 +194,13 @@ function ConfigRail({
   datasetId,
   datasetFormat,
   datasetPath,
+  inferenceParams,
   onAddTarget,
   onRemoveTarget,
   onCustomServerChange,
   onTimeoutChange,
   onSeedChange,
+  onInferenceParamsChange,
   onPromptChange,
   onSystemPromptChange,
   onDatasetModeChange,
@@ -221,11 +223,13 @@ function ConfigRail({
   datasetId: string;
   datasetFormat: BenchmarkDatasetFormat;
   datasetPath: string;
+  inferenceParams: InferenceParams;
   onAddTarget: (target: RunTarget) => void;
   onRemoveTarget: (target: RunTarget) => void;
   onCustomServerChange: (value: string) => void;
   onTimeoutChange: (value: string) => void;
   onSeedChange: (value: string) => void;
+  onInferenceParamsChange: (params: InferenceParams) => void;
   onPromptChange: (value: string) => void;
   onSystemPromptChange: (value: string) => void;
   onDatasetModeChange: (value: RunDatasetMode) => void;
@@ -398,6 +402,59 @@ function ConfigRail({
             Seed
             <input value={seed} onChange={(event) => onSeedChange(event.target.value)} />
           </label>
+          <label>
+            Temperature
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              max="2"
+              value={inferenceParams.temperature ?? ''}
+              onChange={(event) => onInferenceParamsChange({
+                ...inferenceParams,
+                temperature: event.target.value ? Number(event.target.value) : null
+              })}
+            />
+          </label>
+          <label>
+            Top P
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              max="1"
+              value={inferenceParams.top_p ?? ''}
+              onChange={(event) => onInferenceParamsChange({
+                ...inferenceParams,
+                top_p: event.target.value ? Number(event.target.value) : null
+              })}
+            />
+          </label>
+          <label>
+            Max tokens
+            <input
+              type="number"
+              min="1"
+              value={inferenceParams.max_tokens ?? ''}
+              onChange={(event) => onInferenceParamsChange({
+                ...inferenceParams,
+                max_tokens: event.target.value ? Number(event.target.value) : null
+              })}
+            />
+          </label>
+          <label>
+            Stream
+            <select
+              value={inferenceParams.stream ? 'true' : 'false'}
+              onChange={(event) => onInferenceParamsChange({
+                ...inferenceParams,
+                stream: event.target.value === 'true'
+              })}
+            >
+              <option value="false">false</option>
+              <option value="true">true</option>
+            </select>
+          </label>
         </div>
       </div>
 
@@ -476,6 +533,8 @@ function BenchmarkDetail({
   const responses = normalizedResponseItems(result);
   const itemCount = aggStat(result, 'elapsed_ms', 'count');
   const tokensPerSec = aggStat(result, 'tokens_per_second', 'mean');
+  const decodeTokensPerSec = aggStat(result, 'decode_tokens_per_second', 'mean');
+  const prefillTokensPerSec = aggStat(result, 'prefill_tokens_per_second', 'mean');
   const latencyP95 = aggStat(result, 'elapsed_ms', 'p95');
   const correctness = correctnessMetrics(result);
   return (
@@ -540,17 +599,23 @@ function BenchmarkDetail({
       <aside className="run-side-metrics">
         <h3>Metrics</h3>
         <div className="run-metric-grid">
-          <span><b>latency</b>{formatMetric(metrics.elapsed_ms)}</span>
+          <span><b>duration</b>{formatMetric(metrics.elapsed_ms)}</span>
           <span><b>ttft</b>{formatMetric(metrics.first_token_ms)}</span>
           <span><b>tokens in</b>{formatNumber(metrics.input_tokens)}</span>
           <span><b>tokens out</b>{formatNumber(metrics.output_tokens)}</span>
           <span><b>total tokens</b>{formatNumber(metrics.total_tokens)}</span>
           <span><b>stream</b>{streamSummary(result)}</span>
+          {decodeTokensPerSec !== null && (
+            <span><b>tok / s (decode)</b>{formatMetric(decodeTokensPerSec, 'tok/s')}</span>
+          )}
           {tokensPerSec !== null && (
-            <span><b>tok / s</b>{formatMetric(tokensPerSec, 'tok/s')}</span>
+            <span><b>tok / s (overall)</b>{formatMetric(tokensPerSec, 'tok/s')}</span>
+          )}
+          {prefillTokensPerSec !== null && (
+            <span><b>prefill tok / s</b>{formatMetric(prefillTokensPerSec, 'tok/s')}</span>
           )}
           {latencyP95 !== null && itemCount !== null && itemCount > 1 && (
-            <span><b>latency p95</b>{formatMetric(latencyP95)}</span>
+            <span><b>duration p95</b>{formatMetric(latencyP95)}</span>
           )}
           {itemCount !== null && itemCount > 1 && (
             <span><b>items</b>{String(itemCount)}</span>
@@ -599,7 +664,7 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
   const [datasetId, setDatasetId] = useState('codegen-small');
   const [datasetFormat, setDatasetFormat] = useState<BenchmarkDatasetFormat>('jsonl');
   const [datasetPath, setDatasetPath] = useState('codegen-small.jsonl');
-  const inferenceParams = DEFAULT_INFERENCE_PARAMS;
+  const [inferenceParams, setInferenceParams] = useState<InferenceParams>(DEFAULT_INFERENCE_PARAMS);
   const [instantiation, setInstantiation] = useState<BenchmarkInstantiationRecord | null>(null);
   const [result, setResult] = useState<BenchmarkResultRecord | null>(null);
   const [busy, setBusy] = useState(false);
@@ -740,11 +805,13 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
             datasetId={datasetId}
             datasetFormat={datasetFormat}
             datasetPath={datasetPath}
+            inferenceParams={inferenceParams}
             onAddTarget={addTarget}
             onRemoveTarget={removeTarget}
             onCustomServerChange={setCustomServerId}
             onTimeoutChange={setTimeoutSec}
             onSeedChange={setSeed}
+            onInferenceParamsChange={setInferenceParams}
             onPromptChange={setPrompt}
             onSystemPromptChange={setSystemPrompt}
             onDatasetModeChange={setDatasetMode}
