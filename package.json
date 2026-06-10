@@ -26,7 +26,8 @@
     "test": "npm -w backend test && npm -w frontend test"
   },
   "overrides": {
-    "vite": "^8.0.10"
+    "vite": "^8.0.10",
+    "shell-quote": "^1.8.4"
   },
   "optionalDependencies": {
     "@rolldown/binding-linux-x64-gnu": "1.0.0-rc.17",
