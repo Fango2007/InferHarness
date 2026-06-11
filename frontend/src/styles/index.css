@@ -1195,9 +1195,12 @@ button.is-pending::after {
   text-transform: uppercase;
 }
 
-.run-options-grid input {
+.run-options-grid input,
+.run-options-grid select {
   font-family: var(--font-mono);
   font-size: 12px;
+  height: 35px;
+  box-sizing: border-box;
 }
 
 .run-actions-row {
@@ -1484,6 +1487,14 @@ button.is-pending::after {
   color: var(--ink-3);
   font-size: 9px;
   text-transform: uppercase;
+}
+
+.run-metric-grid span.is-estimated {
+  color: #cc0000;
+}
+
+.run-metric-grid span.is-estimated b {
+  color: #cc0000;
 }
 
 .run-side-actions {

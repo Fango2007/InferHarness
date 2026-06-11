@@ -12,6 +12,7 @@ import {
 import { prepareBenchmarkDatasetManifest } from '../../services/benchmark-datasets.js';
 import { BenchmarkKind } from '../../services/benchmark-schemas.js';
 import { runBenchmarkInstantiation } from '../../services/benchmark-runner.js';
+import { runBenchmarkPlan } from '../../services/benchmark-plan-runner.js';
 
 function sendBenchmarkError(reply: FastifyReply, error: unknown): boolean {
   if (error instanceof BenchmarkValidationError) {
@@ -101,5 +102,39 @@ export function registerBenchmarkRoutes(app: FastifyInstance): void {
       return;
     }
     reply.send(record);
+  });
+
+  app.post('/benchmark/plans/run', async (request, reply) => {
+    const body = request.body as {
+      plan_id?: string;
+      template?: unknown;
+      dataset?: unknown;
+      runtime_profile?: unknown;
+      targets?: unknown;
+      continue_on_model_error?: unknown;
+    };
+    if (!body.template || typeof body.template !== 'object' || Array.isArray(body.template)) {
+      reply.code(400).send({ error: 'benchmark plan requires template' });
+      return;
+    }
+    if (!Array.isArray(body.targets) || body.targets.length === 0) {
+      reply.code(400).send({ error: 'benchmark plan requires at least one target' });
+      return;
+    }
+    try {
+      const result = await runBenchmarkPlan({
+        plan_id: typeof body.plan_id === 'string' ? body.plan_id : undefined,
+        template: body.template as Record<string, unknown>,
+        dataset: (body.dataset ?? {}) as Record<string, unknown>,
+        runtime_profile: (body.runtime_profile ?? {}) as Record<string, unknown>,
+        targets: body.targets as { server_id: string; model_id: string }[],
+        continue_on_model_error: body.continue_on_model_error !== false
+      });
+      reply.code(201).send(result);
+    } catch (error) {
+      if (!sendBenchmarkError(reply, error)) {
+        throw error;
+      }
+    }
   });
 }

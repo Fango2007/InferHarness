@@ -6,6 +6,18 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+### Added
+
+- **Model load time metric** — `load_duration_ms` extracted from server-native response metadata (Ollama reports exact load time in nanoseconds on every `/api/chat` and `/api/generate` response). Exposed as a first-class metric in `computeItemMetrics` and aggregated as `max` (load only fires on the cold request). Run page metrics panel shows a "model load" row when the value is non-null and > 0; hidden for servers that don't report it (llama.cpp, vLLM, TGI).
+- **Ollama protocol timing metrics** — `total_duration` (ns) feeds `server_total_time_ms` (server-measured total including load+prefill+decode); `prompt_eval_duration` (ns) → `server_prompt_eval_ms`; `eval_duration` (ns) → `server_eval_ms`. Applies to all Ollama-compatible servers (Ollama, Inferencer, etc.). Run page shows "server prefill" and "server decode" rows when non-null; server-reported, no red.
+- **oMLX native metrics** — `usage.model_load_duration` (seconds) now feeds `load_duration_ms` alongside Ollama's `load_duration` (nanoseconds); `usage.total_time` (seconds) surfaces as new `server_total_time_ms` metric representing server-measured processing time (excludes network, comparable to `elapsed_ms`). Run page shows "server time" row when non-null.
+- **Request-triggered load estimator** — `estimateRequestTriggeredLoad()` computes a heuristic `load_estimate` from ordered `metric_results` when ≥ 3 samples exist: compares first-request latency against the median of warm requests; detects a load event when the cold spike exceeds `max(50% of warm baseline, 3× warm stddev)`. Prefers `first_token_ms` over `elapsed_ms` when streaming data is present. Stored as `load_estimate` on the result document. Run page shows "model load (est.)" in **bold red** when detected and no native `load_duration_ms` is available — signals heuristic rather than server-reported value.
+
+### Fixed
+
+- Stream dropdown in Run page Step 4 options grid now matches the height of number inputs (`font-size: 12px` and explicit `height: 35px` applied uniformly via `.run-options-grid` selector).
+- Derived/estimated metrics in the Run page metrics panel (`tok / s (decode)`, `tok / s (overall)`, `prefill tok / s`, `model load (est.)`) now render in bold red via `.is-estimated` class, consistently distinguishing computed values from directly measured or server-reported ones.
+
 ## [0.6.0] - 2026-06-10
 
 ### Added

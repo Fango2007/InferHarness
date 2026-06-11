@@ -4,10 +4,13 @@ import { useSearchParams } from 'react-router-dom';
 import { InferenceServerErrors } from '../components/InferenceServerErrors.js';
 import { MergedPageHeader } from '../components/MergedPageHeader.js';
 import {
+  buildBenchmarkPlanPayload,
   buildBenchmarkSmokePayload,
   createBenchmarkInstantiation,
+  getBenchmarkResult,
   prepareBenchmarkDatasetManifest,
   runBenchmarkInstantiation,
+  runBenchmarkPlan,
   type BenchmarkDatasetFormat,
   type BenchmarkInstantiationRecord,
   type BenchmarkResultRecord
@@ -115,6 +118,14 @@ function aggStat(result: BenchmarkResultRecord | null, metric: string, stat: str
   const entry = agg?.[metric];
   const value = entry?.[stat];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function firstMetricValue(result: BenchmarkResultRecord | null, field: string): number | null {
+  const rows = result?.document.metric_results ?? [];
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  const first = rows[0] as Record<string, unknown> | undefined;
+  const v = first?.[field];
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
 interface CorrectnessMetric {
@@ -313,8 +324,8 @@ function ConfigRail({
             </select>
           </label>
         </div>
-        <div className="run-count-line">{selectedTargets.length || 0} of 8 models selected · run executes the first selected model</div>
-        <p className="run-hint">Run one model through either a smoke prompt or a server-side dataset file.</p>
+        <div className="run-count-line">{selectedTargets.length || 0} of 8 models selected · {selectedTargets.length > 1 ? `run executes all ${selectedTargets.length} selected models` : 'run executes the selected model'}</div>
+        <p className="run-hint">Run one or more models through a smoke prompt or server-side dataset. Multiple models produce a side-by-side comparison.</p>
       </div>
 
       <div className="run-config-step">
@@ -536,6 +547,12 @@ function BenchmarkDetail({
   const decodeTokensPerSec = aggStat(result, 'decode_tokens_per_second', 'mean');
   const prefillTokensPerSec = aggStat(result, 'prefill_tokens_per_second', 'mean');
   const latencyP95 = aggStat(result, 'elapsed_ms', 'p95');
+  const modelLoadMs = aggStat(result, 'load_duration_ms', 'max') ?? firstMetricValue(result, 'load_duration_ms');
+  const serverTotalTimeMs = aggStat(result, 'server_total_time_ms', 'mean') ?? firstMetricValue(result, 'server_total_time_ms');
+  const serverPromptEvalMs = aggStat(result, 'server_prompt_eval_ms', 'mean') ?? firstMetricValue(result, 'server_prompt_eval_ms');
+  const serverEvalMs = aggStat(result, 'server_eval_ms', 'mean') ?? firstMetricValue(result, 'server_eval_ms');
+  const loadEstimate = result?.document.load_estimate as { estimated_load_ms: number; model_load_detected: boolean } | null | undefined;
+  const estimatedLoadMs = loadEstimate?.model_load_detected ? loadEstimate.estimated_load_ms : null;
   const correctness = correctnessMetrics(result);
   return (
     <div className="run-single-detail">
@@ -600,22 +617,37 @@ function BenchmarkDetail({
         <h3>Metrics</h3>
         <div className="run-metric-grid">
           <span><b>duration</b>{formatMetric(metrics.elapsed_ms)}</span>
+          {serverTotalTimeMs !== null && (
+            <span><b>server time</b>{formatMetric(serverTotalTimeMs)}</span>
+          )}
+          {serverPromptEvalMs !== null && (
+            <span><b>server prefill</b>{formatMetric(serverPromptEvalMs)}</span>
+          )}
+          {serverEvalMs !== null && (
+            <span><b>server decode</b>{formatMetric(serverEvalMs)}</span>
+          )}
+          {latencyP95 !== null && itemCount !== null && itemCount > 1 && (
+            <span><b>duration p95</b>{formatMetric(latencyP95)}</span>
+          )}
           <span><b>ttft</b>{formatMetric(metrics.first_token_ms)}</span>
+          {modelLoadMs !== null && modelLoadMs > 0 && (
+            <span><b>model load</b>{formatMetric(modelLoadMs)}</span>
+          )}
+          {modelLoadMs === null && estimatedLoadMs !== null && estimatedLoadMs > 0 && (
+            <span className="is-estimated"><b>model load (est.)</b>{formatMetric(estimatedLoadMs)}</span>
+          )}
           <span><b>tokens in</b>{formatNumber(metrics.input_tokens)}</span>
           <span><b>tokens out</b>{formatNumber(metrics.output_tokens)}</span>
           <span><b>total tokens</b>{formatNumber(metrics.total_tokens)}</span>
           <span><b>stream</b>{streamSummary(result)}</span>
           {decodeTokensPerSec !== null && (
-            <span><b>tok / s (decode)</b>{formatMetric(decodeTokensPerSec, 'tok/s')}</span>
+            <span className="is-estimated"><b>tok / s (decode)</b>{formatMetric(decodeTokensPerSec, 'tok/s')}</span>
           )}
           {tokensPerSec !== null && (
-            <span><b>tok / s (overall)</b>{formatMetric(tokensPerSec, 'tok/s')}</span>
+            <span className="is-estimated"><b>tok / s (overall)</b>{formatMetric(tokensPerSec, 'tok/s')}</span>
           )}
           {prefillTokensPerSec !== null && (
-            <span><b>prefill tok / s</b>{formatMetric(prefillTokensPerSec, 'tok/s')}</span>
-          )}
-          {latencyP95 !== null && itemCount !== null && itemCount > 1 && (
-            <span><b>duration p95</b>{formatMetric(latencyP95)}</span>
+            <span className="is-estimated"><b>prefill tok / s</b>{formatMetric(prefillTokensPerSec, 'tok/s')}</span>
           )}
           {itemCount !== null && itemCount > 1 && (
             <span><b>items</b>{String(itemCount)}</span>
@@ -650,6 +682,7 @@ function BenchmarkDetail({
   );
 }
 
+
 export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot?: Record<string, InferenceServerHealth> }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [servers, setServers] = useState<InferenceServerRecord[]>([]);
@@ -667,6 +700,7 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
   const [inferenceParams, setInferenceParams] = useState<InferenceParams>(DEFAULT_INFERENCE_PARAMS);
   const [instantiation, setInstantiation] = useState<BenchmarkInstantiationRecord | null>(null);
   const [result, setResult] = useState<BenchmarkResultRecord | null>(null);
+  const [multiResults, setMultiResults] = useState<(BenchmarkResultRecord | null)[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -721,6 +755,7 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
   function addTarget(target: RunTarget) {
     setInstantiation(null);
     setResult(null);
+    setMultiResults([]);
     setSelectedTargets((current) => {
       const key = targetKey(target);
       if (current.some((entry) => targetKey(entry) === key)) {
@@ -733,6 +768,7 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
   function removeTarget(target: RunTarget) {
     setInstantiation(null);
     setResult(null);
+    setMultiResults([]);
     setSelectedTargets((current) => current.filter((entry) => targetKey(entry) !== targetKey(target)));
   }
 
@@ -749,6 +785,7 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
     setBusy(true);
     setError(null);
     setResult(null);
+    setMultiResults([]);
     try {
       const preparedDataset = datasetMode === 'manifest_only'
         ? await prepareBenchmarkDatasetManifest({
@@ -761,22 +798,44 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
             metadata: { source: 'run-page-dataset-path' }
           })
         : undefined;
-      const payload = buildBenchmarkSmokePayload({
-        target: selectedTarget,
-        prompt: prompt.trim(),
-        systemPrompt,
-        inferenceParams,
-        timeoutSec,
-        seed,
-        dataset: preparedDataset
-          ? { mode: 'manifest_only', manifest: preparedDataset }
-          : { mode: 'inline', prompt: prompt.trim(), systemPrompt }
-      });
-      const created = await createBenchmarkInstantiation(payload);
-      setInstantiation(created);
-      const completed = await runBenchmarkInstantiation(created.id);
-      setResult(completed);
-      window.dispatchEvent(new CustomEvent('runs:changed'));
+      const datasetInput = preparedDataset
+        ? { mode: 'manifest_only' as const, manifest: preparedDataset }
+        : { mode: 'inline' as const, prompt: prompt.trim(), systemPrompt };
+
+      if (selectedTargets.length > 1) {
+        const payload = buildBenchmarkPlanPayload({
+          targets: selectedTargets,
+          prompt: prompt.trim(),
+          systemPrompt,
+          inferenceParams,
+          timeoutSec,
+          seed,
+          dataset: datasetInput
+        });
+        const plan = await runBenchmarkPlan(payload);
+        const fetched = await Promise.all(
+          plan.run_results.map((r) =>
+            r.run_id ? getBenchmarkResult(r.run_id).catch(() => null) : Promise.resolve(null)
+          )
+        );
+        setMultiResults(fetched);
+        window.dispatchEvent(new CustomEvent('runs:changed'));
+      } else {
+        const payload = buildBenchmarkSmokePayload({
+          target: selectedTarget,
+          prompt: prompt.trim(),
+          systemPrompt,
+          inferenceParams,
+          timeoutSec,
+          seed,
+          dataset: datasetInput
+        });
+        const created = await createBenchmarkInstantiation(payload);
+        setInstantiation(created);
+        const completed = await runBenchmarkInstantiation(created.id);
+        setResult(completed);
+        window.dispatchEvent(new CustomEvent('runs:changed'));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to run benchmark.');
     } finally {
@@ -824,7 +883,7 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
             <header className="run-page-header">
               <div>
                 <h1>Run</h1>
-                <p>{subtitle}{result ? ` · ${result.document.status}` : busy ? ' · running' : ''}</p>
+                <p>{subtitle}{multiResults.length > 0 ? ` · ${multiResults.length} models` : result ? ` · ${result.document.status}` : busy ? ' · running' : ''}</p>
               </div>
               <div className="run-header-actions">
                 <button type="button" disabled={!result}>Export</button>
@@ -839,6 +898,20 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
             />
             {!selectedTarget ? (
               <RunUnifiedEmpty />
+            ) : selectedTargets.length > 1 || multiResults.length > 0 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+                {selectedTargets.map((target, index) => (
+                  <div key={targetKey(target)} style={{ flex: '1 1 50%', minWidth: 0, borderRight: '1px solid var(--paper-7)', borderBottom: '1px solid var(--paper-7)', boxSizing: 'border-box' }}>
+                    <BenchmarkDetail
+                      target={target}
+                      option={optionMap.get(targetKey(target))}
+                      instantiation={null}
+                      result={multiResults[index] ?? null}
+                      busy={busy}
+                    />
+                  </div>
+                ))}
+              </div>
             ) : (
               <BenchmarkDetail
                 target={selectedTarget}

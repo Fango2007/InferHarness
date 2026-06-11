@@ -199,3 +199,51 @@ export async function runBenchmarkInstantiation(id: string): Promise<BenchmarkRe
 export async function getBenchmarkResult(id: string): Promise<BenchmarkResultRecord> {
   return apiGet<BenchmarkResultRecord>(`/benchmark/results/${id}`);
 }
+
+export interface BenchmarkPlanRunResult {
+  model_profile_ref: string;
+  instantiation_id: string;
+  run_id: string | null;
+  status: string;
+}
+
+export interface BenchmarkPlanResult {
+  kind: 'benchmark_plan_result';
+  plan_version: 'benchmark_plan_result_v1';
+  plan_id: string;
+  run_results: BenchmarkPlanRunResult[];
+  comparison: {
+    metrics: Record<string, Record<string, number | null>>;
+  };
+}
+
+export interface BenchmarkPlanPayload {
+  plan_id?: string;
+  template: Record<string, unknown>;
+  dataset: Record<string, unknown>;
+  runtime_profile: Record<string, unknown>;
+  targets: { server_id: string; model_id: string }[];
+  continue_on_model_error?: boolean;
+}
+
+export async function runBenchmarkPlan(payload: BenchmarkPlanPayload): Promise<BenchmarkPlanResult> {
+  return apiPost<BenchmarkPlanResult>('/benchmark/plans/run', payload);
+}
+
+export function buildBenchmarkPlanPayload(input: {
+  targets: RunTarget[];
+  prompt: string;
+  systemPrompt?: string | null;
+  inferenceParams: InferenceParams;
+  timeoutSec: string;
+  seed: string;
+  dataset?: BenchmarkDatasetInput;
+}): BenchmarkPlanPayload {
+  const first = buildBenchmarkSmokePayload({ ...input, target: input.targets[0] });
+  return {
+    template: first.template,
+    dataset: first.dataset as Record<string, unknown>,
+    runtime_profile: first.runtime_profile,
+    targets: input.targets.map((t) => ({ server_id: t.inference_server_id, model_id: t.model_id }))
+  };
+}
