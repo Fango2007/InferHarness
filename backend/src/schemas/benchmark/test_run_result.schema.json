@@ -40,6 +40,24 @@
     "aggregated_metrics": { "type": "object", "additionalProperties": true },
     "errors": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
     "warnings": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+    "load_estimate": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["basis", "cold_ms", "warm_baseline_ms", "warm_sample_count", "estimated_load_ms", "model_load_detected"],
+          "properties": {
+            "basis": { "type": "string", "enum": ["first_token_ms", "elapsed_ms"] },
+            "cold_ms": { "type": "number" },
+            "warm_baseline_ms": { "type": "number" },
+            "warm_sample_count": { "type": "integer", "minimum": 0 },
+            "estimated_load_ms": { "type": "number", "minimum": 0 },
+            "model_load_detected": { "type": "boolean" }
+          }
+        }
+      ]
+    },
     "metric_version": { "type": "string" },
     "normalizer_version": { "type": "string" },
     "metadata": { "type": "object", "additionalProperties": true },

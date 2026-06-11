@@ -13,7 +13,7 @@ import { buildInferenceServerAuthHeaders } from './inference-server-auth.js';
 import { backendFetch } from './inference-proxy.js';
 import { sha256Document, validateBenchmarkDocument } from './benchmark-schemas.js';
 import { parseSseEvents } from './sse-parser.js';
-import { aggregateMetrics as computeAggregations, computeItemMetrics } from './benchmark-metrics.js';
+import { aggregateMetrics as computeAggregations, computeItemMetrics, estimateRequestTriggeredLoad } from './benchmark-metrics.js';
 
 const ENGINE_VERSION = 'benchmark-runner-v1';
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -58,6 +58,10 @@ interface NormalizedResponse {
   input_tokens: number | null;
   output_tokens: number | null;
   total_tokens: number | null;
+  load_duration_ms: number | null;
+  server_total_time_ms: number | null;
+  server_prompt_eval_ms: number | null;
+  server_eval_ms: number | null;
   tool_calls: unknown[] | null;
   body: unknown;
   text: string | null;
@@ -309,6 +313,34 @@ function objectValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
+function extractLoadDurationMs(metadata: Record<string, unknown> | null): number | null {
+  // Ollama: load_duration is nanoseconds
+  if (typeof metadata?.load_duration === 'number') return metadata.load_duration / 1e6;
+  // oMLX: usage.model_load_duration is seconds
+  const usage = objectValue(metadata?.usage);
+  if (typeof usage?.model_load_duration === 'number') return usage.model_load_duration * 1000;
+  return null;
+}
+
+function extractServerTotalTimeMs(metadata: Record<string, unknown> | null): number | null {
+  // Ollama/Inferencer: total_duration is nanoseconds
+  if (typeof metadata?.total_duration === 'number') return metadata.total_duration / 1e6;
+  // oMLX: usage.total_time is seconds
+  const usage = objectValue(metadata?.usage);
+  if (typeof usage?.total_time === 'number') return usage.total_time * 1000;
+  return null;
+}
+
+function extractServerPromptEvalMs(metadata: Record<string, unknown> | null): number | null {
+  if (typeof metadata?.prompt_eval_duration === 'number') return metadata.prompt_eval_duration / 1e6;
+  return null;
+}
+
+function extractServerEvalMs(metadata: Record<string, unknown> | null): number | null {
+  if (typeof metadata?.eval_duration === 'number') return metadata.eval_duration / 1e6;
+  return null;
+}
+
 function usageTokens(metadata: Record<string, unknown> | null): Pick<NormalizedResponse, 'input_tokens' | 'output_tokens' | 'total_tokens'> {
   const usage = objectValue(metadata?.usage);
   const inputTokens = numberAt(usage, 'prompt_tokens') ?? numberAt(metadata, 'prompt_eval_count');
@@ -418,6 +450,10 @@ function normalizeStreamResponse(protocol: unknown, contentType: string, respons
     input_tokens: stream.input_tokens,
     output_tokens: stream.output_tokens,
     total_tokens: stream.total_tokens,
+    load_duration_ms: extractLoadDurationMs(stream.final_metadata),
+    server_total_time_ms: extractServerTotalTimeMs(stream.final_metadata),
+    server_prompt_eval_ms: extractServerPromptEvalMs(stream.final_metadata),
+    server_eval_ms: extractServerEvalMs(stream.final_metadata),
     tool_calls: null,
     body: stream.final_metadata,
     text: null,
@@ -456,6 +492,10 @@ function normalizeResponse(body: unknown, text: string | null): NormalizedRespon
       total_tokens: typeof usage?.total_tokens === 'number'
         ? usage.total_tokens
         : inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null,
+      load_duration_ms: extractLoadDurationMs(record),
+      server_total_time_ms: extractServerTotalTimeMs(record),
+      server_prompt_eval_ms: extractServerPromptEvalMs(record),
+      server_eval_ms: extractServerEvalMs(record),
       tool_calls: toolCalls,
       body,
       text: null
@@ -466,6 +506,10 @@ function normalizeResponse(body: unknown, text: string | null): NormalizedRespon
     input_tokens: null,
     output_tokens: null,
     total_tokens: null,
+    load_duration_ms: null,
+    server_total_time_ms: null,
+    server_prompt_eval_ms: null,
+    server_eval_ms: null,
     tool_calls: null,
     body,
     text
@@ -608,7 +652,11 @@ async function executeItem(
             first_token_ms: firstTokenMs,
             input_tokens: null,
             output_tokens: null,
-            total_tokens: null
+            total_tokens: null,
+            load_duration_ms: null,
+            server_total_time_ms: null,
+            server_prompt_eval_ms: null,
+            server_eval_ms: null
           },
           error: issue
         };
@@ -632,7 +680,11 @@ async function executeItem(
         first_token_ms: firstTokenMs,
         input_tokens: normalized.input_tokens,
         output_tokens: normalized.output_tokens,
-        total_tokens: normalized.total_tokens
+        total_tokens: normalized.total_tokens,
+        load_duration_ms: normalized.load_duration_ms,
+        server_total_time_ms: normalized.server_total_time_ms,
+        server_prompt_eval_ms: normalized.server_prompt_eval_ms,
+        server_eval_ms: normalized.server_eval_ms
       };
       const computedMetrics = computeItemMetrics({
         requestedMetrics,
@@ -910,6 +962,7 @@ export async function runBenchmarkInstantiation(instantiationId: string) {
     normalized_responses: normalizedResponses,
     metric_results: metricResults,
     aggregated_metrics: computeAggregations(metricResults, requestedAggregations, expectedSampleCount(stages, items.length)),
+    load_estimate: estimateRequestTriggeredLoad(metricResults),
     errors,
     warnings,
     metric_version: 'metrics-v1',

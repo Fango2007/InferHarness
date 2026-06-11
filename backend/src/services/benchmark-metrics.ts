@@ -13,6 +13,10 @@ export interface ItemMetricInputs {
     input_tokens: number | null;
     output_tokens: number | null;
     total_tokens: number | null;
+    load_duration_ms: number | null;
+    server_total_time_ms: number | null;
+    server_prompt_eval_ms: number | null;
+    server_eval_ms: number | null;
   };
   answerText: string;
   toolCalls: unknown[] | null;
@@ -39,6 +43,18 @@ export function computeItemMetrics(args: ItemMetricInputs): Record<string, numbe
         break;
       case 'first_token_ms':
         result.first_token_ms = timing.first_token_ms;
+        break;
+      case 'load_duration_ms':
+        result.load_duration_ms = timing.load_duration_ms;
+        break;
+      case 'server_total_time_ms':
+        result.server_total_time_ms = timing.server_total_time_ms;
+        break;
+      case 'server_prompt_eval_ms':
+        result.server_prompt_eval_ms = timing.server_prompt_eval_ms;
+        break;
+      case 'server_eval_ms':
+        result.server_eval_ms = timing.server_eval_ms;
         break;
       case 'tokens_per_second': {
         const out = timing.output_tokens;
@@ -261,6 +277,51 @@ function interpolatedPercentile(sorted: number[], p: number): number {
   const hi = Math.ceil(idx);
   if (lo === hi) return sorted[lo];
   return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+}
+
+export interface LoadEstimate {
+  basis: 'first_token_ms' | 'elapsed_ms';
+  cold_ms: number;
+  warm_baseline_ms: number;
+  warm_sample_count: number;
+  estimated_load_ms: number;
+  model_load_detected: boolean;
+}
+
+export function estimateRequestTriggeredLoad(
+  metricResults: Record<string, unknown>[]
+): LoadEstimate | null {
+  if (metricResults.length < 3) return null;
+
+  const useFirstToken = metricResults.every(
+    (r) => typeof r.first_token_ms === 'number' && r.first_token_ms !== null
+  );
+  const basis: 'first_token_ms' | 'elapsed_ms' = useFirstToken ? 'first_token_ms' : 'elapsed_ms';
+
+  const first = metricResults[0];
+  const coldMs = typeof first[basis] === 'number' ? (first[basis] as number) : null;
+  if (coldMs === null) return null;
+
+  const warmValues = metricResults.slice(1).map((r) => r[basis]).filter((v): v is number => typeof v === 'number');
+  if (warmValues.length < 2) return null;
+
+  const sortedWarm = [...warmValues].sort((a, b) => a - b);
+  const warmBaseline = interpolatedPercentile(sortedWarm, 50);
+  const warmMean = warmValues.reduce((s, v) => s + v, 0) / warmValues.length;
+  const warmStddev = Math.sqrt(warmValues.reduce((s, v) => s + (v - warmMean) ** 2, 0) / warmValues.length);
+
+  const estimatedLoadMs = Math.max(0, coldMs - warmBaseline);
+  const threshold = Math.max(warmBaseline * 0.5, 3 * warmStddev);
+  const modelLoadDetected = (coldMs - warmBaseline) > threshold;
+
+  return {
+    basis,
+    cold_ms: coldMs,
+    warm_baseline_ms: warmBaseline,
+    warm_sample_count: warmValues.length,
+    estimated_load_ms: estimatedLoadMs,
+    model_load_detected: modelLoadDetected
+  };
 }
 
 function callName(call: unknown): string | null {
