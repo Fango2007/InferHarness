@@ -13,6 +13,13 @@ import { prepareBenchmarkDatasetManifest } from '../../services/benchmark-datase
 import { BenchmarkKind } from '../../services/benchmark-schemas.js';
 import { runBenchmarkInstantiation } from '../../services/benchmark-runner.js';
 import { runBenchmarkPlan } from '../../services/benchmark-plan-runner.js';
+import {
+  BenchmarkDocumentKind,
+  getBenchmarkDocument,
+  putBenchmarkDocument,
+  putBenchmarkPlan
+} from '../../services/benchmark-document-store.js';
+import { resolveBenchmarkPlan } from '../../services/benchmark-plan-registry.js';
 
 function sendBenchmarkError(reply: FastifyReply, error: unknown): boolean {
   if (error instanceof BenchmarkValidationError) {
@@ -27,6 +34,28 @@ function sendBenchmarkError(reply: FastifyReply, error: unknown): boolean {
 }
 
 export function registerBenchmarkRoutes(app: FastifyInstance): void {
+  app.post('/benchmark/documents', async (request, reply) => {
+    try {
+      const record = putBenchmarkDocument(request.body as Record<string, unknown>);
+      reply.code(201).send(record);
+    } catch (error) {
+      if (!sendBenchmarkError(reply, error)) {
+        throw error;
+      }
+    }
+  });
+
+  app.get('/benchmark/documents/:kind/:id', async (request, reply) => {
+    const { kind, id } = request.params as { kind: BenchmarkDocumentKind; id: string };
+    try {
+      reply.send(getBenchmarkDocument(kind, id));
+    } catch (error) {
+      if (!sendBenchmarkError(reply, error)) {
+        throw error;
+      }
+    }
+  });
+
   app.post('/benchmark/validate', async (request, reply) => {
     const payload = request.body as { kind?: BenchmarkKind; document?: unknown };
     try {
@@ -102,6 +131,41 @@ export function registerBenchmarkRoutes(app: FastifyInstance): void {
       return;
     }
     reply.send(record);
+  });
+
+  app.post('/benchmark/plans', async (request, reply) => {
+    try {
+      const record = putBenchmarkPlan(request.body as Record<string, unknown>);
+      reply.code(201).send(record);
+    } catch (error) {
+      if (!sendBenchmarkError(reply, error)) {
+        throw error;
+      }
+    }
+  });
+
+  app.get('/benchmark/plans/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      reply.send(getBenchmarkDocument('benchmark_plan', id));
+    } catch (error) {
+      if (!sendBenchmarkError(reply, error)) {
+        throw error;
+      }
+    }
+  });
+
+  app.post('/benchmark/plans/:id/run', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const planRecord = getBenchmarkDocument('benchmark_plan', id);
+      const result = await runBenchmarkPlan(resolveBenchmarkPlan(planRecord.document));
+      reply.code(201).send(result);
+    } catch (error) {
+      if (!sendBenchmarkError(reply, error)) {
+        throw error;
+      }
+    }
   });
 
   app.post('/benchmark/plans/run', async (request, reply) => {

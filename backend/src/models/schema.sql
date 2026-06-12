@@ -312,3 +312,13 @@ CREATE INDEX IF NOT EXISTS idx_benchmark_results_instantiation
   ON benchmark_test_run_results(instantiation_id);
 CREATE INDEX IF NOT EXISTS idx_benchmark_results_run
   ON benchmark_test_run_results(run_id);
+
+CREATE TABLE IF NOT EXISTS benchmark_documents (
+  id             TEXT NOT NULL,
+  kind           TEXT NOT NULL,
+  schema_version TEXT NOT NULL,
+  document       TEXT NOT NULL,
+  created_at     TEXT NOT NULL,
+  updated_at     TEXT NOT NULL,
+  PRIMARY KEY (kind, id)
+);
