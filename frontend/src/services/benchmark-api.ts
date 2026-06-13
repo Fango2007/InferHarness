@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from './api.js';
+import { apiDelete, apiGet, apiPost } from './api.js';
 import type { InferenceParams } from './inference-param-presets-api.js';
 import type { RunTarget } from './run-unified-utils.js';
 
@@ -27,6 +27,38 @@ export interface BenchmarkResultRecord {
   document: BenchmarkRunResultDocument;
   created_at: string;
 }
+
+export type BenchmarkDocumentKind = 'test_template' | 'runtime_profile' | 'dataset_manifest' | 'benchmark_plan';
+
+export interface BenchmarkDocumentRecord<TDocument extends Record<string, unknown> = Record<string, unknown>> {
+  id: string;
+  kind: BenchmarkDocumentKind;
+  schema_version: string;
+  document: TDocument;
+  created_at: string;
+  updated_at: string;
+}
+
+export type BenchmarkOperation = 'chat_completion' | 'completion' | 'embedding' | 'list_models' | 'healthcheck';
+
+export interface BenchmarkTestTemplateDocument extends Record<string, unknown> {
+  kind: 'test_template';
+  schema_version: 'benchmark_test_template_v1';
+  template_id: string;
+  template_version: string;
+  name?: string;
+  description?: string;
+  operation: BenchmarkOperation;
+  required_capabilities?: Record<string, boolean>;
+  input_contract?: Record<string, unknown>;
+  stages: Array<Record<string, unknown>>;
+  metrics: string[];
+  aggregations: string[];
+  metadata?: Record<string, unknown>;
+  extensions?: Record<string, unknown>;
+}
+
+export type BenchmarkTestTemplateRecord = BenchmarkDocumentRecord<BenchmarkTestTemplateDocument>;
 
 export interface BenchmarkRunResultDocument {
   kind: 'test_run_result';
@@ -198,6 +230,22 @@ export async function runBenchmarkInstantiation(id: string): Promise<BenchmarkRe
 
 export async function getBenchmarkResult(id: string): Promise<BenchmarkResultRecord> {
   return apiGet<BenchmarkResultRecord>(`/benchmark/results/${id}`);
+}
+
+export async function listBenchmarkDocuments<TDocument extends Record<string, unknown> = Record<string, unknown>>(
+  kind: BenchmarkDocumentKind
+): Promise<Array<BenchmarkDocumentRecord<TDocument>>> {
+  return apiGet<Array<BenchmarkDocumentRecord<TDocument>>>(`/benchmark/documents/${kind}`);
+}
+
+export async function saveBenchmarkDocument<TDocument extends Record<string, unknown>>(
+  document: TDocument
+): Promise<BenchmarkDocumentRecord<TDocument>> {
+  return apiPost<BenchmarkDocumentRecord<TDocument>>('/benchmark/documents', document);
+}
+
+export async function deleteBenchmarkDocument(kind: BenchmarkDocumentKind, id: string): Promise<void> {
+  await apiDelete(`/benchmark/documents/${kind}/${id}`);
 }
 
 export interface BenchmarkPlanRunResult {

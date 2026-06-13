@@ -1,0 +1,19 @@
+{
+  "kind": "test_template",
+  "schema_version": "benchmark_test_template_v1",
+  "template_id": "paired_override_invalid_v1",
+  "template_version": "1.0.0",
+  "operation": "chat_completion",
+  "stages": [
+    {
+      "id": "override-pair",
+      "type": "paired_request_loop",
+      "pair": [
+        { "id": "a", "request": { "reuse": "default" } },
+        { "id": "b", "request": { "body": { "prompt": "override" } } }
+      ]
+    }
+  ],
+  "metrics": ["pair.a.elapsed_ms"],
+  "aggregations": ["mean"]
+}

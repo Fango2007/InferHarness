@@ -40,6 +40,33 @@ function benchmarkTemplate(iterations = 1, stopOnError = false): Record<string, 
   };
 }
 
+function pairedBenchmarkTemplate(stopOnError = false): Record<string, unknown> {
+  return {
+    ...benchmarkTemplate(1, stopOnError),
+    template_id: 'runner_paired_chat_v1',
+    stages: [
+      {
+        id: 'cold-hot',
+        type: 'paired_request_loop',
+        iterations_per_item: 1,
+        record_metrics: true,
+        stop_on_error: stopOnError,
+        pre_iteration_delay_ms: 0,
+        intra_pair_delay_ms: 0,
+        pair: [
+          { id: 'cold', role: 'baseline', request: { reuse: 'default' } },
+          { id: 'hot', role: 'comparison', request: { reuse: 'default' } }
+        ],
+        derived_metrics: [
+          { id: 'cold_token_delta', type: 'difference', left: 'cold.total_tokens', right: 'hot.total_tokens' }
+        ]
+      }
+    ],
+    metrics: ['pair.cold.total_tokens', 'pair.hot.total_tokens', 'cold_token_delta'],
+    aggregations: ['mean', 'count']
+  };
+}
+
 function seedServerAndModel(
   baseUrl: string,
   options: { schemaFamily?: string[]; streaming?: boolean; authToken?: string } = {}
@@ -172,6 +199,28 @@ function installMockInferenceFetch(status: number | number[] = 200): { baseUrl: 
     });
   }));
   return { baseUrl: 'http://mock.local', requests, headers };
+}
+
+function installMockTokenSequenceFetch(tokens: number[]): { baseUrl: string; requests: unknown[] } {
+  const requests: unknown[] = [];
+  const queue = [...tokens];
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url !== 'http://mock.local/v1/chat/completions') {
+      return new Response('', { status: 404 });
+    }
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
+    requests.push(body);
+    const total = queue.shift() ?? 0;
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: 'benchmark answer' } }],
+      usage: { prompt_tokens: total, completion_tokens: 0, total_tokens: total }
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }));
+  return { baseUrl: 'http://mock.local', requests };
 }
 
 function streamResponse(chunks: string[], contentType: string): Response {
@@ -360,6 +409,57 @@ describe('benchmark runner API', () => {
     });
     expect(getResponse.statusCode).toBe(200);
     expect(getResponse.json().document_hash).toBe(result.document_hash);
+    await app.close();
+  });
+
+  it('executes paired_request_loop stages and aggregates pair metrics', async () => {
+    mockServer = installMockTokenSequenceFetch([10, 4, 8, 3]);
+    const app = createServer();
+    seedServerAndModel(mockServer.baseUrl);
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/benchmark/instantiations',
+      headers: AUTH_HEADERS,
+      payload: {
+        template: pairedBenchmarkTemplate(),
+        server_id: 'srv-runner',
+        model_id: 'mock-chat',
+        runtime_profile: runtimeProfile({ timeout_ms: 5000 }),
+        dataset: {
+          dataset_id: 'embedded-paired-runner',
+          source: { source_type: 'inline', format: 'json' },
+          snapshot_policy: 'embedded',
+          items: [
+            { id: 'item-1', prompt: 'Run first.' },
+            { id: 'item-2', prompt: 'Run second.' }
+          ]
+        }
+      }
+    });
+    expect(createResponse.statusCode, JSON.stringify(createResponse.json())).toBe(201);
+
+    const runResponse = await app.inject({
+      method: 'POST',
+      url: `/benchmark/instantiations/${createResponse.json().id}/run`,
+      headers: AUTH_HEADERS
+    });
+    expect(runResponse.statusCode).toBe(201);
+    const result = runResponse.json();
+    expect(result.document.status).toBe('completed');
+    expect(mockServer.requests).toHaveLength(4);
+    expect(result.document.stage_results[0].stage_type).toBe('paired_request_loop');
+    expect(result.document.stage_results[0].run_count).toBe(2);
+    expect(result.document.stage_results[0].results[0].members.cold.metrics.total_tokens).toBe(10);
+    expect(result.document.stage_results[0].results[0].members.hot.metrics.total_tokens).toBe(4);
+    expect(result.document.stage_results[0].results[0].derived_metrics.cold_token_delta).toBe(6);
+    expect(result.document.raw_responses.map((entry: Record<string, unknown>) => entry.pair_member_id)).toEqual(['cold', 'hot', 'cold', 'hot']);
+    expect(result.document.metric_results).toHaveLength(2);
+    expect(result.document.metric_results[0]['pair.cold.total_tokens']).toBe(10);
+    expect(result.document.metric_results[0]['pair.hot.total_tokens']).toBe(4);
+    expect(result.document.metric_results[0].cold_token_delta).toBe(6);
+    expect(result.document.aggregated_metrics.cold_token_delta.mean).toBe(5.5);
+    expect(result.document.aggregated_metrics.cold_token_delta.valid_sample_count).toBe(2);
     await app.close();
   });
 

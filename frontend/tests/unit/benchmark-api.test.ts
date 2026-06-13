@@ -3,8 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildBenchmarkSmokePayload,
   createBenchmarkInstantiation,
+  deleteBenchmarkDocument,
+  listBenchmarkDocuments,
   prepareBenchmarkDatasetManifest,
-  runBenchmarkInstantiation
+  runBenchmarkInstantiation,
+  saveBenchmarkDocument
 } from '../../src/services/benchmark-api.js';
 
 beforeEach(() => {
@@ -165,5 +168,46 @@ describe('benchmark API helpers', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/benchmark/instantiations');
     expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:8080/benchmark/instantiations/bti-1/run');
     expect((fetchMock.mock.calls[1][1] as RequestInit).body).toBe(JSON.stringify({}));
+  });
+
+  it('lists, saves, and deletes benchmark documents through the benchmark API', async () => {
+    const document = {
+      kind: 'test_template',
+      schema_version: 'benchmark_test_template_v1',
+      template_id: 'ui-template',
+      template_version: '1.0.0',
+      operation: 'chat_completion',
+      stages: [{ id: 'chat', type: 'dataset_loop' }],
+      metrics: ['elapsed_ms'],
+      aggregations: ['mean']
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ([{ id: 'ui-template', kind: 'test_template', document }])
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: async () => ({ id: 'ui-template', kind: 'test_template', document })
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        json: async () => ({})
+      } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await listBenchmarkDocuments('test_template');
+    await saveBenchmarkDocument(document);
+    await deleteBenchmarkDocument('test_template', 'ui-template');
+
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/benchmark/documents/test_template');
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:8080/benchmark/documents');
+    expect((fetchMock.mock.calls[1][1] as RequestInit).body).toBe(JSON.stringify(document));
+    expect(fetchMock.mock.calls[2][0]).toBe('http://localhost:8080/benchmark/documents/test_template/ui-template');
+    expect((fetchMock.mock.calls[2][1] as RequestInit).method).toBe('DELETE');
   });
 });

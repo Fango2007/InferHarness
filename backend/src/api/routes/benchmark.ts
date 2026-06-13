@@ -15,7 +15,9 @@ import { runBenchmarkInstantiation } from '../../services/benchmark-runner.js';
 import { runBenchmarkPlan } from '../../services/benchmark-plan-runner.js';
 import {
   BenchmarkDocumentKind,
+  deleteBenchmarkDocument,
   getBenchmarkDocument,
+  listBenchmarkDocuments,
   putBenchmarkDocument,
   putBenchmarkPlan
 } from '../../services/benchmark-document-store.js';
@@ -33,6 +35,18 @@ function sendBenchmarkError(reply: FastifyReply, error: unknown): boolean {
   return false;
 }
 
+function parseDocumentKind(kind: string): BenchmarkDocumentKind {
+  if (
+    kind === 'test_template'
+    || kind === 'runtime_profile'
+    || kind === 'dataset_manifest'
+    || kind === 'benchmark_plan'
+  ) {
+    return kind;
+  }
+  throw new BenchmarkValidationError(`Unsupported benchmark document kind: ${kind}`);
+}
+
 export function registerBenchmarkRoutes(app: FastifyInstance): void {
   app.post('/benchmark/documents', async (request, reply) => {
     try {
@@ -45,10 +59,33 @@ export function registerBenchmarkRoutes(app: FastifyInstance): void {
     }
   });
 
-  app.get('/benchmark/documents/:kind/:id', async (request, reply) => {
-    const { kind, id } = request.params as { kind: BenchmarkDocumentKind; id: string };
+  app.get('/benchmark/documents/:kind', async (request, reply) => {
+    const { kind } = request.params as { kind: string };
     try {
-      reply.send(getBenchmarkDocument(kind, id));
+      reply.send(listBenchmarkDocuments(parseDocumentKind(kind)));
+    } catch (error) {
+      if (!sendBenchmarkError(reply, error)) {
+        throw error;
+      }
+    }
+  });
+
+  app.get('/benchmark/documents/:kind/:id', async (request, reply) => {
+    const { kind, id } = request.params as { kind: string; id: string };
+    try {
+      reply.send(getBenchmarkDocument(parseDocumentKind(kind), id));
+    } catch (error) {
+      if (!sendBenchmarkError(reply, error)) {
+        throw error;
+      }
+    }
+  });
+
+  app.delete('/benchmark/documents/:kind/:id', async (request, reply) => {
+    const { kind, id } = request.params as { kind: string; id: string };
+    try {
+      const removed = deleteBenchmarkDocument(parseDocumentKind(kind), id);
+      reply.code(removed ? 204 : 404).send();
     } catch (error) {
       if (!sendBenchmarkError(reply, error)) {
         throw error;

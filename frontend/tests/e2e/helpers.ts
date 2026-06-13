@@ -239,6 +239,12 @@ export async function cleanupTemplateIds(
 
   for (const templateId of uniqueTemplateIds) {
     await request
+      .delete(`${API_BASE_URL}/benchmark/documents/test_template/${templateId}`, {
+        headers: authHeaders,
+        timeout: 5_000
+      })
+      .catch(() => undefined);
+    await request
       .delete(`${API_BASE_URL}/templates/${templateId}`, {
         headers: authHeaders,
         timeout: 5_000

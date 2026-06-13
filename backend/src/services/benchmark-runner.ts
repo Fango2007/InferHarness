@@ -17,19 +17,60 @@ import { aggregateMetrics as computeAggregations, computeItemMetrics, estimateRe
 
 const ENGINE_VERSION = 'benchmark-runner-v1';
 const DEFAULT_TIMEOUT_MS = 30_000;
+const BUILT_IN_METRICS = [
+  'input_tokens',
+  'output_tokens',
+  'total_tokens',
+  'elapsed_ms',
+  'first_token_ms',
+  'tokens_per_second',
+  'decode_tokens_per_second',
+  'prefill_tokens_per_second',
+  'output_input_token_ratio',
+  'tool_call_count',
+  'tool_selected_correctly',
+  'tool_arguments_valid',
+  'missing_tool_call',
+  'hallucinated_tool_call',
+  'json_valid',
+  'schema_valid',
+  'regex_match',
+  'exact_match',
+  'contains_required_terms'
+];
 
 interface BenchmarkStage {
   id: string;
   type: 'dataset_loop' | 'single_request' | 'paired_request_loop';
   iterations_per_item?: number;
   record_metrics?: boolean;
+  cooldown_ms?: number;
+  pre_iteration_delay_ms?: number;
+  intra_pair_delay_ms?: number;
+  pair?: PairMember[];
+  derived_metrics?: DerivedMetric[];
   stop_on_error?: boolean;
+}
+
+interface PairMember {
+  id: string;
+  role?: string;
+  request?: { reuse?: 'default' };
+}
+
+interface DerivedMetric {
+  id: string;
+  type: 'difference';
+  left: string;
+  right: string;
+  unit?: string;
 }
 
 interface ExecutableItem {
   item: Record<string, unknown>;
   itemIndex: number;
   iteration: number;
+  pairMemberId?: string;
 }
 
 interface RetryPolicy {
@@ -115,6 +156,60 @@ function objectAt(value: unknown, key: string): Record<string, unknown> | null {
   return entry && typeof entry === 'object' && !Array.isArray(entry) ? entry as Record<string, unknown> : null;
 }
 
+function numberField(record: Record<string, unknown>, key: string): number | undefined {
+  return typeof record[key] === 'number' && Number.isFinite(record[key]) ? record[key] as number : undefined;
+}
+
+function pairMembersFromStage(record: Record<string, unknown>, index: number): PairMember[] | undefined {
+  if (record.type !== 'paired_request_loop') {
+    return undefined;
+  }
+  if (!Array.isArray(record.pair) || record.pair.length < 2) {
+    throw new BenchmarkValidationError(`Benchmark paired_request_loop stage ${index} requires at least two pair members.`);
+  }
+  return record.pair.map((member, memberIndex) => {
+    if (!member || typeof member !== 'object' || Array.isArray(member)) {
+      throw new BenchmarkValidationError(`Benchmark paired_request_loop stage ${index} pair member ${memberIndex} must be an object.`);
+    }
+    const memberRecord = member as Record<string, unknown>;
+    const id = textFromValue(memberRecord.id);
+    if (!id) {
+      throw new BenchmarkValidationError(`Benchmark paired_request_loop stage ${index} pair member ${memberIndex} requires an id.`);
+    }
+    const request = objectAt(memberRecord, 'request');
+    if (request && request.reuse !== undefined && request.reuse !== 'default') {
+      throw new BenchmarkValidationError(`Benchmark paired_request_loop stage ${index} pair member ${id} only supports request.reuse="default".`);
+    }
+    return {
+      id,
+      role: textFromValue(memberRecord.role) ?? undefined,
+      request: request ? { reuse: 'default' } : undefined
+    };
+  });
+}
+
+function derivedMetricsFromStage(record: Record<string, unknown>, index: number): DerivedMetric[] | undefined {
+  if (!Array.isArray(record.derived_metrics)) {
+    return undefined;
+  }
+  return record.derived_metrics.map((metric, metricIndex) => {
+    if (!metric || typeof metric !== 'object' || Array.isArray(metric)) {
+      throw new BenchmarkValidationError(`Benchmark stage ${index} derived metric ${metricIndex} must be an object.`);
+    }
+    const metricRecord = metric as Record<string, unknown>;
+    const id = textFromValue(metricRecord.id);
+    const left = textFromValue(metricRecord.left);
+    const right = textFromValue(metricRecord.right);
+    if (!id || !left || !right) {
+      throw new BenchmarkValidationError(`Benchmark stage ${index} derived metric ${metricIndex} requires id, left, and right.`);
+    }
+    if (metricRecord.type !== 'difference') {
+      throw new BenchmarkValidationError(`Benchmark stage ${index} derived metric ${id} only supports type="difference" in this checkpoint.`);
+    }
+    return { id, type: 'difference', left, right, unit: textFromValue(metricRecord.unit) ?? undefined };
+  });
+}
+
 function stagesFromInstantiation(instantiation: Record<string, unknown>): BenchmarkStage[] {
   const template = objectAt(instantiation, 'template');
   const snapshot = objectAt(template, 'snapshot');
@@ -127,14 +222,19 @@ function stagesFromInstantiation(instantiation: Record<string, unknown>): Benchm
       throw new BenchmarkValidationError(`Benchmark stage ${index} must be an object.`);
     }
     const record = stage as Record<string, unknown>;
-    if (record.type !== 'dataset_loop' && record.type !== 'single_request') {
+    if (record.type !== 'dataset_loop' && record.type !== 'single_request' && record.type !== 'paired_request_loop') {
       throw new BenchmarkValidationError(`Unsupported benchmark stage type in this checkpoint: ${String(record.type)}`);
     }
     return {
       id: String(record.id ?? `stage-${index}`),
       type: record.type,
-      iterations_per_item: typeof record.iterations_per_item === 'number' ? record.iterations_per_item : undefined,
+      iterations_per_item: numberField(record, 'iterations_per_item'),
       record_metrics: typeof record.record_metrics === 'boolean' ? record.record_metrics : true,
+      cooldown_ms: numberField(record, 'cooldown_ms'),
+      pre_iteration_delay_ms: numberField(record, 'pre_iteration_delay_ms'),
+      intra_pair_delay_ms: numberField(record, 'intra_pair_delay_ms'),
+      pair: pairMembersFromStage(record, index),
+      derived_metrics: derivedMetricsFromStage(record, index),
       stop_on_error: typeof record.stop_on_error === 'boolean' ? record.stop_on_error : false
     };
   });
@@ -543,6 +643,7 @@ async function executeItem(
   let firstTokenMs: number | null = null;
   const attemptErrors: Record<string, unknown>[] = [];
   const maxAttempts = policy.retry.max_retries + 1;
+  const pairMeta = executable.pairMemberId ? { pair_member_id: executable.pairMemberId } : {};
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const controller = new AbortController();
@@ -601,6 +702,7 @@ async function executeItem(
           message: error.message,
           retryable: false,
           stage_id: stage.id,
+          ...pairMeta,
           item_index: executable.itemIndex,
           iteration: executable.iteration,
           attempt,
@@ -611,6 +713,7 @@ async function executeItem(
           result: {
             item_index: executable.itemIndex,
             iteration: executable.iteration,
+            ...pairMeta,
             status: 'failed',
             started_at: startedAt,
             completed_at: completedAt,
@@ -622,6 +725,7 @@ async function executeItem(
           },
           rawResponse: {
             stage_id: stage.id,
+            ...pairMeta,
             item_index: executable.itemIndex,
             iteration: executable.iteration,
             attempt,
@@ -633,6 +737,7 @@ async function executeItem(
           },
           normalizedResponse: {
             stage_id: stage.id,
+            ...pairMeta,
             item_index: executable.itemIndex,
             iteration: executable.iteration,
             attempt,
@@ -646,6 +751,7 @@ async function executeItem(
           },
           metrics: {
             stage_id: stage.id,
+            ...pairMeta,
             item_index: executable.itemIndex,
             iteration: executable.iteration,
             elapsed_ms: elapsedMs,
@@ -663,6 +769,7 @@ async function executeItem(
       }
       const rawResponse = {
         stage_id: stage.id,
+        ...pairMeta,
         item_index: executable.itemIndex,
         iteration: executable.iteration,
         attempt,
@@ -674,6 +781,7 @@ async function executeItem(
       };
       const baseMetrics = {
         stage_id: stage.id,
+        ...pairMeta,
         item_index: executable.itemIndex,
         iteration: executable.iteration,
         elapsed_ms: elapsedMs,
@@ -700,6 +808,7 @@ async function executeItem(
           result: {
             item_index: executable.itemIndex,
             iteration: executable.iteration,
+            ...pairMeta,
             status: 'completed',
             started_at: startedAt,
             completed_at: completedAt,
@@ -716,6 +825,7 @@ async function executeItem(
           rawResponse,
           normalizedResponse: {
             stage_id: stage.id,
+            ...pairMeta,
             item_index: executable.itemIndex,
             iteration: executable.iteration,
             attempt,
@@ -731,6 +841,7 @@ async function executeItem(
         message: `Benchmark request failed with HTTP ${response.status}`,
         retryable: isRetryableError(errorCode, policy.retry),
         stage_id: stage.id,
+        ...pairMeta,
         item_index: executable.itemIndex,
         iteration: executable.iteration,
         attempt
@@ -741,6 +852,7 @@ async function executeItem(
           result: {
             item_index: executable.itemIndex,
             iteration: executable.iteration,
+            ...pairMeta,
             status: 'failed',
             started_at: startedAt,
             completed_at: completedAt,
@@ -753,6 +865,7 @@ async function executeItem(
           rawResponse,
           normalizedResponse: {
             stage_id: stage.id,
+            ...pairMeta,
             item_index: executable.itemIndex,
             iteration: executable.iteration,
             attempt,
@@ -769,6 +882,7 @@ async function executeItem(
         message: err.name === 'AbortError' ? `Benchmark request timed out after ${timeoutMs}ms` : err.message,
         retryable: isRetryableError(err.name === 'AbortError' ? 'timeout' : 'connection_error', policy.retry),
         stage_id: stage.id,
+        ...pairMeta,
         item_index: executable.itemIndex,
         iteration: executable.iteration,
         attempt
@@ -781,6 +895,7 @@ async function executeItem(
           result: {
             item_index: executable.itemIndex,
             iteration: executable.iteration,
+            ...pairMeta,
             status: 'failed',
             started_at: startedAt,
             completed_at: completedAt,
@@ -830,6 +945,152 @@ function skippedResult(executable: ExecutableItem, reason: string): Record<strin
     elapsed_ms: null,
     request: null,
     response_status: null
+  };
+}
+
+function skippedPairResult(executable: ExecutableItem, reason: string): Record<string, unknown> {
+  return {
+    item_index: executable.itemIndex,
+    iteration: executable.iteration,
+    status: 'skipped',
+    skipped_reason: reason,
+    members: {},
+    derived_metrics: {}
+  };
+}
+
+function memberMetricRequest(stage: BenchmarkStage, requestedMetrics: string[]): string[] {
+  const metrics = new Set(BUILT_IN_METRICS);
+  for (const metric of requestedMetrics) {
+    if (BUILT_IN_METRICS.includes(metric)) {
+      metrics.add(metric);
+      continue;
+    }
+    const parts = metric.split('.');
+    if (parts.length === 3 && parts[0] === 'pair') {
+      metrics.add(parts[2]);
+    }
+  }
+  for (const metric of stage.derived_metrics ?? []) {
+    for (const ref of [metric.left, metric.right]) {
+      const parts = ref.split('.');
+      metrics.add(parts[0] === 'pair' ? parts[2] : parts[1]);
+    }
+  }
+  return [...metrics].filter((metric) => BUILT_IN_METRICS.includes(metric));
+}
+
+function pairMetricValue(metricsByMember: Map<string, Record<string, unknown>>, ref: string): number | null {
+  const parts = ref.split('.');
+  const memberId = parts[0] === 'pair' ? parts[1] : parts[0];
+  const metricName = parts[0] === 'pair' ? parts[2] : parts[1];
+  const value = metricsByMember.get(memberId)?.[metricName];
+  return typeof value === 'number' ? value : null;
+}
+
+function computePairMetrics(
+  stage: BenchmarkStage,
+  requestedMetrics: string[],
+  metricsByMember: Map<string, Record<string, unknown>>
+): Record<string, unknown> {
+  const metrics: Record<string, unknown> = {};
+  for (const metric of requestedMetrics) {
+    const parts = metric.split('.');
+    if (parts.length !== 3 || parts[0] !== 'pair') {
+      continue;
+    }
+    metrics[metric] = pairMetricValue(metricsByMember, metric);
+  }
+  const derived: Record<string, unknown> = {};
+  for (const metric of stage.derived_metrics ?? []) {
+    const left = pairMetricValue(metricsByMember, metric.left);
+    const right = pairMetricValue(metricsByMember, metric.right);
+    derived[metric.id] = left !== null && right !== null ? left - right : null;
+    metrics[metric.id] = derived[metric.id];
+  }
+  return metrics;
+}
+
+async function executePair(
+  instantiation: Record<string, unknown>,
+  stage: BenchmarkStage,
+  executable: ExecutableItem,
+  policy: ExecutionPolicy,
+  authHeaders: Record<string, string>,
+  requestedMetrics: string[]
+): Promise<{
+  result: Record<string, unknown>;
+  rawResponses: Record<string, unknown>[];
+  normalizedResponses: Record<string, unknown>[];
+  metrics: Record<string, unknown> | null;
+  errors: Record<string, unknown>[];
+}> {
+  const pair = stage.pair ?? [];
+  const memberRequestedMetrics = memberMetricRequest(stage, requestedMetrics);
+  const members: Record<string, unknown> = {};
+  const metricsByMember = new Map<string, Record<string, unknown>>();
+  const rawResponses: Record<string, unknown>[] = [];
+  const normalizedResponses: Record<string, unknown>[] = [];
+  const errors: Record<string, unknown>[] = [];
+  const startedAt = nowIso();
+
+  await sleep(stage.pre_iteration_delay_ms ?? 0);
+
+  for (let memberIndex = 0; memberIndex < pair.length; memberIndex += 1) {
+    const member = pair[memberIndex];
+    const execution = await executeItem(
+      instantiation,
+      stage,
+      { ...executable, pairMemberId: member.id },
+      policy,
+      authHeaders,
+      memberRequestedMetrics
+    );
+    if (execution.rawResponse) rawResponses.push(execution.rawResponse);
+    if (execution.normalizedResponse) normalizedResponses.push(execution.normalizedResponse);
+    if (execution.metrics) metricsByMember.set(member.id, execution.metrics);
+    if (execution.error) errors.push(execution.error);
+    members[member.id] = {
+      role: member.role ?? null,
+      result: execution.result,
+      metrics: execution.metrics,
+      error: execution.error
+    };
+    if (execution.error) {
+      break;
+    }
+    if (memberIndex < pair.length - 1) {
+      await sleep(stage.intra_pair_delay_ms ?? 0);
+    }
+  }
+
+  const completedAt = nowIso();
+  const pairMetrics = errors.length === 0 ? computePairMetrics(stage, requestedMetrics, metricsByMember) : {};
+  const pairMetricRow = errors.length === 0
+    ? {
+        stage_id: stage.id,
+        item_index: executable.itemIndex,
+        iteration: executable.iteration,
+        ...pairMetrics
+      }
+    : null;
+
+  return {
+    result: {
+      item_index: executable.itemIndex,
+      iteration: executable.iteration,
+      status: errors.length > 0 ? 'failed' : 'completed',
+      started_at: startedAt,
+      completed_at: completedAt,
+      members,
+      derived_metrics: Object.fromEntries(
+        Object.entries(pairMetrics).filter(([key]) => (stage.derived_metrics ?? []).some((metric) => metric.id === key))
+      )
+    },
+    rawResponses,
+    normalizedResponses,
+    metrics: pairMetricRow,
+    errors
   };
 }
 
@@ -898,22 +1159,33 @@ export async function runBenchmarkInstantiation(instantiationId: string) {
     for (let itemIndex = 0; itemIndex < executable.length; itemIndex += 1) {
       const item = executable[itemIndex];
       if (runCancelled) {
-        results.push(skippedResult(item, cancellation));
+        results.push(stage.type === 'paired_request_loop' ? skippedPairResult(item, cancellation) : skippedResult(item, cancellation));
         continue;
       }
-      const execution = await executeItem(record.document, stage, item, policy, authHeaders, requestedMetrics);
+      const execution = stage.type === 'paired_request_loop'
+        ? await executePair(record.document, stage, item, policy, authHeaders, requestedMetrics)
+        : await executeItem(record.document, stage, item, policy, authHeaders, requestedMetrics);
       results.push(execution.result);
-      if (execution.rawResponse) rawResponses.push(execution.rawResponse);
-      if (execution.normalizedResponse) normalizedResponses.push(execution.normalizedResponse);
+      if ('rawResponses' in execution) {
+        rawResponses.push(...execution.rawResponses);
+      } else if (execution.rawResponse) {
+        rawResponses.push(execution.rawResponse);
+      }
+      if ('normalizedResponses' in execution) {
+        normalizedResponses.push(...execution.normalizedResponses);
+      } else if (execution.normalizedResponse) {
+        normalizedResponses.push(execution.normalizedResponse);
+      }
       if (execution.metrics && (stage.record_metrics !== false)) metricResults.push(execution.metrics);
-      if (execution.error) {
-        stageErrors.push(execution.error);
-        errors.push(execution.error);
+      const executionErrors = 'errors' in execution ? execution.errors : execution.error ? [execution.error] : [];
+      if (executionErrors.length > 0) {
+        stageErrors.push(...executionErrors);
+        errors.push(...executionErrors);
         consecutiveErrors += 1;
         const reason = cancellationReason({
           policy: policy.cancellation,
           stage,
-          latestError: execution.error,
+          latestError: executionErrors[executionErrors.length - 1],
           errors: stageErrors.length,
           completed: completedItems,
           consecutiveErrors
@@ -922,7 +1194,7 @@ export async function runBenchmarkInstantiation(instantiationId: string) {
           runCancelled = true;
           cancellation = reason;
           for (const remaining of executable.slice(itemIndex + 1)) {
-            results.push(skippedResult(remaining, reason));
+            results.push(stage.type === 'paired_request_loop' ? skippedPairResult(remaining, reason) : skippedResult(remaining, reason));
           }
           break;
         }
@@ -930,6 +1202,7 @@ export async function runBenchmarkInstantiation(instantiationId: string) {
         consecutiveErrors = 0;
         completedItems += 1;
       }
+      await sleep(stage.cooldown_ms ?? 0);
     }
     stageResults.push({
       stage_id: stage.id,
