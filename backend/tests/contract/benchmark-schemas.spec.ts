@@ -22,6 +22,7 @@ const validExamples: Array<{ file: string; kind: BenchmarkKind }> = [
   { file: 'dataset_manifest.embedded.valid.json', kind: 'dataset_manifest' },
   { file: 'dataset_manifest.compressed_blob.valid.json', kind: 'dataset_manifest' },
   { file: 'test_template.valid.json', kind: 'test_template' },
+  { file: 'test_template.paired.valid.json', kind: 'test_template' },
   { file: 'test_instantiation.complete.valid.json', kind: 'test_instantiation' },
   { file: 'test_run_result.completed.valid.json', kind: 'test_run_result' },
   { file: 'test_run_result.partial.valid.json', kind: 'test_run_result' },
@@ -31,6 +32,9 @@ const validExamples: Array<{ file: string; kind: BenchmarkKind }> = [
 const invalidExamples: Array<{ file: string; kind: BenchmarkKind }> = [
   { file: 'invalid/dataset_manifest.missing_hash.json', kind: 'dataset_manifest' },
   { file: 'invalid/test_template.invalid_required_capability.json', kind: 'test_template' },
+  { file: 'invalid/test_template.paired_single_member.json', kind: 'test_template' },
+  { file: 'invalid/test_template.paired_ratio_metric.json', kind: 'test_template' },
+  { file: 'invalid/test_template.paired_request_override.json', kind: 'test_template' },
   { file: 'invalid/test_instantiation.missing_dataset_manifest.json', kind: 'test_instantiation' },
   { file: 'invalid/model_snapshot.missing_quality.json', kind: 'model_snapshot' }
 ];

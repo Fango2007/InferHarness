@@ -114,6 +114,22 @@ export function getBenchmarkDocumentOrNull(kind: BenchmarkDocumentKind, id: stri
   return row ? mapRow(row) : null;
 }
 
+export function listBenchmarkDocuments(kind: BenchmarkDocumentKind): BenchmarkDocumentRecord[] {
+  const db = getDb();
+  const rows = db
+    .prepare('SELECT * FROM benchmark_documents WHERE kind = ? ORDER BY updated_at DESC, id ASC')
+    .all(kind) as BenchmarkDocumentRow[];
+  return rows.map(mapRow);
+}
+
+export function deleteBenchmarkDocument(kind: BenchmarkDocumentKind, id: string): boolean {
+  const db = getDb();
+  const result = db
+    .prepare('DELETE FROM benchmark_documents WHERE kind = ? AND id = ?')
+    .run(kind, id);
+  return result.changes > 0;
+}
+
 export function putBenchmarkPlan(document: Record<string, unknown>): BenchmarkDocumentRecord {
   const kind = benchmarkKindFromDocument(document);
   if (kind !== 'benchmark_plan') {

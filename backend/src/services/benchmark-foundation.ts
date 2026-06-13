@@ -245,9 +245,6 @@ function assertCapabilities(template: Record<string, unknown>, snapshot: Record<
   if (requiredCapability(template, 'streaming') && !serverCaps.server?.streaming) {
     failures.push('Streaming is enabled for this run, but the selected server is not marked as streaming-capable. Disable Stream or enable Streaming on the server.');
   }
-  if (requiredCapability(template, 'usage_tokens')) {
-    failures.push('usage_tokens is response-observed and is not supported as a v1 instantiation prerequisite.');
-  }
   if (failures.length > 0) {
     throw new BenchmarkValidationError('Benchmark required capabilities are not satisfied.', failures.map((message) => ({ message })));
   }

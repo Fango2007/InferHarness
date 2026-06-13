@@ -232,6 +232,69 @@ describe('benchmark plan document routes', () => {
     await app.close();
   });
 
+  it('lists and deletes persisted benchmark test_template documents', async () => {
+    const app = createServer();
+    const document = templateDoc();
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/benchmark/documents',
+      headers: AUTH_HEADERS,
+      payload: document
+    });
+    expect(createResponse.statusCode, JSON.stringify(createResponse.json())).toBe(201);
+
+    const listResponse = await app.inject({
+      method: 'GET',
+      url: '/benchmark/documents/test_template',
+      headers: AUTH_HEADERS
+    });
+    expect(listResponse.statusCode, JSON.stringify(listResponse.json())).toBe(200);
+    expect(listResponse.json()).toEqual([
+      expect.objectContaining({
+        id: 'route-template',
+        kind: 'test_template',
+        document
+      })
+    ]);
+
+    const deleteResponse = await app.inject({
+      method: 'DELETE',
+      url: '/benchmark/documents/test_template/route-template',
+      headers: AUTH_HEADERS
+    });
+    expect(deleteResponse.statusCode).toBe(204);
+
+    const secondDeleteResponse = await app.inject({
+      method: 'DELETE',
+      url: '/benchmark/documents/test_template/route-template',
+      headers: AUTH_HEADERS
+    });
+    expect(secondDeleteResponse.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('rejects unsupported benchmark document kinds for list and delete routes', async () => {
+    const app = createServer();
+
+    const listResponse = await app.inject({
+      method: 'GET',
+      url: '/benchmark/documents/not_a_kind',
+      headers: AUTH_HEADERS
+    });
+    expect(listResponse.statusCode, JSON.stringify(listResponse.json())).toBe(400);
+    expect(listResponse.json().error).toContain('Unsupported benchmark document kind');
+
+    const deleteResponse = await app.inject({
+      method: 'DELETE',
+      url: '/benchmark/documents/not_a_kind/id',
+      headers: AUTH_HEADERS
+    });
+    expect(deleteResponse.statusCode, JSON.stringify(deleteResponse.json())).toBe(400);
+    expect(deleteResponse.json().error).toContain('Unsupported benchmark document kind');
+    await app.close();
+  });
+
   it('keeps the transitional inline benchmark plan route working', async () => {
     installMockInferenceFetch();
     const app = createServer();

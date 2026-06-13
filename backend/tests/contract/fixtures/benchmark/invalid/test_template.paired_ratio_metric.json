@@ -1,0 +1,27 @@
+{
+  "kind": "test_template",
+  "schema_version": "benchmark_test_template_v1",
+  "template_id": "paired_ratio_invalid_v1",
+  "template_version": "1.0.0",
+  "operation": "chat_completion",
+  "stages": [
+    {
+      "id": "ratio-pair",
+      "type": "paired_request_loop",
+      "pair": [
+        { "id": "a" },
+        { "id": "b" }
+      ],
+      "derived_metrics": [
+        {
+          "id": "ratio",
+          "type": "ratio",
+          "left": "a.elapsed_ms",
+          "right": "b.elapsed_ms"
+        }
+      ]
+    }
+  ],
+  "metrics": ["ratio"],
+  "aggregations": ["mean"]
+}
