@@ -6,9 +6,18 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-14
+
 ### Added
 
+- **Real first-run onboarding** — added a frontend-only guided setup path that uses existing server, model, benchmark document, and run/result APIs to help users create their first production-ready server, model selection, starter benchmark template, and successful run without demo data or new backend endpoints.
+- **Automatic local API token bootstrap** — first local startup now creates or syncs `INFERHARNESS_API_TOKEN` and `VITE_INFERHARNESS_API_TOKEN` in `.env` when missing, keeping the frontend and backend able to communicate on a fresh install.
 - **README project badges** — the root README now shows version, Node.js, Python, CI, and MIT license badges.
+
+### Changed
+
+- **Onboarding-aware shell** — added the setup pill, welcome page, progress ribbons, handoff prompts, Settings tour controls, sidebar setup locking, and first-run completion prompt while keeping users on the Run page after a successful benchmark.
+- **Starter benchmark creation** — the Run page can create a valid reusable `test_template` starter benchmark through the existing benchmark document API.
 
 ## [0.7.0] - 2026-06-14
 
