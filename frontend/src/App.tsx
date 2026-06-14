@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearch
 
 import packageInfo from '../package.json' with { type: 'json' };
 import { MergedPageHeader } from './components/MergedPageHeader.js';
+import { SettingsModal } from './components/SettingsModal.js';
 import { Sidebar } from './components/Sidebar.js';
 import { Catalog } from './pages/Catalog.js';
 import { Evaluate } from './pages/Evaluate.js';
@@ -14,7 +15,7 @@ import { legacyRedirectSearch, normalizeResultsTab, resultsSearch } from './navi
 import { apiGet } from './services/api.js';
 import { InferenceServerHealth, getConnectivityConfig, getInferenceServerHealth } from './services/connectivity-api.js';
 import { InferenceServerRecord, listInferenceServers } from './services/inference-servers-api.js';
-import { listModels } from './services/models-api.js';
+import { listModels, type ModelRecord } from './services/models-api.js';
 import { clearDatabase, EnvEntry, listEnvEntries, setEnvEntry } from './services/system-api.js';
 import { listTemplates } from './services/templates-api.js';
 
@@ -128,8 +129,8 @@ export function App() {
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
-  const [newEnvKey, setNewEnvKey] = useState('');
-  const [newEnvValue, setNewEnvValue] = useState('');
+  const [settingsModels, setSettingsModels] = useState<ModelRecord[]>([]);
+  const [settingsModelsError, setSettingsModelsError] = useState<string | null>(null);
   const [servers, setServers] = useState<InferenceServerRecord[]>([]);
   const [serversError, setServersError] = useState(false);
   const [connectivity, setConnectivity] = useState<Record<string, InferenceServerHealth>>({});
@@ -280,15 +281,33 @@ export function App() {
     if (!showSettings) {
       return;
     }
+    let isActive = true;
     setSettingsBusy(true);
     setSettingsError(null);
-    listEnvEntries()
-      .then((entries) => {
-        setSettingsEntries(entries);
-        setSettingsMessage(null);
+    setSettingsModelsError(null);
+    Promise.allSettled([listEnvEntries(), listModels()])
+      .then(([entriesResult, modelsResult]) => {
+        if (!isActive) return;
+        if (entriesResult.status === 'fulfilled') {
+          setSettingsEntries(entriesResult.value);
+          setSettingsMessage(null);
+        } else {
+          const reason = entriesResult.reason;
+          setSettingsError(reason instanceof Error ? reason.message : 'Unable to load env entries');
+        }
+        if (modelsResult.status === 'fulfilled') {
+          setSettingsModels(modelsResult.value);
+        } else {
+          const reason = modelsResult.reason;
+          setSettingsModelsError(reason instanceof Error ? reason.message : 'Unable to load models');
+        }
       })
-      .catch((err) => setSettingsError(err instanceof Error ? err.message : 'Unable to load env entries'))
-      .finally(() => setSettingsBusy(false));
+      .finally(() => {
+        if (isActive) setSettingsBusy(false);
+      });
+    return () => {
+      isActive = false;
+    };
   }, [showSettings]);
 
   const sidebarHealth = useMemo(() => {
@@ -305,10 +324,6 @@ export function App() {
   }, [connectivity, dbStatus, healthStatus, servers, serversError]);
 
   async function handleClearDb() {
-    const confirmed = window.confirm('Clear all database tables? This cannot be undone.');
-    if (!confirmed) {
-      return;
-    }
     setSettingsBusy(true);
     setSettingsError(null);
     try {
@@ -317,6 +332,7 @@ export function App() {
       setSettingsMessage('Database cleared.');
     } catch (err) {
       setSettingsError(err instanceof Error ? err.message : 'Unable to clear database');
+      throw err;
     } finally {
       setSettingsBusy(false);
     }
@@ -333,21 +349,12 @@ export function App() {
       const entries = await setEnvEntry(trimmedKey, value);
       setSettingsEntries(entries);
       setSettingsMessage(`${value === null ? 'Removed' : 'Saved'} ${trimmedKey}.`);
-      if (trimmedKey === newEnvKey.trim()) {
-        setNewEnvKey('');
-        setNewEnvValue('');
-      }
     } catch (err) {
       setSettingsError(err instanceof Error ? err.message : 'Unable to update env entry');
+      throw err;
     } finally {
       setSettingsBusy(false);
     }
-  }
-
-  function updateEnvValue(key: string, value: string) {
-    setSettingsEntries((current) =>
-      current.map((entry) => (entry.key === key ? { ...entry, value } : entry))
-    );
   }
 
   return (
@@ -379,83 +386,17 @@ export function App() {
         </Routes>
       </main>
       {showSettings ? (
-        <div className="modal-overlay" role="dialog" aria-modal="true">
-          <div className="modal-card settings-card">
-            <div className="modal-header">
-              <h3>Settings</h3>
-              <button
-                type="button"
-                className="icon-btn"
-                onClick={() => setShowSettings(false)}
-                aria-label="Close"
-              >
-                <span aria-hidden="true">x</span>
-              </button>
-            </div>
-            {settingsError ? <div className="error">{settingsError}</div> : null}
-            {settingsMessage ? <p className="muted">{settingsMessage}</p> : null}
-            <div className="settings-section">
-              <h4>Database</h4>
-              <p className="muted">Clear all tables in the current SQLite database.</p>
-              <button type="button" onClick={handleClearDb} disabled={settingsBusy}>
-                {settingsBusy ? 'Working...' : 'Empty database'}
-              </button>
-            </div>
-            <div className="divider" />
-            <div className="settings-section">
-              <h4>Environment (.env)</h4>
-              <p className="muted">Changes update the .env file at the app root.</p>
-              {settingsEntries.length === 0 ? <p className="muted">No env variables found.</p> : null}
-              <div className="env-list">
-                {settingsEntries.map((entry) => (
-                  <div key={entry.key} className="env-row">
-                    <div className="env-key">{entry.key}</div>
-                    <input
-                      value={entry.value}
-                      onChange={(event) => updateEnvValue(entry.key, event.target.value)}
-                      disabled={settingsBusy}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleSaveEnvEntry(entry.key, entry.value)}
-                      disabled={settingsBusy}
-                    >
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSaveEnvEntry(entry.key, null)}
-                      disabled={settingsBusy}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <div className="env-add">
-                <input
-                  placeholder="ENV_KEY"
-                  value={newEnvKey}
-                  onChange={(event) => setNewEnvKey(event.target.value)}
-                  disabled={settingsBusy}
-                />
-                <input
-                  placeholder="value"
-                  value={newEnvValue}
-                  onChange={(event) => setNewEnvValue(event.target.value)}
-                  disabled={settingsBusy}
-                />
-                <button
-                  type="button"
-                  onClick={() => handleSaveEnvEntry(newEnvKey, newEnvValue)}
-                  disabled={settingsBusy || !newEnvKey.trim()}
-                >
-                  Add
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <SettingsModal
+          entries={settingsEntries}
+          busy={settingsBusy}
+          error={settingsError}
+          message={settingsMessage}
+          models={settingsModels}
+          modelsError={settingsModelsError}
+          onClose={() => setShowSettings(false)}
+          onSaveEntry={handleSaveEnvEntry}
+          onClearDatabase={handleClearDb}
+        />
       ) : null}
     </div>
   );

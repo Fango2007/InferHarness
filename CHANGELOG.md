@@ -8,6 +8,8 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Added
 
+- **Settings side-shell model selection** — Settings now uses a categorized side-shell with a dedicated local-only `Model Selection` picker backed by active `/models` records, plus foldable environment sections scoped to Runtime, Providers & Auth, Connectivity, Frontend, and Advanced instead of a duplicated catch-all environment tab.
+- **README settings alignment** — the root README now calls out active development status and Settings-managed environment values.
 - **Paired benchmark stage runner checkpoint** — `paired_request_loop` templates now validate and run with pair-member preservation, pair metric paths such as `pair.cold.elapsed_ms`, and simple `difference` derived metrics while keeping paired-stage authoring in the Templates Raw JSON drawer.
 - **Complete benchmark-template stage authoring** — the Templates editor now exposes paired-stage fields including pair delays, pair members, simple difference derived metrics, stage observability JSON, and custom metric IDs while retaining Raw JSON as an escape hatch.
 - **Templates benchmark-template authoring checkpoint** — the existing Templates page now authors benchmark `test_template` document CRUD through `/benchmark/documents`, while keeping `benchmark_plan` creation out of the UI for the later Run-page flow.
