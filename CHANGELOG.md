@@ -6,6 +6,8 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-14
+
 ### Added
 
 - **Settings side-shell model selection** — Settings now uses a categorized side-shell with a dedicated local-only `Model Selection` picker backed by active `/models` records, plus foldable environment sections scoped to Runtime, Providers & Auth, Connectivity, Frontend, and Advanced instead of a duplicated catch-all environment tab.
