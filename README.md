@@ -12,6 +12,8 @@ InferHarness helps you answer practical questions before you rely on a model in 
 
 All data stays on your machine. InferHarness does not require a cloud account, hosted service, or telemetry connection. It runs as a browser interface backed by a local API and a local SQLite database.
 
+InferHarness is still under active development. Expect the workflow and settings surface to keep evolving as benchmark, catalog, and evaluation features are completed.
+
 ---
 
 ## Why InferHarness Exists
@@ -262,7 +264,7 @@ pip install -r backend/src/scripts/requirements.txt
 cp .env.example .env
 ```
 
-Edit `.env` and set at least `INFERHARNESS_API_TOKEN`.
+Edit `.env` and set at least `INFERHARNESS_API_TOKEN`. After the app is running, Settings can maintain environment values from the browser.
 
 ---
 
@@ -313,6 +315,8 @@ npm -w frontend run test
 ---
 
 ## Environment Variables
+
+Environment values can be edited in Settings after startup. Settings groups them by Runtime, Providers & Auth, Connectivity, Frontend, and Advanced so backend and frontend values are not mixed into one catch-all view.
 
 **Required**
 
@@ -408,6 +412,8 @@ External local or remote servers provide model inference through OpenAI-compatib
 ---
 
 ## For Contributors
+
+Before changing the repo, read [`AGENTS.md`](AGENTS.md) for branch, changelog, and README-alignment rules. Every user-visible or project-behavior change should keep [`CHANGELOG.md`](CHANGELOG.md) current.
 
 The active backend schema catalog is documented in [`backend/src/schemas/README.md`](backend/src/schemas/README.md).
 

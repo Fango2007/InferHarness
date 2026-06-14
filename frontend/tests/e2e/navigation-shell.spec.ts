@@ -125,6 +125,50 @@ async function mockCatalogRoutes(
   });
 }
 
+async function mockSettingsRoutes(page: Page) {
+  let entries = [
+    { key: 'INFERHARNESS_PYTHON_BIN', value: '/opt/python/bin/python3' },
+    { key: 'INFERHARNESS_CONTEXT_PADDING', value: '200000' },
+    { key: 'VITE_INFERHARNESS_API_TOKEN', value: 'vite-secret-token' },
+    { key: 'HF_TOKEN', value: 'hf-secret-token' }
+  ];
+
+  await page.route('**/system/env', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ entries }) });
+      return;
+    }
+
+    const body = route.request().postDataJSON() as { key: string; value: string | null };
+    if (body.value === null) {
+      entries = entries.filter((entry) => entry.key !== body.key);
+    } else {
+      const existing = entries.find((entry) => entry.key === body.key);
+      if (existing) {
+        existing.value = body.value;
+      } else {
+        entries.push({ key: body.key, value: body.value });
+      }
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ entries }) });
+  });
+
+  await page.route('**/system/clear-db', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+  });
+
+  await page.route('**/models', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([
+        catalogModel('srv-a', 'mistral:latest', 'mistral', 'MLX'),
+        catalogModel('srv-b', 'qwen:latest', 'qwen', 'GGUF')
+      ])
+    });
+  });
+}
+
 test('sidebar exposes five top-level destinations and follows active routes', async ({ page }) => {
   await page.goto('/catalog?tab=servers');
 
@@ -270,10 +314,108 @@ test('legacy routes redirect to the new IA contract', async ({ page }) => {
 });
 
 test('settings opens from the sidebar footer', async ({ page }) => {
+  await mockSettingsRoutes(page);
+
   await page.goto('/catalog?tab=servers');
   await page.getByRole('button', { name: /Settings/ }).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  const dialog = page.getByRole('dialog', { name: 'Settings' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /Database/ })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /Model Selection/ })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /Runtime/ })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /Providers & Auth/ })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /Connectivity/ })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /Frontend/ })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /Advanced/ })).toBeVisible();
+  await expect(dialog.locator('.label').filter({ hasText: /^Runtime$/ })).toBeVisible();
+});
+
+test('settings supports categorized env panes, folding, secrets, saves, add, removal, and clear confirmation', async ({ page }) => {
+  await mockSettingsRoutes(page);
+
+  await page.goto('/catalog?tab=servers');
+  await page.getByRole('button', { name: /Settings/ }).click();
+  const dialog = page.getByRole('dialog');
+
+  await expect(dialog.locator('.label').filter({ hasText: /^Runtime$/ })).toBeVisible();
+  await expect(dialog.getByText('2 keys')).toBeVisible();
+  await expect(dialog.getByText('Execution runtime')).toBeVisible();
+
+  await dialog.getByRole('button', { name: /Model Selection/ }).click();
+  await expect(dialog.locator('.label').filter({ hasText: /^Model Selection$/ })).toBeVisible();
+  const modelSelect = dialog.getByLabel('Model');
+  await expect(modelSelect).toBeVisible();
+  await expect(modelSelect).toHaveValue('srv-a::mistral:latest');
+  await dialog.getByLabel('Model').selectOption('srv-b::qwen:latest');
+  const modelSummary = dialog.locator('.settings-model-summary');
+  await expect(modelSummary.getByText('srv-b')).toBeVisible();
+  await expect(modelSummary.getByText('Qwen')).toBeVisible();
+
+  await dialog.getByRole('button', { name: /Runtime/ }).click();
+  await expect(dialog.locator('.label').filter({ hasText: /^Runtime$/ })).toBeVisible();
+
+  const runtimeGroup = dialog.getByRole('button', { name: /Execution runtime/ });
+  await expect(runtimeGroup).toHaveAttribute('aria-expanded', 'true');
+  await runtimeGroup.click();
+  await expect(runtimeGroup).toHaveAttribute('aria-expanded', 'false');
+  await expect(dialog.getByText('INFERHARNESS_CONTEXT_PADDING')).toBeHidden();
+  await runtimeGroup.click();
+
+  await dialog.getByPlaceholder('Filter runtime keys...').fill('PADDING');
+  await expect(runtimeGroup).toHaveAttribute('aria-expanded', 'true');
+  await expect(dialog.getByText('INFERHARNESS_CONTEXT_PADDING')).toBeVisible();
+  await dialog.getByPlaceholder('Filter runtime keys...').fill('');
+
+  await dialog.getByRole('button', { name: /Frontend/ }).click();
+  await expect(dialog.locator('.label').filter({ hasText: /^Frontend$/ })).toBeVisible();
+  const frontendGroup = dialog.getByRole('button', { name: /Frontend \(Vite\)/ });
+  await expect(frontendGroup).toHaveAttribute('aria-expanded', 'true');
+  await frontendGroup.click();
+  await expect(frontendGroup).toHaveAttribute('aria-expanded', 'false');
+  await dialog.getByPlaceholder('Filter frontend keys...').fill('TOKEN');
+  await expect(dialog.getByText('INFERHARNESS_CONTEXT_PADDING')).toHaveCount(0);
+  await expect(frontendGroup).toHaveAttribute('aria-expanded', 'true');
+  await expect(dialog.getByText('VITE_INFERHARNESS_API_TOKEN')).toBeVisible();
+  await dialog.getByPlaceholder('Filter frontend keys...').fill('');
+  await expect(frontendGroup).toHaveAttribute('aria-expanded', 'false');
+  await frontendGroup.click();
+  await expect(frontendGroup).toHaveAttribute('aria-expanded', 'true');
+
+  const tokenRow = dialog.locator('.env-row').filter({ hasText: 'VITE_INFERHARNESS_API_TOKEN' });
+  const tokenInput = tokenRow.locator('input.field').first();
+  await expect(tokenInput).toHaveAttribute('type', 'password');
+  await tokenRow.getByRole('button', { name: /Show VITE_INFERHARNESS_API_TOKEN/ }).click();
+  await expect(tokenInput).toHaveAttribute('type', 'text');
+
+  await dialog.getByRole('button', { name: /Runtime/ }).click();
+  const paddingRow = dialog.locator('.env-row').filter({ hasText: 'INFERHARNESS_CONTEXT_PADDING' });
+  await expect(paddingRow.getByRole('button', { name: 'Saved' })).toBeDisabled();
+  await paddingRow.locator('input.field').fill('300000');
+  await expect(paddingRow.getByRole('button', { name: 'Save' })).toBeEnabled();
+  await paddingRow.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog.getByText('Saved INFERHARNESS_CONTEXT_PADDING.')).toBeVisible();
+
+  await dialog.getByRole('button', { name: /Advanced/ }).click();
+  await dialog.getByPlaceholder('NEW_ENV_KEY').fill('vite_new_flag');
+  await dialog.getByPlaceholder('value').fill('true');
+  await dialog.getByRole('button', { name: 'Add key' }).click();
+  await expect(dialog.locator('.label').filter({ hasText: /^Frontend$/ })).toBeVisible();
+  await expect(dialog.locator('.env-row').filter({ hasText: 'VITE_NEW_FLAG' })).toBeVisible();
+  await expect(dialog.getByText('2 keys')).toBeVisible();
+
+  await dialog.getByRole('button', { name: /Providers & Auth/ }).click();
+  const hfRow = dialog.locator('.env-row').filter({ hasText: 'HF_TOKEN' });
+  await hfRow.getByRole('button', { name: /Remove HF_TOKEN/ }).click();
+  await expect(dialog.getByText('Removed HF_TOKEN.')).toBeVisible();
+  await expect(dialog.getByText('0 keys')).toBeVisible();
+
+  await dialog.getByRole('button', { name: /Database/ }).click();
+  const emptyDb = dialog.getByRole('button', { name: 'Empty database' });
+  await emptyDb.click();
+  await expect(dialog.getByRole('button', { name: 'Click again to confirm' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Click again to confirm' }).click();
+  await expect(dialog.getByText('Database cleared.')).toBeVisible();
 });
 
 test('run keeps page and workspace headers', async ({ page }) => {
