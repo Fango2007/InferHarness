@@ -2,9 +2,10 @@ import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 
 import { EnvEntry } from '../services/system-api.js';
 import { type ModelRecord } from '../services/models-api.js';
+import type { OnboardingStatus, OnboardingUiState } from '../onboarding.js';
 
 type EnvType = 'secret' | 'bool' | 'url' | 'path' | 'int' | 'text';
-type SettingsSectionId = 'database' | 'model' | 'runtime' | 'auth' | 'connectivity' | 'frontend' | 'advanced';
+type SettingsSectionId = 'database' | 'onboarding' | 'model' | 'runtime' | 'auth' | 'connectivity' | 'frontend' | 'advanced';
 
 type SettingsModalProps = {
   entries: EnvEntry[];
@@ -13,9 +14,13 @@ type SettingsModalProps = {
   message: string | null;
   models: ModelRecord[];
   modelsError: string | null;
+  onboardingState: OnboardingUiState;
+  onboardingStatus: OnboardingStatus;
   onClose: () => void;
   onSaveEntry: (key: string, value: string | null) => Promise<void>;
   onClearDatabase: () => Promise<void>;
+  onResetOnboarding: () => void;
+  onReplayOnboarding: () => void;
 };
 
 type SettingsSection = {
@@ -38,6 +43,11 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: 'database',
     label: 'Database',
     description: 'Storage controls and destructive maintenance actions.'
+  },
+  {
+    id: 'onboarding',
+    label: 'Tour & onboarding',
+    description: 'Replay, reset, and inspect the first-run setup guide.'
   },
   {
     id: 'model',
@@ -102,7 +112,7 @@ function sectionForEntry(entry: EnvEntry): SettingsSectionId {
 }
 
 function groupEntries(entries: EnvEntry[], activeSection: SettingsSectionId, filter: string): EnvGroup[] {
-  if (activeSection === 'database' || activeSection === 'model') return [];
+  if (activeSection === 'database' || activeSection === 'onboarding' || activeSection === 'model') return [];
   const normalizedFilter = filter.trim().toLowerCase();
   const visible = entries
     .filter((entry) => sectionForEntry(entry) === activeSection)
@@ -164,7 +174,7 @@ function formatContextWindow(value: number | null) {
 }
 
 function sectionCount(entries: EnvEntry[], sectionId: SettingsSectionId, models: ModelRecord[]) {
-  if (sectionId === 'database') return null;
+  if (sectionId === 'database' || sectionId === 'onboarding') return null;
   if (sectionId === 'model') return models.filter((record) => record.model.active && !record.model.archived).length;
   return entries.filter((entry) => sectionForEntry(entry) === sectionId).length;
 }
@@ -176,14 +186,18 @@ export function SettingsModal({
   message,
   models,
   modelsError,
+  onboardingState,
+  onboardingStatus,
   onClose,
   onSaveEntry,
-  onClearDatabase
+  onClearDatabase,
+  onResetOnboarding,
+  onReplayOnboarding
 }: SettingsModalProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>('runtime');
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>('model');
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState('');
   const [revealed, setRevealed] = useState<Set<string>>(() => new Set());
@@ -345,7 +359,7 @@ export function SettingsModal({
         : 'Empty database';
 
   const countNoun = activeSection === 'model' ? 'model' : 'key';
-  const showEnvControls = activeSection !== 'database' && activeSection !== 'model';
+  const showEnvControls = activeSection !== 'database' && activeSection !== 'onboarding' && activeSection !== 'model';
 
   return (
     <div className="modal-overlay settings-overlay">
@@ -422,6 +436,46 @@ export function SettingsModal({
                     </svg>
                     {clearLabel}
                   </button>
+                </div>
+              ) : null}
+
+              {activeSection === 'onboarding' ? (
+                <div className="settings-onboarding">
+                  <div className="settings-onboarding__summary">
+                    <div>
+                      <span>Current step</span>
+                      <strong>{onboardingStatus.step.replace('_', ' ')}</strong>
+                    </div>
+                    <div>
+                      <span>Progress</span>
+                      <strong>{onboardingStatus.completedSteps}/{onboardingStatus.totalSteps}</strong>
+                    </div>
+                    <div>
+                      <span>Completed</span>
+                      <strong>{onboardingState.completedAt ? new Date(onboardingState.completedAt).toLocaleString() : 'Not yet'}</strong>
+                    </div>
+                    <div>
+                      <span>Dismissed</span>
+                      <strong>{onboardingState.dismissedAt ? new Date(onboardingState.dismissedAt).toLocaleString() : 'No'}</strong>
+                    </div>
+                  </div>
+                  <div className="settings-onboarding__steps">
+                    {[
+                      ['Connect a server', onboardingStatus.completedSteps >= 1],
+                      ['Pick a discovered model', onboardingStatus.completedSteps >= 2],
+                      ['Create a starter template', onboardingStatus.completedSteps >= 3],
+                      ['Run your first successful benchmark', onboardingStatus.completedSteps >= 4]
+                    ].map(([label, done]) => (
+                      <div key={String(label)} className={done ? 'is-done' : ''}>
+                        <span aria-hidden="true">{done ? '✓' : '·'}</span>
+                        <strong>{label}</strong>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="settings-onboarding__actions">
+                    <button type="button" className="btn btn--ghost" onClick={onResetOnboarding}>Reset onboarding</button>
+                    <button type="button" onClick={onReplayOnboarding}>Replay tour</button>
+                  </div>
                 </div>
               ) : null}
 
