@@ -6,6 +6,10 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+### Added
+
+- **README project badges** — the root README now shows version, Node.js, Python, CI, and MIT license badges.
+
 ## [0.7.0] - 2026-06-14
 
 ### Added
