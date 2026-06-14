@@ -1,19 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { InferenceServerErrors } from '../components/InferenceServerErrors.js';
 import { MergedPageHeader } from '../components/MergedPageHeader.js';
+import { HandoffToast, ProgressRibbon } from '../components/Onboarding.js';
+import { useOnboardingContext } from '../onboarding-context.js';
+import { isRibbonDismissed } from '../onboarding.js';
 import {
+  STARTER_BENCHMARK_TEMPLATE_ID,
   buildBenchmarkPlanPayload,
   buildBenchmarkSmokePayload,
   createBenchmarkInstantiation,
   getBenchmarkResult,
+  listBenchmarkDocuments,
   prepareBenchmarkDatasetManifest,
   runBenchmarkInstantiation,
   runBenchmarkPlan,
+  saveBenchmarkDocument,
+  starterBenchmarkTemplateDocument,
   type BenchmarkDatasetFormat,
   type BenchmarkInstantiationRecord,
-  type BenchmarkResultRecord
+  type BenchmarkResultRecord,
+  type BenchmarkTestTemplateDocument
 } from '../services/benchmark-api.js';
 import type { InferenceServerHealth } from '../services/connectivity-api.js';
 import { DEFAULT_INFERENCE_PARAMS, type InferenceParams } from '../services/inference-param-presets-api.js';
@@ -206,6 +214,9 @@ function ConfigRail({
   datasetFormat,
   datasetPath,
   inferenceParams,
+  onboardingActive,
+  starterTemplateReady,
+  starterBusy,
   onAddTarget,
   onRemoveTarget,
   onCustomServerChange,
@@ -218,7 +229,8 @@ function ConfigRail({
   onDatasetIdChange,
   onDatasetFormatChange,
   onDatasetPathChange,
-  onRun
+  onRun,
+  onUseStarterTemplate
 }: {
   servers: InferenceServerRecord[];
   selectableServers: InferenceServerRecord[];
@@ -235,6 +247,9 @@ function ConfigRail({
   datasetFormat: BenchmarkDatasetFormat;
   datasetPath: string;
   inferenceParams: InferenceParams;
+  onboardingActive?: boolean;
+  starterTemplateReady?: boolean;
+  starterBusy?: boolean;
   onAddTarget: (target: RunTarget) => void;
   onRemoveTarget: (target: RunTarget) => void;
   onCustomServerChange: (value: string) => void;
@@ -248,6 +263,7 @@ function ConfigRail({
   onDatasetFormatChange: (value: BenchmarkDatasetFormat) => void;
   onDatasetPathChange: (value: string) => void;
   onRun: () => void;
+  onUseStarterTemplate: () => Promise<void>;
 }) {
   const accentedTargets = assignRunAccents(selectedTargets);
   const selectedKeys = new Set(selectedTargets.map(targetKey));
@@ -330,6 +346,17 @@ function ConfigRail({
 
       <div className="run-config-step">
         <div className="run-step-label">Step 3 · dataset</div>
+        {onboardingActive && selectedTargets.length > 0 ? (
+          <div className="run-starter-template">
+            <div>
+              <strong>{starterTemplateReady ? 'Starter template ready' : 'Create your starter template'}</strong>
+              <p>A reusable benchmark document for code explanation quality. You can edit it later in Templates.</p>
+            </div>
+            <button type="button" className="btn btn--sm" onClick={onUseStarterTemplate} disabled={starterBusy}>
+              {starterBusy ? 'Preparing...' : starterTemplateReady ? 'Use starter template' : 'Create starter template'}
+            </button>
+          </div>
+        ) : null}
         <div className="segmented-control run-dataset-mode" aria-label="Dataset mode">
           <button type="button" className={datasetMode === 'inline' ? 'is-active' : ''} onClick={() => onDatasetModeChange('inline')}>
             Prompt
@@ -683,8 +710,16 @@ function BenchmarkDetail({
 }
 
 
-export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot?: Record<string, InferenceServerHealth> }) {
+export function RunUnified({
+  connectivitySnapshot = {},
+  onFirstRunSuccess
+}: {
+  connectivitySnapshot?: Record<string, InferenceServerHealth>;
+  onFirstRunSuccess?: () => void;
+}) {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const onboarding = useOnboardingContext();
   const [servers, setServers] = useState<InferenceServerRecord[]>([]);
   const [models, setModels] = useState<ModelRecord[]>([]);
   const [selectedTargets, setSelectedTargets] = useState<RunTarget[]>(() => parseRunTargets(searchParams).slice(0, 8));
@@ -698,11 +733,14 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
   const [datasetFormat, setDatasetFormat] = useState<BenchmarkDatasetFormat>('jsonl');
   const [datasetPath, setDatasetPath] = useState('codegen-small.jsonl');
   const [inferenceParams, setInferenceParams] = useState<InferenceParams>(DEFAULT_INFERENCE_PARAMS);
+  const [starterTemplate, setStarterTemplate] = useState<BenchmarkTestTemplateDocument | null>(null);
+  const [starterBusy, setStarterBusy] = useState(false);
   const [instantiation, setInstantiation] = useState<BenchmarkInstantiationRecord | null>(null);
   const [result, setResult] = useState<BenchmarkResultRecord | null>(null);
   const [multiResults, setMultiResults] = useState<(BenchmarkResultRecord | null)[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showResultsHandoff, setShowResultsHandoff] = useState(false);
 
   useEffect(() => {
     Promise.all([listInferenceServers(), listModels()])
@@ -748,6 +786,11 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
   const optionMap = useMemo(() => new Map(options.map((option) => [targetKey(option), option])), [options]);
   const selectedTarget = selectedTargets[0] ?? null;
   const selectedOption = selectedTarget ? optionMap.get(targetKey(selectedTarget)) : undefined;
+  const showTemplateRibbon =
+    onboarding?.status.active === true &&
+    selectedTargets.length > 0 &&
+    onboarding.status.step === 'template' &&
+    !isRibbonDismissed(onboarding.uiState, 'model-selected');
   const subtitle = selectedTarget
     ? `${selectedTarget.model_id} · ${datasetMode === 'manifest_only' ? 'dataset run' : 'benchmark smoke'}`
     : `No model · ${datasetMode === 'manifest_only' ? 'dataset run' : 'benchmark smoke'}`;
@@ -756,6 +799,7 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
     setInstantiation(null);
     setResult(null);
     setMultiResults([]);
+    setShowResultsHandoff(false);
     setSelectedTargets((current) => {
       const key = targetKey(target);
       if (current.some((entry) => targetKey(entry) === key)) {
@@ -769,7 +813,32 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
     setInstantiation(null);
     setResult(null);
     setMultiResults([]);
+    setShowResultsHandoff(false);
     setSelectedTargets((current) => current.filter((entry) => targetKey(entry) !== targetKey(target)));
+  }
+
+  async function ensureStarterTemplate() {
+    setStarterBusy(true);
+    setError(null);
+    try {
+      const existing = await listBenchmarkDocuments<BenchmarkTestTemplateDocument>('test_template')
+        .then((documents) => documents.find((record) => record.id === STARTER_BENCHMARK_TEMPLATE_ID || record.document.template_id === STARTER_BENCHMARK_TEMPLATE_ID))
+        .catch(() => null);
+      const document = existing?.document ?? starterBenchmarkTemplateDocument();
+      if (!existing) {
+        await saveBenchmarkDocument(document);
+        window.dispatchEvent(new CustomEvent('templates:changed'));
+      }
+      setStarterTemplate(document);
+      setDatasetMode('inline');
+      setPrompt('Explain what this function does, identify one edge case, and describe the time complexity:\n\nfunction clamp(value, min, max) {\n  return Math.min(Math.max(value, min), max);\n}');
+      setSystemPrompt('You are a careful code reviewer. Be concise and specific.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to prepare starter template.');
+      throw err;
+    } finally {
+      setStarterBusy(false);
+    }
   }
 
   async function handleRun() {
@@ -786,6 +855,7 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
     setError(null);
     setResult(null);
     setMultiResults([]);
+    setShowResultsHandoff(false);
     try {
       const preparedDataset = datasetMode === 'manifest_only'
         ? await prepareBenchmarkDatasetManifest({
@@ -810,7 +880,8 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
           inferenceParams,
           timeoutSec,
           seed,
-          dataset: datasetInput
+          dataset: datasetInput,
+          template: starterTemplate ?? undefined
         });
         const plan = await runBenchmarkPlan(payload);
         const fetched = await Promise.all(
@@ -828,12 +899,17 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
           inferenceParams,
           timeoutSec,
           seed,
-          dataset: datasetInput
+          dataset: datasetInput,
+          template: starterTemplate ?? undefined
         });
         const created = await createBenchmarkInstantiation(payload);
         setInstantiation(created);
         const completed = await runBenchmarkInstantiation(created.id);
         setResult(completed);
+        if (completed.document.status === 'completed' && completed.document.errors.length === 0) {
+          onFirstRunSuccess?.();
+          setShowResultsHandoff(true);
+        }
         window.dispatchEvent(new CustomEvent('runs:changed'));
       }
     } catch (err) {
@@ -846,6 +922,17 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
   return (
     <>
       <MergedPageHeader title="Run" subtitle="Benchmark-backed smoke execution" />
+      {showTemplateRibbon && onboarding ? (
+        <ProgressRibbon
+          id="model-selected"
+          step={2}
+          doneLabel="model selected · run target pre-filled"
+          fact={selectedOption?.display_name ?? selectedTarget?.model_id}
+          nextLabel="Create starter template"
+          onNext={() => void ensureStarterTemplate()}
+          onDismiss={onboarding.dismissRibbon}
+        />
+      ) : null}
       <section className="run-unified-page">
         <InferenceServerErrors message={error} />
         <div className="run-unified-layout">
@@ -865,6 +952,9 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
             datasetFormat={datasetFormat}
             datasetPath={datasetPath}
             inferenceParams={inferenceParams}
+            onboardingActive={onboarding?.status.active}
+            starterTemplateReady={Boolean(starterTemplate)}
+            starterBusy={starterBusy}
             onAddTarget={addTarget}
             onRemoveTarget={removeTarget}
             onCustomServerChange={setCustomServerId}
@@ -878,6 +968,7 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
             onDatasetFormatChange={setDatasetFormat}
             onDatasetPathChange={setDatasetPath}
             onRun={handleRun}
+            onUseStarterTemplate={ensureStarterTemplate}
           />
           <main className="run-workspace">
             <header className="run-page-header">
@@ -924,6 +1015,17 @@ export function RunUnified({ connectivitySnapshot = {} }: { connectivitySnapshot
           </main>
         </div>
       </section>
+      {showResultsHandoff ? (
+        <HandoffToast
+          title="Benchmark complete"
+          body="Your run finished successfully. Stay here to inspect the raw output, or open the results dashboard."
+          primary="View results"
+          secondary="Stay here"
+          onPrimary={() => navigate('/results?tab=dashboard&onboarding=complete')}
+          onSecondary={() => setShowResultsHandoff(false)}
+          onDismiss={() => setShowResultsHandoff(false)}
+        />
+      ) : null}
     </>
   );
 }

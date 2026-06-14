@@ -8,10 +8,21 @@ import {
   resolveInferenceProxyConfig,
   shouldDisableInferenceTlsVerification
 } from './services/inference-proxy.js';
+import { ensureLocalApiTokenEnv } from './services/env-bootstrap.js';
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(moduleDir, '..', '..');
 const envPath = path.join(repoRoot, '.env');
+
+const bootstrapResult = ensureLocalApiTokenEnv({ envPath });
+for (const warning of bootstrapResult.warnings) {
+  console.warn(`[env] ${warning}`);
+}
+if (bootstrapResult.generated) {
+  console.info(`[env] Generated local API token in ${envPath}`);
+} else if (bootstrapResult.changed) {
+  console.info(`[env] Synchronized local API token entries in ${envPath}`);
+}
 
 if (fs.existsSync(envPath)) {
   dotenv.config({ path: envPath });

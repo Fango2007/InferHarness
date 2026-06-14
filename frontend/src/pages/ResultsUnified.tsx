@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { MergedPageHeader } from '../components/MergedPageHeader.js';
+import { FirstRunCompleteHero } from '../components/Onboarding.js';
 import { ResultsGraphPanel } from '../components/results-graph-panel.js';
 import { ResultsPerformanceComparisonPanel } from '../components/results-performance-comparison-panel.js';
 import { normalizeResultsTab } from '../navigation.js';
+import { useOnboardingContext } from '../onboarding-context.js';
 import { getLeaderboard, type LeaderboardEntry } from '../services/leaderboard-api.js';
 import {
   deleteRun,
@@ -950,6 +952,7 @@ function EvaluationDetailBody({ detail }: { detail: ResultsEvaluationDetail }) {
 export function ResultsUnified({ runCount }: { runCount: number | null }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const onboarding = useOnboardingContext();
   const activeTab = normalizeResultsTab(searchParams.get('tab')) as ResultsTab;
   const filters = useMemo(() => decodeFilters(searchParams), [searchParams]);
   const [data, setData] = useState<Awaited<ReturnType<typeof queryResultsView>> | null>(null);
@@ -1186,6 +1189,9 @@ export function ResultsUnified({ runCount }: { runCount: number | null }) {
         }
       />
       <section className={`results-page ${showDashboardEmpty ? 'results-page--empty' : ''}`}>
+        {searchParams.get('onboarding') === 'complete' || (onboarding?.uiState.replaying && onboarding.uiState.completedAt) ? (
+          <FirstRunCompleteHero onRunAnother={() => navigate('/run')} />
+        ) : null}
         {!showDashboardEmpty ? (
           <ResultsFilterRail
             filters={filters}

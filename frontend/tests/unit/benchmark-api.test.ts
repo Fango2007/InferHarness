@@ -7,7 +7,8 @@ import {
   listBenchmarkDocuments,
   prepareBenchmarkDatasetManifest,
   runBenchmarkInstantiation,
-  saveBenchmarkDocument
+  saveBenchmarkDocument,
+  starterBenchmarkTemplateDocument
 } from '../../src/services/benchmark-api.js';
 
 beforeEach(() => {
@@ -15,6 +16,24 @@ beforeEach(() => {
 });
 
 describe('benchmark API helpers', () => {
+  it('builds a schema-compatible starter benchmark template', () => {
+    const document = starterBenchmarkTemplateDocument();
+
+    expect(document).toMatchObject({
+      kind: 'test_template',
+      schema_version: 'benchmark_test_template_v1',
+      template_id: 'starter-code-explain',
+      operation: 'chat_completion',
+      input_contract: {
+        required_fields: ['prompt'],
+        optional_fields: ['system_prompt', 'expected_format', 'tags', 'metadata'],
+        min_items: 1
+      }
+    });
+    expect(document.input_contract).not.toHaveProperty('variables');
+    expect(document.input_contract).not.toHaveProperty('guidance');
+  });
+
   it('builds a benchmark smoke payload from Run page inputs', () => {
     const payload = buildBenchmarkSmokePayload({
       target: { inference_server_id: 'srv-1', model_id: 'model-a' },

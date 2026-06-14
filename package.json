@@ -17,6 +17,7 @@
     "build": "npm run build:frontend",
     "build:frontend": "npm -w frontend run build",
     "dev": "concurrently \"npm -w backend run dev\" \"npm -w frontend run dev\"",
+    "predev": "npm -w backend run bootstrap-env",
     "e2e:serve": "concurrently --kill-others-on-fail \"npm run start:backend\" \"npm -w frontend run dev\"",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "release:check": "npm run lint && npm test && npm run build",

@@ -3,7 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { MergedPageHeader } from '../components/MergedPageHeader.js';
 import { EmptyState } from '../components/EmptyState.js';
+import { HandoffToast, ProgressRibbon } from '../components/Onboarding.js';
 import { RegLight } from '../components/RegLight.js';
+import { useOnboardingContext } from '../onboarding-context.js';
+import { isRibbonDismissed } from '../onboarding.js';
 import { catalogSearch, normalizeCatalogTab } from '../navigation.js';
 import { InferenceServerHealth } from '../services/connectivity-api.js';
 import {
@@ -585,10 +588,12 @@ export function Catalog({
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const onboarding = useOnboardingContext();
   const activeTab = normalizeCatalogTab(searchParams.get('tab'));
   const inspectorServerId = searchParams.get('serverId');
   const inspectorModelId = searchParams.get('modelId');
   const healthView = activeTab === 'servers' && searchParams.get('view') === 'health';
+  const onboardingHandoff = searchParams.get('onboarding');
 
   const [servers, setServers] = useState<InferenceServerRecord[]>(serversSnapshot);
   const [models, setModels] = useState<ModelRecord[]>([]);
@@ -619,6 +624,13 @@ export function Catalog({
       search: `?serverId=${encodeURIComponent(inspectorServerId)}`
     }, { replace: true });
   }, [activeTab, inspectorModelId, inspectorServerId, navigate]);
+
+  useEffect(() => {
+    if (searchParams.get('startOnboarding') !== '1') {
+      return;
+    }
+    setDrawer({ kind: 'create' });
+  }, [searchParams]);
 
   async function refreshData(showLoading = false) {
     if (showLoading) setLoading(true);
@@ -688,6 +700,10 @@ export function Catalog({
     });
   }, [connectivity, serverFilters, servers, showArchivedOnly]);
   const selectedDetail = filteredServers.find((server) => server.inference_server.server_id === selectedDetailId) ?? null;
+  const showServerSavedHandoff =
+    onboarding?.status.active === true &&
+    onboardingHandoff === 'server-saved' &&
+    !isRibbonDismissed(onboarding.uiState, 'server-saved');
 
   useEffect(() => {
     if (!selectedDetailId || activeTab !== 'servers') return;
@@ -751,6 +767,21 @@ export function Catalog({
     window.dispatchEvent(new CustomEvent('inference-servers:updated'));
   }
 
+  function useFirstVisibleModel() {
+    const model = visibleModels.find((entry) => entry.discoveryStatus !== 'absent');
+    if (!model) {
+      updateQuery((params) => {
+        params.set('tab', 'models');
+        if (servers[0]) writeCsv(params, 'servers', [servers[0].inference_server.server_id]);
+      });
+      return;
+    }
+    onboarding.dismissRibbon('server-saved');
+    const params = new URLSearchParams();
+    params.set('target', `${model.serverId}:${encodeURIComponent(model.modelId)}`);
+    navigate({ pathname: '/run', search: `?${params.toString()}` });
+  }
+
   async function handleDelete(server: InferenceServerRecord) {
     if (!window.confirm(`Delete inference server "${server.inference_server.display_name}"? This cannot be undone.`)) return;
     await deleteInferenceServer(server.inference_server.server_id);
@@ -771,6 +802,17 @@ export function Catalog({
         activeTab={activeTab}
         onTabChange={changeTab}
       />
+      {showServerSavedHandoff ? (
+        <ProgressRibbon
+          id="server-saved"
+          step={1}
+          doneLabel="server saved · model discovery complete"
+          fact={`${catalogModels.length} models discovered`}
+          nextLabel="Use first available model"
+          onNext={useFirstVisibleModel}
+          onDismiss={onboarding.dismissRibbon}
+        />
+      ) : null}
       {error ? <div className="catalog-error error">{error}</div> : null}
       {loading ? <p className="catalog-loading muted">Loading catalog...</p> : null}
       {activeTab === 'servers' ? (
@@ -859,8 +901,24 @@ export function Catalog({
           onToggleCapability={(v) => toggleModelFilter('capabilities', v)}
           onSetMaxParam={setMaxParamFilter}
           onInspect={(serverId, modelId) => navigate({ pathname: `/catalog/models/${encodeURIComponent(modelId)}`, search: `?serverId=${encodeURIComponent(serverId)}` })}
+          onUseModel={(serverId, modelId) => {
+            const params = new URLSearchParams();
+            params.set('target', `${serverId}:${encodeURIComponent(modelId)}`);
+            navigate({ pathname: '/run', search: `?${params.toString()}` });
+          }}
         />
       )}
+      {showServerSavedHandoff ? (
+        <HandoffToast
+          title="Server saved"
+          body={`${catalogModels.length} models are ready. Continue with the first available model, or choose another from the list.`}
+          primary="Use first available model"
+          secondary="Stay here"
+          onPrimary={useFirstVisibleModel}
+          onSecondary={() => onboarding.dismissRibbon('server-saved')}
+          onDismiss={() => onboarding.dismissRibbon('server-saved')}
+        />
+      ) : null}
       {drawer ? (
         <ServerDrawer
           mode={drawer}
@@ -869,9 +927,11 @@ export function Catalog({
           onSaved={async (server, openModels) => {
             notifyServersUpdated();
             await refreshData();
-            if (openModels) {
+            if (openModels || searchParams.get('startOnboarding') === '1') {
               updateQuery((params) => {
                 params.set('tab', 'models');
+                params.set('onboarding', 'server-saved');
+                params.delete('startOnboarding');
                 writeCsv(params, 'servers', [server.inference_server.server_id]);
               });
             }
@@ -1129,6 +1189,7 @@ function ModelsCatalog(props: {
   onToggleCapability: (value: string) => void;
   onSetMaxParam: (value: number | null) => void;
   onInspect: (serverId: string, modelId: string) => void;
+  onUseModel: (serverId: string, modelId: string) => void;
 }) {
   const [modelFilterStageCollapsed, setModelFilterStageCollapsed] = useState(() => localStorage.getItem(MODEL_FILTER_STAGE_STORAGE_KEY) === 'true');
   const selectedModelFilterCount = props.selectedFamilies.size + props.selectedQuantizations.size + props.selectedFormats.size + props.selectedCapabilities.size + (props.maxParamCount !== null ? 1 : 0);
@@ -1267,7 +1328,10 @@ function ModelsCatalog(props: {
                   <p>{[...model.capabilities.slice(0, 4), model.streaming ? 'streaming' : null].filter(Boolean).join(' · ') || 'standard generation'}</p>
                   <div className="catalog-card-footer">
                     <span className="server-chip">{model.serverName}</span>
-                    <button type="button" className="btn btn--ghost btn--sm" onClick={() => props.onInspect(model.serverId, model.modelId)} disabled={absent}>Inspect</button>
+                    <div className="catalog-card-actions">
+                      <button type="button" className="btn btn--ghost btn--sm" onClick={() => props.onInspect(model.serverId, model.modelId)} disabled={absent}>Inspect</button>
+                      <button type="button" className="btn btn--sm" onClick={() => props.onUseModel(model.serverId, model.modelId)} disabled={absent}>Use in Run</button>
+                    </div>
                   </div>
                 </article>
               );
@@ -1511,6 +1575,8 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [discovered, setDiscovered] = useState<string[]>([]);
+  const selectedProviderPreset = PROVIDER_PRESETS.find((entry) => entry.id === providerPresetId) ?? PROVIDER_PRESETS[0];
+  const hostingFieldsDisabled = !editing && selectedProviderPreset.providerKind === 'cloud';
 
   function toggleFamily(value: ApiSchemaFamily) {
     setSchemaFamilies((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
@@ -1540,6 +1606,8 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
     setGpuVendor(preset.platform.gpuVendor);
     setGpuModel(preset.platform.gpuModel);
     setGpuVramGb(preset.platform.gpuVramGb);
+    setGpuCores('');
+    setNeuralEngineTops('');
     setCpuVendorHint(preset.platform.cpuVendorHint);
     setCpuModel(preset.platform.cpuModel);
     setCpuCores(preset.platform.cpuCores);
@@ -1555,7 +1623,6 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
   }
 
   function buildInput(): InferenceServerInput {
-    const selectedPreset = PROVIDER_PRESETS.find((entry) => entry.id === providerPresetId) ?? PROVIDER_PRESETS[0];
     const authPayload: InferenceServerInput['auth'] = {
       type: authType === 'header' ? 'custom' as AuthType : authType,
       header_name: authHeader || 'Authorization'
@@ -1603,8 +1670,8 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
     };
     if (!editing) {
       input.raw = {
-        provider_preset: selectedPreset.id,
-        provider_kind: selectedPreset.providerKind
+        provider_preset: selectedProviderPreset.id,
+        provider_kind: selectedProviderPreset.providerKind
       };
     }
     return input;
@@ -1768,8 +1835,13 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
             </div>
 
             {/* ── RIGHT: Hosting Server ── */}
-            <div className="drawer-col">
+            <fieldset className={`drawer-col drawer-col--hosting ${hostingFieldsDisabled ? 'is-disabled' : ''}`} disabled={hostingFieldsDisabled}>
               <div className="form-field-label">GPU</div>
+              {hostingFieldsDisabled ? (
+                <p className="drawer-disabled-note">
+                  Hosted AI providers do not expose reliable hardware or platform details. InferHarness will store this server with unknown hosting metadata.
+                </p>
+              ) : null}
               <label>GPU vendor
                 <select value={gpuVendor} onChange={(event) => {
                   const v = event.target.value as GpuVendor;
@@ -1863,7 +1935,7 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
               {containerType !== 'none' && containerType !== 'unknown' ? (
                 <label>Image<input className="input--mono" value={containerImage} onChange={(event) => setContainerImage(event.target.value)} placeholder="ghcr.io/org/image:latest" /></label>
               ) : null}
-            </div>
+            </fieldset>
 
           </div>
 

@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 
+import type { OnboardingStatus } from '../onboarding.js';
 import { RegLight } from './RegLight.js';
 
 interface SidebarHealth {
@@ -17,16 +18,19 @@ interface SidebarProps {
   health: SidebarHealth;
   templateCount: number | null;
   runCount: number | null;
+  onboarding?: OnboardingStatus;
   onSettings: () => void;
 }
 
 const navItems = [
-  { to: '/catalog?tab=servers', section: '/catalog', label: 'Catalog', sub: 'Servers · Models' },
-  { to: '/templates', section: '/templates', label: 'Templates', sub: 'JSON · Python', badge: 'templates' },
-  { to: '/run', section: '/run', label: 'Run', sub: '1-8 models' },
-  { to: '/results?tab=dashboard', section: '/results', label: 'Results', sub: 'Dash · Board · History', badge: 'runs' },
-  { to: '/evaluate', section: '/evaluate', label: 'Evaluate', sub: 'Score queue' }
+  { id: 'catalog', to: '/catalog?tab=servers', section: '/catalog', label: 'Catalog', sub: 'Servers · Models' },
+  { id: 'templates', to: '/templates', section: '/templates', label: 'Templates', sub: 'JSON · Python', badge: 'templates' },
+  { id: 'run', to: '/run', section: '/run', label: 'Run', sub: '1-8 models' },
+  { id: 'results', to: '/results?tab=dashboard', section: '/results', label: 'Results', sub: 'Dash · Board · History', badge: 'runs' },
+  { id: 'evaluate', to: '/evaluate', section: '/evaluate', label: 'Evaluate', sub: 'Score queue' }
 ] as const;
+
+const navOrder = navItems.map((item) => item.id);
 
 function statusLabel(status: 'unknown' | 'up' | 'down') {
   if (status === 'up') {
@@ -66,7 +70,9 @@ function RegLightRow({
   );
 }
 
-export function Sidebar({ version, health, templateCount, runCount, onSettings }: SidebarProps) {
+export function Sidebar({ version, health, templateCount, runCount, onboarding, onSettings }: SidebarProps) {
+  const onboardingActive = onboarding?.active === true;
+  const unlockedIndex = onboardingActive ? navOrder.indexOf(onboarding.unlockedThrough) : navOrder.length - 1;
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -74,32 +80,61 @@ export function Sidebar({ version, health, templateCount, runCount, onSettings }
         <span>v{version}</span>
       </div>
       <nav className="sidebar-nav" aria-label="Primary navigation">
-        {navItems.map((item) => (
+        {navItems.map((item, index) => {
+          const locked = onboardingActive && index > unlockedIndex;
+          const activeSetupItem = onboardingActive && item.id === onboarding.unlockedThrough;
+          return (
           <NavLink
             key={item.section}
             to={item.to}
-            className={({ isActive }) => (isActive ? 'sidebar-item is-active' : 'sidebar-item')}
+            aria-disabled={locked}
+            className={({ isActive }) => [
+              'sidebar-item',
+              isActive ? 'is-active' : '',
+              locked ? 'is-locked' : '',
+              activeSetupItem ? 'is-setup-active' : ''
+            ].filter(Boolean).join(' ')}
+            onClick={(event) => {
+              if (locked) {
+                event.preventDefault();
+              }
+            }}
           >
             <span className="sidebar-item__main">
               <span>{item.label}</span>
               {'badge' in item && item.badge === 'templates' && templateCount !== null ? <b>{templateCount}</b> : null}
               {'badge' in item && item.badge === 'runs' && runCount !== null ? <b>{runCount}</b> : null}
+              {locked ? <em aria-hidden="true">lock</em> : null}
             </span>
             <span className="sidebar-item__sub">{item.sub}</span>
           </NavLink>
-        ))}
+          );
+        })}
       </nav>
       <div className="sidebar-spacer" />
-      <div className="sidebar-health">
-        <div className="sidebar-health__label">Health</div>
-        <RegLightRow status={health.backend} label="Backend" detail={statusLabel(health.backend)} />
-        <RegLightRow status={health.database} label="Database" detail={statusLabel(health.database)} />
-        <RegLightRow
-          status={serverStatus(health.servers)}
-          label={`${health.servers.total} servers`}
-          detail={health.servers.failed > 0 ? `${health.servers.failed} issues` : undefined}
-        />
-      </div>
+      {onboardingActive ? (
+        <div className="sidebar-setup">
+          <div className="sidebar-health__label">Setup</div>
+          <div className="sidebar-setup__row">
+            <strong>{onboarding.completedSteps}/{onboarding.totalSteps}</strong>
+            <span>{onboarding.step === 'welcome' ? 'Start' : onboarding.step.replace('_', ' ')}</span>
+          </div>
+          <div className="sidebar-setup__track" aria-hidden="true">
+            <span style={{ width: `${(onboarding.completedSteps / onboarding.totalSteps) * 100}%` }} />
+          </div>
+        </div>
+      ) : (
+        <div className="sidebar-health">
+          <div className="sidebar-health__label">Health</div>
+          <RegLightRow status={health.backend} label="Backend" detail={statusLabel(health.backend)} />
+          <RegLightRow status={health.database} label="Database" detail={statusLabel(health.database)} />
+          <RegLightRow
+            status={serverStatus(health.servers)}
+            label={`${health.servers.total} servers`}
+            detail={health.servers.failed > 0 ? `${health.servers.failed} issues` : undefined}
+          />
+        </div>
+      )}
       <div className="sidebar-settings">
         <button type="button" onClick={onSettings}>
           <span aria-hidden="true">S</span>

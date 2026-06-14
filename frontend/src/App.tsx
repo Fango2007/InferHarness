@@ -3,8 +3,18 @@ import { Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from
 
 import packageInfo from '../package.json' with { type: 'json' };
 import { MergedPageHeader } from './components/MergedPageHeader.js';
+import { WelcomeCanvas } from './components/Onboarding.js';
 import { SettingsModal } from './components/SettingsModal.js';
 import { Sidebar } from './components/Sidebar.js';
+import { OnboardingProvider } from './onboarding-context.js';
+import {
+  deriveOnboardingStatus,
+  markRibbonDismissed,
+  onboardingRouteForStep,
+  readOnboardingUiState,
+  writeOnboardingUiState,
+  type OnboardingUiState
+} from './onboarding.js';
 import { Catalog } from './pages/Catalog.js';
 import { Evaluate } from './pages/Evaluate.js';
 import { ModelDetails } from './pages/ModelDetails.js';
@@ -13,11 +23,11 @@ import { RunUnified } from './pages/RunUnified.js';
 import { Templates } from './pages/Templates.js';
 import { normalizeResultsTab, resultsSearch } from './navigation.js';
 import { apiGet } from './services/api.js';
+import { listBenchmarkDocuments, type BenchmarkTestTemplateDocument } from './services/benchmark-api.js';
 import { InferenceServerHealth, getConnectivityConfig, getInferenceServerHealth } from './services/connectivity-api.js';
 import { InferenceServerRecord, listInferenceServers } from './services/inference-servers-api.js';
 import { listModels, type ModelRecord } from './services/models-api.js';
 import { clearDatabase, EnvEntry, listEnvEntries, setEnvEntry } from './services/system-api.js';
-import { listBenchmarkDocuments } from './services/benchmark-api.js';
 
 type SystemHealthMetrics = {
   db: {
@@ -25,7 +35,19 @@ type SystemHealthMetrics = {
   };
 };
 
-function CatalogRoute({ servers, connectivity }: { servers: InferenceServerRecord[]; connectivity: Record<string, InferenceServerHealth> }) {
+function CatalogRoute({
+  servers,
+  connectivity,
+  showWelcome
+}: {
+  servers: InferenceServerRecord[];
+  connectivity: Record<string, InferenceServerHealth>;
+  showWelcome: boolean;
+}) {
+  const [searchParams] = useSearchParams();
+  if (showWelcome && searchParams.get('startOnboarding') !== '1') {
+    return <WelcomeCanvas />;
+  }
   return <Catalog serversSnapshot={servers} connectivitySnapshot={connectivity} />;
 }
 
@@ -112,11 +134,18 @@ function ResultsRoute({ runCount }: { runCount: number | null }) {
   return <ResultsUnified runCount={runCount} />;
 }
 
-function RunRoute({ connectivity }: { connectivity: Record<string, InferenceServerHealth> }) {
-  return <RunUnified connectivitySnapshot={connectivity} />;
+function RunRoute({
+  connectivity,
+  onFirstRunSuccess
+}: {
+  connectivity: Record<string, InferenceServerHealth>;
+  onFirstRunSuccess: () => void;
+}) {
+  return <RunUnified connectivitySnapshot={connectivity} onFirstRunSuccess={onFirstRunSuccess} />;
 }
 
 export function App() {
+  const navigate = useNavigate();
   const [healthStatus, setHealthStatus] = useState<'unknown' | 'up' | 'down'>('unknown');
   const [dbStatus, setDbStatus] = useState<'unknown' | 'up' | 'down'>('unknown');
   const [showSettings, setShowSettings] = useState(false);
@@ -127,10 +156,13 @@ export function App() {
   const [settingsModels, setSettingsModels] = useState<ModelRecord[]>([]);
   const [settingsModelsError, setSettingsModelsError] = useState<string | null>(null);
   const [servers, setServers] = useState<InferenceServerRecord[]>([]);
+  const [serversLoaded, setServersLoaded] = useState(false);
   const [serversError, setServersError] = useState(false);
   const [connectivity, setConnectivity] = useState<Record<string, InferenceServerHealth>>({});
   const [templateCount, setTemplateCount] = useState<number | null>(null);
+  const [modelCount, setModelCount] = useState<number | null>(null);
   const [runCount, setRunCount] = useState<number | null>(null);
+  const [onboardingUiState, setOnboardingUiState] = useState<OnboardingUiState>(() => readOnboardingUiState());
 
   useEffect(() => {
     let isActive = true;
@@ -226,10 +258,12 @@ export function App() {
         if (isActive) {
           setServers(data);
           setServersError(false);
+          setServersLoaded(true);
         }
       } catch {
         if (isActive) {
           setServersError(true);
+          setServersLoaded(true);
         }
       }
     };
@@ -237,25 +271,29 @@ export function App() {
     fetchServers();
     const intervalId = window.setInterval(fetchServers, 10000);
     window.addEventListener('inference-servers:updated', fetchServers);
+    window.addEventListener('database:cleared', fetchServers);
 
     return () => {
       isActive = false;
       window.clearInterval(intervalId);
       window.removeEventListener('inference-servers:updated', fetchServers);
+      window.removeEventListener('database:cleared', fetchServers);
     };
   }, []);
 
   useEffect(() => {
     let isActive = true;
     const refreshCounts = async () => {
-      const [templatesResult, runsResult] = await Promise.allSettled([
-        listBenchmarkDocuments('test_template'),
+      const [templatesResult, modelsResult, runsResult] = await Promise.allSettled([
+        listBenchmarkDocuments<BenchmarkTestTemplateDocument>('test_template'),
+        listModels(),
         apiGet<Record<string, unknown>[]>('/runs')
       ]);
       if (!isActive) {
         return;
       }
       setTemplateCount(templatesResult.status === 'fulfilled' ? templatesResult.value.length : null);
+      setModelCount(modelsResult.status === 'fulfilled' ? modelsResult.value.length : null);
       setRunCount(runsResult.status === 'fulfilled' ? runsResult.value.length : null);
     };
 
@@ -263,12 +301,16 @@ export function App() {
     const intervalId = window.setInterval(refreshCounts, 30000);
     window.addEventListener('database:cleared', refreshCounts);
     window.addEventListener('runs:changed', refreshCounts);
+    window.addEventListener('templates:changed', refreshCounts);
+    window.addEventListener('inference-servers:updated', refreshCounts);
 
     return () => {
       isActive = false;
       window.clearInterval(intervalId);
       window.removeEventListener('database:cleared', refreshCounts);
       window.removeEventListener('runs:changed', refreshCounts);
+      window.removeEventListener('templates:changed', refreshCounts);
+      window.removeEventListener('inference-servers:updated', refreshCounts);
     };
   }, []);
 
@@ -318,11 +360,92 @@ export function App() {
     };
   }, [connectivity, dbStatus, healthStatus, servers, serversError]);
 
+  const onboardingStatus = useMemo(() => {
+    return deriveOnboardingStatus({
+      serverCount: serversLoaded ? servers.length : 0,
+      modelCount: modelCount ?? 0,
+      templateCount: templateCount ?? 0,
+      uiState: onboardingUiState
+    });
+  }, [modelCount, onboardingUiState, servers.length, serversLoaded, templateCount]);
+
+  function persistOnboarding(next: OnboardingUiState) {
+    const saved = writeOnboardingUiState(next);
+    setOnboardingUiState(saved);
+  }
+
+  function handleDismissSetup() {
+    persistOnboarding({ ...onboardingUiState, dismissedAt: new Date().toISOString(), replaying: false });
+  }
+
+  function handleResetOnboarding() {
+    const resetState: OnboardingUiState = {
+      dismissedAt: undefined,
+      completedAt: undefined,
+      replaying: false,
+      resetBaseline: {
+        serverCount: serversLoaded ? servers.length : 0,
+        modelCount: modelCount ?? 0,
+        templateCount: templateCount ?? 0
+      },
+      ribbonsDismissed: []
+    };
+    persistOnboarding(resetState);
+    setShowSettings(false);
+    const resetStatus = deriveOnboardingStatus({
+      serverCount: serversLoaded ? servers.length : 0,
+      modelCount: modelCount ?? 0,
+      templateCount: templateCount ?? 0,
+      uiState: resetState
+    });
+    navigate(onboardingRouteForStep(resetStatus.step));
+  }
+
+  function handleReplayOnboarding() {
+    persistOnboarding({
+      ...onboardingUiState,
+      dismissedAt: undefined,
+      completedAt: undefined,
+      replaying: true,
+      ribbonsDismissed: []
+    });
+    setShowSettings(false);
+    navigate('/welcome');
+  }
+
+  function handleCompleteOnboarding() {
+    persistOnboarding({
+      ...onboardingUiState,
+      completedAt: new Date().toISOString(),
+      dismissedAt: undefined,
+      replaying: false
+    });
+  }
+
+  function handleDismissRibbon(id: string) {
+    persistOnboarding(markRibbonDismissed(onboardingUiState, id));
+  }
+
+  const onboardingContext = useMemo(() => ({
+    status: onboardingStatus,
+    uiState: onboardingUiState,
+    dismissSetup: handleDismissSetup,
+    resetOnboarding: handleResetOnboarding,
+    replayOnboarding: handleReplayOnboarding,
+    completeOnboarding: handleCompleteOnboarding,
+    dismissRibbon: handleDismissRibbon
+  }), [onboardingStatus, onboardingUiState]);
+
   async function handleClearDb() {
     setSettingsBusy(true);
     setSettingsError(null);
     try {
       await clearDatabase();
+      persistOnboarding({ ribbonsDismissed: [] });
+      setServers([]);
+      setTemplateCount(0);
+      setModelCount(0);
+      setRunCount(0);
       window.dispatchEvent(new CustomEvent('database:cleared'));
       setSettingsMessage('Database cleared.');
     } catch (err) {
@@ -353,40 +476,48 @@ export function App() {
   }
 
   return (
-    <div className="app-shell">
-      <Sidebar
-        version={packageInfo.version}
-        health={sidebarHealth}
-        templateCount={templateCount}
-        runCount={runCount}
-        onSettings={() => setShowSettings(true)}
-      />
-      <main className="app-main">
-        <Routes>
-          <Route path="/" element={<Navigate to="/catalog?tab=servers" replace />} />
-          <Route path="/catalog" element={<CatalogRoute servers={servers} connectivity={connectivity} />} />
-          <Route path="/catalog/models/:id" element={<CatalogModelDetailsRoute servers={servers} connectivity={connectivity} />} />
-          <Route path="/templates" element={<Templates />} />
-          <Route path="/run" element={<RunRoute connectivity={connectivity} />} />
-          <Route path="/results" element={<ResultsRoute runCount={runCount} />} />
-          <Route path="/runs/:id" element={<Navigate to={{ pathname: '/results', search: resultsSearch('history') }} replace />} />
-          <Route path="/evaluate" element={<Evaluate />} />
-          <Route path="*" element={<Navigate to="/catalog?tab=servers" replace />} />
-        </Routes>
-      </main>
-      {showSettings ? (
-        <SettingsModal
-          entries={settingsEntries}
-          busy={settingsBusy}
-          error={settingsError}
-          message={settingsMessage}
-          models={settingsModels}
-          modelsError={settingsModelsError}
-          onClose={() => setShowSettings(false)}
-          onSaveEntry={handleSaveEnvEntry}
-          onClearDatabase={handleClearDb}
+    <OnboardingProvider value={onboardingContext}>
+      <div className="app-shell">
+        <Sidebar
+          version={packageInfo.version}
+          health={sidebarHealth}
+          templateCount={templateCount}
+          runCount={runCount}
+          onboarding={onboardingStatus.active ? onboardingStatus : undefined}
+          onSettings={() => setShowSettings(true)}
         />
-      ) : null}
-    </div>
+        <main className="app-main">
+          <Routes>
+            <Route path="/" element={onboardingStatus.showWelcome ? <Navigate to="/welcome" replace /> : <Navigate to="/catalog?tab=servers" replace />} />
+            <Route path="/welcome" element={<WelcomeCanvas />} />
+            <Route path="/catalog" element={<CatalogRoute servers={servers} connectivity={connectivity} showWelcome={onboardingStatus.showWelcome} />} />
+            <Route path="/catalog/models/:id" element={<CatalogModelDetailsRoute servers={servers} connectivity={connectivity} />} />
+            <Route path="/templates" element={<Templates />} />
+            <Route path="/run" element={<RunRoute connectivity={connectivity} onFirstRunSuccess={handleCompleteOnboarding} />} />
+            <Route path="/results" element={<ResultsRoute runCount={runCount} />} />
+            <Route path="/runs/:id" element={<Navigate to={{ pathname: '/results', search: resultsSearch('history') }} replace />} />
+            <Route path="/evaluate" element={<Evaluate />} />
+            <Route path="*" element={<Navigate to="/catalog?tab=servers" replace />} />
+          </Routes>
+        </main>
+        {showSettings ? (
+          <SettingsModal
+            entries={settingsEntries}
+            busy={settingsBusy}
+            error={settingsError}
+            message={settingsMessage}
+            models={settingsModels}
+            modelsError={settingsModelsError}
+            onboardingState={onboardingUiState}
+            onboardingStatus={onboardingStatus}
+            onClose={() => setShowSettings(false)}
+            onSaveEntry={handleSaveEnvEntry}
+            onClearDatabase={handleClearDb}
+            onResetOnboarding={handleResetOnboarding}
+            onReplayOnboarding={handleReplayOnboarding}
+          />
+        ) : null}
+      </div>
+    </OnboardingProvider>
   );
 }
