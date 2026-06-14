@@ -7,8 +7,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createServer } from '../../src/api/server.js';
 import { getDb, resetDbInstance, runSchema } from '../../src/models/db.js';
-import { createInferenceServerRecord } from '../../src/services/inference-servers-repository.js';
-import { upsertTestDefinition } from '../../src/models/test-definition.js';
 
 const AUTH_HEADERS = { 'x-api-token': 'test-token' };
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
@@ -106,37 +104,6 @@ afterEach(() => {
 });
 
 describe('runs API', () => {
-  it('creates a single run', async () => {
-    const app = createServer();
-    const server = createInferenceServerRecord({
-      inference_server: { display_name: `local-${Date.now()}` },
-      endpoints: { base_url: 'http://localhost:11434' },
-      runtime: { api: { schema_family: ['openai-compatible'], api_version: null } }
-    });
-    upsertTestDefinition({
-      id: 'test-1',
-      version: '1.0.0',
-      name: 'Test 1',
-      description: 'Basic test',
-      category: 'basic',
-      tags: [],
-      protocols: ['openai_chat_completions'],
-      spec_path: 'tests/definitions/test-1.json',
-      runner_type: 'json',
-      request_template: {},
-      assertions: [],
-      metric_rules: {}
-    });
-    const response = await app.inject({
-      method: 'POST',
-      url: '/runs',
-      headers: AUTH_HEADERS,
-      payload: { inference_server_id: server.inference_server.server_id, test_id: 'test-1' }
-    });
-
-    expect(response.statusCode).toBe(201);
-  });
-
   it('deletes a completed run and its result-owned data', async () => {
     seedServer();
     seedRunWithDependencies({ runId: 'run-delete' });
@@ -149,7 +116,6 @@ describe('runs API', () => {
     });
 
     expect(deleted.statusCode).toBe(204);
-    expect((await app.inject({ method: 'GET', url: '/runs/run-delete', headers: AUTH_HEADERS })).statusCode).toBe(404);
     expect((await app.inject({ method: 'GET', url: '/results-view/runs/run-delete', headers: AUTH_HEADERS })).statusCode).toBe(404);
     const listed = await app.inject({ method: 'GET', url: '/runs', headers: AUTH_HEADERS });
     expect(listed.json().some((run: { id: string }) => run.id === 'run-delete')).toBe(false);

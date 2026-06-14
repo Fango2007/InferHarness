@@ -39,16 +39,10 @@ function seedQueueResult(id = 'queue-result-a') {
   const db = getDb();
   const now = '2026-05-01T10:00:00.000Z';
   db.prepare(`
-    INSERT INTO active_tests (
-      id, template_id, template_version, inference_server_id, model_name,
-      status, created_at, deleted_at, version, command_preview, python_ready
-    ) VALUES ('active-queue', 'template-queue', '1.0.0', 'srv-queue', 'model-a', 'active', ?, null, '1.0.0', null, 1)
-  `).run(now);
-  db.prepare(`
     INSERT INTO runs (
       id, inference_server_id, suite_id, test_id, profile_id, profile_version,
       status, started_at, ended_at, environment_snapshot, retention_days
-    ) VALUES ('run-queue', 'srv-queue', null, 'active-queue', null, null, 'completed', ?, ?, ?, 30)
+    ) VALUES ('run-queue', 'srv-queue', null, 'template-queue', null, null, 'completed', ?, ?, ?, 30)
   `).run(
     now,
     now,
@@ -58,7 +52,7 @@ function seedQueueResult(id = 'queue-result-a') {
     INSERT INTO test_results (
       id, run_id, test_id, verdict, failure_reason, metrics, artefacts, raw_events,
       repetition_stats, started_at, ended_at
-    ) VALUES (?, 'run-queue', 'active-queue', 'pass', null, ?, ?, '[]', ?, ?, ?)
+    ) VALUES (?, 'run-queue', 'template-queue', 'pass', null, ?, ?, '[]', ?, ?, ?)
   `).run(
     id,
     JSON.stringify({ latency_ms: 42, prompt_tokens: 7, completion_tokens: 9, total_tokens: 16, estimated_cost: 0.001 }),
@@ -69,7 +63,7 @@ function seedQueueResult(id = 'queue-result-a') {
   );
   db.prepare(`
     INSERT INTO test_result_documents (test_result_id, run_id, test_id, schema_version, document, created_at)
-    VALUES (?, 'run-queue', 'active-queue', '1.0.0', ?, ?)
+    VALUES (?, 'run-queue', 'template-queue', '1.0.0', ?, ?)
   `).run(
     id,
     JSON.stringify({ prompt: 'Weather in Paris?', test: { tags: ['queue'] }, selected_model: { id: 'model-a' } }),

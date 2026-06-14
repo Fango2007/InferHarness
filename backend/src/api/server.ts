@@ -4,19 +4,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import { getDb, resolvedDbPath, runSchema } from '../models/db.js';
-import { reloadTests } from '../services/test-service.js';
 import { registerAuth } from './middleware/auth.js';
-import { registerResultsRoutes } from './routes/results.js';
 import { registerResultsViewRoutes } from './routes/results-view.js';
 import { registerRunsRoutes } from './routes/runs.js';
-import { registerSuitesRoutes } from './routes/suites.js';
 import { registerInferenceServersRoutes } from './routes/inference-servers.js';
-import { registerTestsRoutes } from './routes/tests.js';
-import { registerProfilesRoutes } from './routes/profiles.js';
 import { registerModelsRoutes } from './routes/models.js';
 import { registerSystemRoutes } from './routes/system.js';
-import { registerTemplatesRoutes } from './routes/templates.js';
-import { registerDashboardResultsRoutes } from './routes/dashboard-results.js';
 import { registerEvalInferenceRoutes } from './routes/eval-inference.js';
 import { registerEvaluationsRoutes } from './routes/evaluations.js';
 import { registerLeaderboardRoutes } from './routes/leaderboard.js';
@@ -44,14 +37,6 @@ function applyColumnMigrations(): void {
   `);
 }
 
-function dropLegacyRunGroupTables(): void {
-  const db = getDb();
-  db.exec(`
-    DROP TABLE IF EXISTS run_group_items;
-    DROP TABLE IF EXISTS run_groups;
-  `);
-}
-
 export function createServer() {
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' });
 
@@ -60,7 +45,6 @@ export function createServer() {
   if (fs.existsSync(schemaPath)) {
     runSchema(fs.readFileSync(schemaPath, 'utf8'));
   }
-  dropLegacyRunGroupTables();
   applyColumnMigrations();
   if (process.env.INFERHARNESS_E2E === '1' && process.env.INFERHARNESS_E2E_MARKER_PATH) {
     fs.mkdirSync(path.dirname(process.env.INFERHARNESS_E2E_MARKER_PATH), { recursive: true });
@@ -70,8 +54,6 @@ export function createServer() {
       'utf8'
     );
   }
-
-  reloadTests();
 
   registerAuth(app);
 
@@ -109,15 +91,9 @@ export function createServer() {
 
   registerSystemRoutes(app);
   registerInferenceServersRoutes(app);
-  registerTestsRoutes(app);
   registerRunsRoutes(app);
-  registerSuitesRoutes(app);
-  registerProfilesRoutes(app);
   registerModelsRoutes(app);
-  registerResultsRoutes(app);
   registerResultsViewRoutes(app);
-  registerTemplatesRoutes(app);
-  registerDashboardResultsRoutes(app);
   registerEvalInferenceRoutes(app);
   registerEvaluationsRoutes(app);
   registerEvaluationQueueRoutes(app);

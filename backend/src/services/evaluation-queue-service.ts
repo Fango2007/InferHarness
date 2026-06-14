@@ -179,15 +179,13 @@ function sourceRows(): QueueSourceRow[] {
       r.environment_snapshot,
       r.inference_server_id AS server_id,
       i.display_name AS server_name,
-      at.template_id,
-      td.name AS template_name,
-      td.runner_type
+      tr.test_id AS template_id,
+      tr.test_id AS template_name,
+      NULL AS runner_type
     FROM test_results tr
     JOIN runs r ON r.id = tr.run_id
     LEFT JOIN test_result_documents trd ON trd.test_result_id = tr.id
     LEFT JOIN inference_servers i ON i.server_id = r.inference_server_id
-    LEFT JOIN active_tests at ON at.id = COALESCE(tr.test_id, r.test_id)
-    LEFT JOIN test_definitions td ON td.id = COALESCE(tr.test_id, r.test_id)
     WHERE r.status = 'completed'
     ORDER BY COALESCE(tr.ended_at, tr.started_at) DESC
     LIMIT 500

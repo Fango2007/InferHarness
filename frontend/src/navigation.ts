@@ -26,27 +26,3 @@ export function catalogSearch(tab: CatalogTab, params?: { serverId?: string | nu
 export function resultsSearch(tab: ResultsTab): string {
   return `?${new URLSearchParams({ tab }).toString()}`;
 }
-
-export function legacyRedirectSearch(target: string, currentSearch = ''): { pathname: string; search: string } {
-  const params = new URLSearchParams(currentSearch);
-  switch (target) {
-    case 'servers':
-      params.set('tab', 'servers');
-      return { pathname: '/catalog', search: `?${params.toString()}` };
-    case 'models':
-      params.set('tab', 'models');
-      return { pathname: '/catalog', search: `?${params.toString()}` };
-    case 'run-single':
-      return { pathname: '/run', search: currentSearch };
-    case 'compare':
-      return { pathname: '/run', search: `?${params.toString()}` };
-    case 'dashboard':
-      params.set('tab', 'dashboard');
-      return { pathname: '/results', search: `?${params.toString()}` };
-    case 'leaderboard':
-      params.set('tab', 'leaderboard');
-      return { pathname: '/results', search: `?${params.toString()}` };
-    default:
-      return { pathname: '/catalog', search: '?tab=servers' };
-  }
-}

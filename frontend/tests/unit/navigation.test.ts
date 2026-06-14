@@ -2,7 +2,6 @@ import { expect, test } from 'vitest';
 
 import {
   catalogSearch,
-  legacyRedirectSearch,
   normalizeCatalogTab,
   normalizeResultsTab,
   resultsSearch
@@ -29,19 +28,4 @@ test('catalog detail search keeps slash-bearing model ids in query params', () =
 
 test('results search encodes tab state', () => {
   expect(resultsSearch('history')).toBe('?tab=history');
-});
-
-test('legacy redirects map old routes to new route contract', () => {
-  expect(legacyRedirectSearch('servers')).toEqual({ pathname: '/catalog', search: '?tab=servers' });
-  expect(legacyRedirectSearch('models', '?serverId=s1')).toEqual({
-    pathname: '/catalog',
-    search: '?serverId=s1&tab=models'
-  });
-  expect(legacyRedirectSearch('run-single')).toEqual({ pathname: '/run', search: '' });
-  expect(legacyRedirectSearch('compare', '?modelId=org%2Fmodel')).toEqual({
-    pathname: '/run',
-    search: '?modelId=org%2Fmodel'
-  });
-  expect(legacyRedirectSearch('dashboard')).toEqual({ pathname: '/results', search: '?tab=dashboard' });
-  expect(legacyRedirectSearch('leaderboard')).toEqual({ pathname: '/results', search: '?tab=leaderboard' });
 });

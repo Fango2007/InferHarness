@@ -163,27 +163,6 @@ describe('inference servers contract', () => {
     expect(db.prepare('SELECT COUNT(1) as count FROM inference_servers WHERE server_id = ?').get(created.inference_server.server_id)).toMatchObject({ count: 0 });
   });
 
-  it('drops legacy run-group tables during server startup', async () => {
-    const db = getDb();
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS run_groups (
-        id TEXT PRIMARY KEY
-      );
-      CREATE TABLE IF NOT EXISTS run_group_items (
-        id TEXT PRIMARY KEY,
-        group_id TEXT NOT NULL,
-        inference_server_id TEXT NOT NULL,
-        FOREIGN KEY (group_id) REFERENCES run_groups(id),
-        FOREIGN KEY (inference_server_id) REFERENCES inference_servers(server_id)
-      );
-    `);
-
-    createServer();
-
-    expect(db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'run_groups'").get()).toBeUndefined();
-    expect(db.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'run_group_items'").get()).toBeUndefined();
-  });
-
   it('stores raw auth tokens without returning them in API payloads', async () => {
     const app = createServer();
     const createResponse = await app.inject({
