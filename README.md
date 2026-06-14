@@ -1,6 +1,6 @@
 # InferHarness
 
-[![version](https://img.shields.io/badge/version-0.7.0-blue)](https://github.com/Fango2007/InferHarness/releases/tag/v0.7.0)
+[![version](https://img.shields.io/badge/version-0.8.0-blue)](https://github.com/Fango2007/InferHarness/releases/tag/v0.8.0)
 [![node](https://img.shields.io/badge/node-%3E%3D22.19%20%3C26-339933)](package.json)
 [![python](https://img.shields.io/badge/python-3.10%2B-3776AB)](backend/src/scripts/requirements.txt)
 [![CI](https://github.com/Fango2007/InferHarness/actions/workflows/ci.yml/badge.svg)](https://github.com/Fango2007/InferHarness/actions/workflows/ci.yml)
