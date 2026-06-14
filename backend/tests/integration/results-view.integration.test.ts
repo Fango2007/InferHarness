@@ -53,12 +53,6 @@ function seedRun(input: {
   const db = getDb();
   const templateId = input.templateId ?? 'cold-start';
   const serverId = input.serverId ?? 'srv-results';
-  db.prepare(`
-    INSERT INTO active_tests (
-      id, template_id, template_version, inference_server_id, model_name,
-      status, created_at, deleted_at, version, command_preview, python_ready
-    ) VALUES (?, ?, '1.0.0', ?, ?, 'active', ?, null, '1.0.0', null, 1)
-  `).run(`${templateId}-${input.runId}`, templateId, serverId, input.model, input.startedAt);
 
   db.prepare(`
     INSERT INTO runs (
@@ -68,7 +62,7 @@ function seedRun(input: {
   `).run(
     input.runId,
     serverId,
-    `${templateId}-${input.runId}`,
+    templateId,
     input.startedAt,
     input.startedAt,
     JSON.stringify({ effective_config: { model: input.model } })
@@ -83,7 +77,7 @@ function seedRun(input: {
   `).run(
     resultId,
     input.runId,
-    `${templateId}-${input.runId}`,
+    templateId,
     input.verdict,
     input.verdict === 'fail' ? 'assertion failed' : null,
     JSON.stringify({ latency_ms: input.latency, estimated_cost: 0.001 }),
@@ -107,7 +101,7 @@ function seedRun(input: {
   `).run(
     resultId,
     input.runId,
-    `${templateId}-${input.runId}`,
+    templateId,
     JSON.stringify({ test: { tags: ['nightly'], type: 'scenario-json' }, selected_model: { id: input.model }, steps: [] }),
     input.startedAt
   );

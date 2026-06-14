@@ -339,7 +339,6 @@ export function deleteInferenceServer(id: string): boolean {
     `).run(id);
     db.prepare('DELETE FROM runs WHERE inference_server_id = ?').run(id);
     db.prepare('DELETE FROM evaluations WHERE server_id = ?').run(id);
-    db.prepare('DELETE FROM active_tests WHERE inference_server_id = ?').run(id);
     db.prepare('DELETE FROM models WHERE server_id = ?').run(id);
     const result = db.prepare('DELETE FROM inference_servers WHERE server_id = ?').run(id);
     return result.changes > 0;

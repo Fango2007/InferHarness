@@ -19,8 +19,8 @@ import {
   type ResultsStatus,
   type ResultsTab
 } from '../services/results-view-api.js';
-import type { DashboardPanel } from '../services/dashboard-results-api.js';
-import { toLocalInputValue } from './ResultsDashboard.js';
+import type { ResultsPanel } from '../services/results-panels.js';
+import { toLocalInputValue } from '../services/results-panels.js';
 import '../styles/dashboard-results.css';
 
 type LeaderboardSort = 'score' | 'latency' | 'cost' | 'pass_rate';
@@ -179,7 +179,7 @@ function templatesForFunnel(options: ResultsFilterOptions | null, serverIds: str
   ));
 }
 
-function seriesPanel(title: string, metric: string, series: Array<{ label: string; points: Array<{ x: string; y: number | null }> }>): DashboardPanel {
+function seriesPanel(title: string, metric: string, series: Array<{ label: string; points: Array<{ x: string; y: number | null }> }>): ResultsPanel {
   return {
     panel_id: `results:${metric}`,
     presentation_type: 'performance_graph',

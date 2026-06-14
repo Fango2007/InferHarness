@@ -47,19 +47,6 @@ export interface InferenceServerRecord {
   };
 }
 
-export interface TemplateRecord {
-  id: string;
-  name: string;
-  type: 'json' | 'python';
-  version: string;
-  content: string;
-}
-
-export interface ActiveTestRecord {
-  id: string;
-  template_id: string;
-}
-
 export interface ModelRecord {
   model: {
     server_id: string;
@@ -181,43 +168,6 @@ export async function createModel(
   return parseJsonResponse<ModelRecord>(response, 'createModel');
 }
 
-export async function listTemplates(request: APIRequestContext) {
-  const response = await request.get(`${API_BASE_URL}/templates`, {
-    headers: authHeaders
-  });
-  if (!response.ok()) {
-    const body = await response.text();
-    throw new Error(`listTemplates failed: ${response.status()} ${body}`);
-  }
-  return parseJsonResponse<TemplateRecord[]>(response, 'listTemplates');
-}
-
-export async function listActiveTests(request: APIRequestContext) {
-  const response = await request.get(`${API_BASE_URL}/active-tests`, {
-    headers: authHeaders
-  });
-  if (!response.ok()) {
-    const body = await response.text();
-    throw new Error(`listActiveTests failed: ${response.status()} ${body}`);
-  }
-  return parseJsonResponse<ActiveTestRecord[]>(response, 'listActiveTests');
-}
-
-export async function cleanupE2eTemplates(
-  request: APIRequestContext,
-  prefix = 'e2e-'
-) {
-  const activeTests = await listActiveTests(request).catch(() => []);
-  for (const activeTest of activeTests.filter((entry) => entry.template_id.startsWith(prefix))) {
-    await request.delete(`${API_BASE_URL}/active-tests/${activeTest.id}`, { headers: authHeaders });
-  }
-
-  const templates = await listTemplates(request).catch(() => []);
-  for (const template of templates.filter((entry) => entry.id.startsWith(prefix))) {
-    await request.delete(`${API_BASE_URL}/templates/${template.id}`, { headers: authHeaders });
-  }
-}
-
 export async function cleanupTemplateIds(
   request: APIRequestContext,
   templateIds: string[]
@@ -227,25 +177,9 @@ export async function cleanupTemplateIds(
   }
 
   const uniqueTemplateIds = Array.from(new Set(templateIds));
-  const activeTests = await listActiveTests(request).catch(() => []);
-  for (const activeTest of activeTests.filter((entry) => uniqueTemplateIds.includes(entry.template_id))) {
-    await request
-      .delete(`${API_BASE_URL}/active-tests/${activeTest.id}`, {
-        headers: authHeaders,
-        timeout: 5_000
-      })
-      .catch(() => undefined);
-  }
-
   for (const templateId of uniqueTemplateIds) {
     await request
       .delete(`${API_BASE_URL}/benchmark/documents/test_template/${templateId}`, {
-        headers: authHeaders,
-        timeout: 5_000
-      })
-      .catch(() => undefined);
-    await request
-      .delete(`${API_BASE_URL}/templates/${templateId}`, {
         headers: authHeaders,
         timeout: 5_000
       })

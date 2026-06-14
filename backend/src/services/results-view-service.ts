@@ -477,9 +477,9 @@ function fetchRows(filters: ResultsFilterState): ResultsViewRow[] {
       tr.id AS result_id,
       tr.test_id AS test_result_test_id,
       r.test_id AS run_test_id,
-      at.template_id,
-      td.name AS test_definition_name,
-      td.runner_type,
+      COALESCE(tr.test_id, r.test_id) AS template_id,
+      COALESCE(tr.test_id, r.test_id) AS test_definition_name,
+      NULL AS runner_type,
       tr.verdict,
       tr.failure_reason,
       tr.metrics,
@@ -491,8 +491,6 @@ function fetchRows(filters: ResultsFilterState): ResultsViewRow[] {
     FROM runs r
     LEFT JOIN inference_servers i ON i.server_id = r.inference_server_id
     LEFT JOIN test_results tr ON tr.run_id = r.id
-    LEFT JOIN active_tests at ON at.id = COALESCE(tr.test_id, r.test_id)
-    LEFT JOIN test_definitions td ON td.id = COALESCE(tr.test_id, r.test_id)
     LEFT JOIN test_result_documents trd ON trd.test_result_id = tr.id
     WHERE r.started_at >= ? AND r.started_at <= ?
     ORDER BY r.started_at DESC
@@ -515,9 +513,9 @@ function fetchRowsForRun(runId: string): ResultsViewRow[] {
       tr.id AS result_id,
       tr.test_id AS test_result_test_id,
       r.test_id AS run_test_id,
-      at.template_id,
-      td.name AS test_definition_name,
-      td.runner_type,
+      COALESCE(tr.test_id, r.test_id) AS template_id,
+      COALESCE(tr.test_id, r.test_id) AS test_definition_name,
+      NULL AS runner_type,
       tr.verdict,
       tr.failure_reason,
       tr.metrics,
@@ -529,8 +527,6 @@ function fetchRowsForRun(runId: string): ResultsViewRow[] {
     FROM runs r
     LEFT JOIN inference_servers i ON i.server_id = r.inference_server_id
     LEFT JOIN test_results tr ON tr.run_id = r.id
-    LEFT JOIN active_tests at ON at.id = COALESCE(tr.test_id, r.test_id)
-    LEFT JOIN test_definitions td ON td.id = COALESCE(tr.test_id, r.test_id)
     LEFT JOIN test_result_documents trd ON trd.test_result_id = tr.id
     WHERE r.id = ?
     ORDER BY tr.started_at ASC

@@ -299,20 +299,6 @@ test('catalog server cards toggle the detail rail', async ({ page }) => {
   expect(filteredBox!.width).toBeCloseTo(initialBox!.width, 1);
 });
 
-test('legacy routes redirect to the new IA contract', async ({ page }) => {
-  for (const [legacyPath, expected] of [
-    ['/servers', /\/catalog\?tab=servers/],
-    ['/models', /\/catalog\?tab=models/],
-    ['/run-single', /\/run$/],
-    ['/compare', /\/run$/],
-    ['/dashboard', /\/results\?tab=dashboard/],
-    ['/leaderboard', /\/results\?tab=leaderboard/]
-  ] as const) {
-    await page.goto(legacyPath);
-    await expect(page).toHaveURL(expected);
-  }
-});
-
 test('settings opens from the sidebar footer', async ({ page }) => {
   await mockSettingsRoutes(page);
 

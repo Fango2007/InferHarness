@@ -6,13 +6,13 @@ import type { EChartsOption } from 'echarts/types/dist/shared';
 
 const ReactECharts = _ReactECharts as unknown as ComponentType<EChartsReactProps>;
 
-import { DashboardPanel } from '../services/dashboard-results-api.js';
+import { ResultsPanel } from '../services/results-panels.js';
 
 interface ResultsGraphPanelProps {
-  panel: DashboardPanel;
+  panel: ResultsPanel;
 }
 
-function inferUnit(metricKey: string, panel: DashboardPanel): string {
+function inferUnit(metricKey: string, panel: ResultsPanel): string {
   const declared = panel.unit_keys.find((entry) => typeof entry === 'string' && entry.trim().length > 0);
   if (declared) {
     return declared;

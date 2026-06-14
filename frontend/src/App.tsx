@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import packageInfo from '../package.json' with { type: 'json' };
 import { MergedPageHeader } from './components/MergedPageHeader.js';
@@ -11,24 +11,19 @@ import { ModelDetails } from './pages/ModelDetails.js';
 import { ResultsUnified } from './pages/ResultsUnified.js';
 import { RunUnified } from './pages/RunUnified.js';
 import { Templates } from './pages/Templates.js';
-import { legacyRedirectSearch, normalizeResultsTab, resultsSearch } from './navigation.js';
+import { normalizeResultsTab, resultsSearch } from './navigation.js';
 import { apiGet } from './services/api.js';
 import { InferenceServerHealth, getConnectivityConfig, getInferenceServerHealth } from './services/connectivity-api.js';
 import { InferenceServerRecord, listInferenceServers } from './services/inference-servers-api.js';
 import { listModels, type ModelRecord } from './services/models-api.js';
 import { clearDatabase, EnvEntry, listEnvEntries, setEnvEntry } from './services/system-api.js';
-import { listTemplates } from './services/templates-api.js';
+import { listBenchmarkDocuments } from './services/benchmark-api.js';
 
 type SystemHealthMetrics = {
   db: {
     ok: boolean;
   };
 };
-
-function LegacyRedirect({ target }: { target: string }) {
-  const location = useLocation();
-  return <Navigate to={legacyRedirectSearch(target, location.search)} replace />;
-}
 
 function CatalogRoute({ servers, connectivity }: { servers: InferenceServerRecord[]; connectivity: Record<string, InferenceServerHealth> }) {
   return <Catalog serversSnapshot={servers} connectivitySnapshot={connectivity} />;
@@ -254,7 +249,7 @@ export function App() {
     let isActive = true;
     const refreshCounts = async () => {
       const [templatesResult, runsResult] = await Promise.allSettled([
-        listTemplates(),
+        listBenchmarkDocuments('test_template'),
         apiGet<Record<string, unknown>[]>('/runs')
       ]);
       if (!isActive) {
@@ -376,12 +371,6 @@ export function App() {
           <Route path="/results" element={<ResultsRoute runCount={runCount} />} />
           <Route path="/runs/:id" element={<Navigate to={{ pathname: '/results', search: resultsSearch('history') }} replace />} />
           <Route path="/evaluate" element={<Evaluate />} />
-          <Route path="/servers" element={<LegacyRedirect target="servers" />} />
-          <Route path="/models" element={<LegacyRedirect target="models" />} />
-          <Route path="/run-single" element={<LegacyRedirect target="run-single" />} />
-          <Route path="/compare" element={<LegacyRedirect target="compare" />} />
-          <Route path="/dashboard" element={<LegacyRedirect target="dashboard" />} />
-          <Route path="/leaderboard" element={<LegacyRedirect target="leaderboard" />} />
           <Route path="*" element={<Navigate to="/catalog?tab=servers" replace />} />
         </Routes>
       </main>

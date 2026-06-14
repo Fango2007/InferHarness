@@ -17,47 +17,6 @@ CREATE TABLE IF NOT EXISTS inference_servers (
   CHECK (NOT (active = 1 AND archived = 1))
 );
 
-CREATE TABLE IF NOT EXISTS test_definitions (
-  id TEXT NOT NULL,
-  version TEXT NOT NULL,
-  name TEXT NOT NULL,
-  description TEXT,
-  category TEXT,
-  tags TEXT,
-  protocols TEXT,
-  spec_path TEXT,
-  runner_type TEXT NOT NULL,
-  request_template TEXT,
-  assertions TEXT,
-  metric_rules TEXT,
-  created_at TEXT NOT NULL,
-  PRIMARY KEY (id, version)
-);
-
-CREATE TABLE IF NOT EXISTS suites (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  ordered_test_ids TEXT,
-  filters TEXT,
-  stop_on_fail INTEGER DEFAULT 0,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS profiles (
-  id TEXT NOT NULL,
-  version TEXT NOT NULL,
-  name TEXT NOT NULL,
-  description TEXT,
-  generation_parameters TEXT,
-  context_strategy TEXT,
-  test_selection TEXT,
-  execution_behaviour TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  PRIMARY KEY (id, version)
-);
-
 CREATE TABLE IF NOT EXISTS models (
   server_id TEXT NOT NULL,
   model_id TEXT NOT NULL,
@@ -99,22 +58,7 @@ CREATE TABLE IF NOT EXISTS runs (
     (suite_id IS NOT NULL AND test_id IS NULL)
     OR (suite_id IS NULL AND test_id IS NOT NULL)
   ),
-  FOREIGN KEY (inference_server_id) REFERENCES inference_servers(server_id),
-  FOREIGN KEY (suite_id) REFERENCES suites(id)
-);
-
-CREATE TABLE IF NOT EXISTS active_tests (
-  id TEXT PRIMARY KEY,
-  template_id TEXT NOT NULL,
-  template_version TEXT NOT NULL,
-  inference_server_id TEXT NOT NULL,
-  model_name TEXT NOT NULL,
-  status TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  deleted_at TEXT,
-  version TEXT NOT NULL,
-  command_preview TEXT,
-  python_ready INTEGER NOT NULL DEFAULT 0
+  FOREIGN KEY (inference_server_id) REFERENCES inference_servers(server_id)
 );
 
 CREATE TABLE IF NOT EXISTS test_results (
@@ -173,46 +117,6 @@ CREATE TABLE IF NOT EXISTS inference_param_presets (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_inference_param_presets_name
   ON inference_param_presets(name);
-
-CREATE TABLE IF NOT EXISTS test_templates (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  format TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active',
-  owner_id TEXT NOT NULL,
-  current_version_id TEXT,
-  storage_path TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  FOREIGN KEY (current_version_id) REFERENCES test_template_versions(id)
-);
-
-CREATE TABLE IF NOT EXISTS test_template_versions (
-  id TEXT PRIMARY KEY,
-  template_id TEXT NOT NULL,
-  version_number INTEGER NOT NULL,
-  content TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  created_by TEXT NOT NULL,
-  FOREIGN KEY (template_id) REFERENCES test_templates(id) ON DELETE CASCADE,
-  UNIQUE(template_id, version_number)
-);
-
-CREATE TABLE IF NOT EXISTS instantiated_tests (
-  id TEXT PRIMARY KEY,
-  template_id TEXT NOT NULL,
-  template_version_id TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  FOREIGN KEY (template_id) REFERENCES test_templates(id),
-  FOREIGN KEY (template_version_id) REFERENCES test_template_versions(id)
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_test_templates_active_name
-  ON test_templates(name)
-  WHERE status = 'active';
-CREATE INDEX IF NOT EXISTS idx_test_templates_status ON test_templates(status);
-CREATE INDEX IF NOT EXISTS idx_template_versions_template ON test_template_versions(template_id);
-CREATE INDEX IF NOT EXISTS idx_instantiated_tests_template ON instantiated_tests(template_id);
 
 CREATE TABLE IF NOT EXISTS eval_prompts (
   id          TEXT NOT NULL PRIMARY KEY,
