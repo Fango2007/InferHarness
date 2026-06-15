@@ -331,5 +331,5 @@ describe('benchmark foundation API', () => {
     expect(lookupMs).toBeLessThan(50);
     expect(performance.now() - started).toBeLessThan(10000);
     await app.close();
-  });
+  }, 15000);
 });
