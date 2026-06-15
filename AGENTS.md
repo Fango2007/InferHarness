@@ -21,7 +21,8 @@
 
 - This repo may use multiple git worktrees in parallel for separate features or agents.
 - Treat each worktree as isolated. Do not assume changes from another worktree are available locally.
-- Before asking for review or merge, commit and push the current branch.
+- Commit local work whenever it is coherent. Push the branch when it needs backup, review, or CI.
+- Before final validation, PR readiness, or merge, update the branch against the current base branch to catch conflicts and drift.
 - After a branch is merged, resync any related worktrees from the updated base branch before continuing dependent work.
 - Re-check the Node.js runtime before installs, rebuilds, backend startup, or tests in each worktree.
 
