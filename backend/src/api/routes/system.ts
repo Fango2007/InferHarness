@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 
+import { createRateLimitPreHandler } from '../middleware/rate-limit.js';
 import { getAppSettings, setTemplateAgentModel } from '../../services/app-settings.js';
 import { getSystemMetrics } from '../../services/system-metrics.js';
 import { clearDatabase, listEnvEntries, setEnvEntry } from '../../services/system-settings.js';
@@ -7,9 +8,15 @@ import { clearDatabase, listEnvEntries, setEnvEntry } from '../../services/syste
 export function registerSystemRoutes(app: FastifyInstance): void {
   app.get('/system/metrics', async () => getSystemMetrics());
 
-  app.get('/system/settings', async () => getAppSettings());
+  const systemSettingsRateLimit = createRateLimitPreHandler({
+    keyPrefix: 'system-settings',
+    maxRequests: 60,
+    windowMs: 60_000
+  });
 
-  app.patch('/system/settings/template-agent-model', async (request, reply) => {
+  app.get('/system/settings', { preHandler: systemSettingsRateLimit }, async () => getAppSettings());
+
+  app.patch('/system/settings/template-agent-model', { preHandler: systemSettingsRateLimit }, async (request, reply) => {
     const body = request.body as { server_id?: string; model_id?: string };
     try {
       reply.send(setTemplateAgentModel({

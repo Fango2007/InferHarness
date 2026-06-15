@@ -106,6 +106,19 @@ describe('template agent settings and route', () => {
     expect(settings.json().template_agent_model.model_id).toBe('agent-model');
   });
 
+  it('rate limits template agent settings reads', async () => {
+    const app = createServer();
+    for (let index = 0; index < 60; index += 1) {
+      const response = await app.inject({ method: 'GET', url: '/system/settings', headers: AUTH_HEADERS });
+      expect(response.statusCode).toBe(200);
+    }
+
+    const limited = await app.inject({ method: 'GET', url: '/system/settings', headers: AUTH_HEADERS });
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json()).toEqual({ error: 'Too many requests' });
+    expect(limited.headers['retry-after']).toBeTruthy();
+  });
+
   it('runs the agent and returns a validated draft without saving it', async () => {
     const draft = JSON.parse(fs.readFileSync(TEMPLATE_FIXTURE, 'utf8')) as Record<string, unknown>;
     mockAgentResponse(JSON.stringify({
