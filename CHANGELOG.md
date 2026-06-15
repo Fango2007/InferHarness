@@ -8,6 +8,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Added
 
+- **Native Anthropic and Gemini benchmark tool calls** — benchmark execution now resolves Anthropic Messages and Gemini GenerateContent operations, maps dataset tools and `tool_choice` into provider-native payloads, and normalizes returned tool calls and usage metrics.
 - **Adaptive Results performance views** — the Results dashboard now has an Auto performance view with manual modes for cold-start comparison, latency trend, pass-rate trend, latency histogram, and model-summary table comparisons backed by filtered model aggregates.
 - **Project workflow guardrails** — `AGENTS.md` now combines the main branch workflow, Node 25 rules, challenge-and-skill behavior instructions, and a static-data rule that keeps prompts, schemas, fixtures, and examples out of application code.
 - **Benchmark template agent** — Templates now includes a review-first benchmark-template agent that uses a database-persisted Settings model, challenges underspecified requests, loads its prompt from Markdown with the full `test_template` schema and example injected, validates generated drafts server-side, and applies drafts to the existing editor without auto-saving.

@@ -22,6 +22,7 @@ const optionalItemFields: Record<string, (value: unknown) => boolean> = {
   system_prompt: (value) => value === null || typeof value === 'string',
   interaction_mode: (value) => ['chat', 'tool_calling', 'structured_output', 'multi_turn', 'agentic'].includes(String(value)),
   tools: Array.isArray,
+  tool_choice: (value) => value === null || typeof value === 'string' || (typeof value === 'object' && !Array.isArray(value)),
   expected_tool_calls: Array.isArray,
   expected_answer: () => true,
   expected_format: (value) => ['free_text', 'json', 'markdown', 'code', 'boolean', 'number', 'schema', 'regex'].includes(String(value)),

@@ -38,6 +38,7 @@
           "system_prompt": { "type": ["string", "null"] },
           "interaction_mode": { "type": "string", "enum": ["chat", "tool_calling", "structured_output", "multi_turn", "agentic"] },
           "tools": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "tool_choice": { "type": ["string", "object", "null"], "additionalProperties": true },
           "expected_tool_calls": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
           "expected_answer": { "type": ["string", "number", "boolean", "object", "array", "null"] },
           "expected_format": { "type": "string", "enum": ["free_text", "json", "markdown", "code", "boolean", "number", "schema", "regex"] },
