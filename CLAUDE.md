@@ -5,11 +5,11 @@ at `specs/010-model-architecture-inspect/plan.md`
 <!-- SPECKIT END -->
 
 ## Active Technologies
-- TypeScript 5.x / Node.js 20+ (backend + frontend); Python 3.10+ (architecture inspection subprocess only) (010-model-architecture-inspect)
+- TypeScript 5.x / Node.js 25.x (backend + frontend); Python 3.10+ (architecture inspection subprocess only) (010-model-architecture-inspect)
 - SQLite (existing schema + migration); file cache under `/backend/data/model/` (010-model-architecture-inspect)
 
 ## Recent Changes
-- 010-model-architecture-inspect: Added TypeScript 5.x / Node.js 20+ (backend + frontend); Python 3.10+ (architecture inspection subprocess only)
+- 010-model-architecture-inspect: Added TypeScript 5.x / Node.js 25.x (backend + frontend); Python 3.10+ (architecture inspection subprocess only)
 
 ## Behavioral guidelines
 

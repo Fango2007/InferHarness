@@ -8,7 +8,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Fixed
 
-- Restored tracked `AGENTS.md` project workflow rules while keeping the Node 25.x native-module guidance, and restored `CLAUDE.md` tracking for Claude-specific project guidance.
+- Restored tracked `AGENTS.md` project workflow rules while keeping the Node 25.x native-module guidance, restored `CLAUDE.md` tracking, and aligned Claude-specific project guidance with the enforced Node 25.x runtime.
 
 ## [0.8.0] - 2026-06-14
 
