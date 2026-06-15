@@ -1,5 +1,8 @@
 Project Workflow Rules
 
+Don't assume the user knows what he really wants. Challenge their ideas and ask questions. Don't hide confusion. Prioritize simplicity. Surface tradeoffs. You can criticize and offer suggestions.
+Whenever it is possible and suited for handling the prompt user, use a skill. Suggest if a skill should be created, especially when similar prompts arise over time.
+
 Start every new change on a new git branch before editing files. If the user has not already confirmed or created a branch for the change, ask before beginning implementation.
 Update CHANGELOG.md in the same change whenever code, tests, docs, configuration, or user-facing behavior is modified.
 Check whether the root README.md remains aligned with the purpose and user-visible behavior of each change; update it in the same change when it would otherwise become stale or misleading.

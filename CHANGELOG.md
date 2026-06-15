@@ -8,7 +8,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Added
 
-- **Project workflow guardrails** — `AGENTS.md` now preserves the main branch workflow and Node 25 rules while adding a static-data rule that keeps prompts, schemas, fixtures, and examples out of application code.
+- **Project workflow guardrails** — `AGENTS.md` now combines the main branch workflow, Node 25 rules, challenge-and-skill behavior instructions, and a static-data rule that keeps prompts, schemas, fixtures, and examples out of application code.
 - **Benchmark template agent** — Templates now includes a review-first benchmark-template agent that uses a database-persisted Settings model, challenges underspecified requests, loads its prompt from Markdown with the full `test_template` schema and example injected, validates generated drafts server-side, and applies drafts to the existing editor without auto-saving.
 - **README project badges** — the root README now shows version, Node.js, Python, CI, and MIT license badges.
 
