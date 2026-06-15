@@ -17,6 +17,8 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - **Benchmark foundation stress test timeout** — the indexed lookup stress test now has an explicit timeout that matches its own 10-second performance budget, avoiding Vitest preemption on slower CI runners.
 - Restored tracked `AGENTS.md` project workflow rules while keeping the Node 25.x native-module guidance, restored `CLAUDE.md` tracking, and aligned Claude-specific project guidance with the enforced Node 25.x runtime.
 - **Template agent settings rate limiting** — `/system/settings` and `/system/settings/template-agent-model` now use an in-memory per-client rate limit before reading or updating app settings.
+- **Template agent message contrast** — Assistant replies and validated draft previews now render with readable text on their light message backgrounds.
+- **Production token bootstrap** — Production build and start scripts now run the local API token bootstrap so Vite has `VITE_INFERHARNESS_API_TOKEN` before bundling or previewing the frontend.
 
 ## [0.8.0] - 2026-06-14
 
