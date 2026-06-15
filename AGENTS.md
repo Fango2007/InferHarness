@@ -1,21 +1,35 @@
-Project Workflow Rules
+# Project Workflow Rules
 
-Don't assume the user knows what he really wants. Challenge their ideas and ask questions. Don't hide confusion. Prioritize simplicity. Surface tradeoffs. You can criticize and offer suggestions.
-Whenever it is possible and suited for handling the prompt user, use a skill. Suggest if a skill should be created, especially when similar prompts arise over time.
+## Working Style
 
-Start every new change on a new git branch before editing files. If the user has not already confirmed or created a branch for the change, ask before beginning implementation.
-Update CHANGELOG.md in the same change whenever code, tests, docs, configuration, or user-facing behavior is modified.
-Check whether the root README.md remains aligned with the purpose and user-visible behavior of each change; update it in the same change when it would otherwise become stale or misleading.
-At the end of each completed change, suggest a concise commit message and a short commit-details summary covering the files and behavior changed.
-For additional context about technologies to be used, project structure, shell commands, and other important information, read the current plan.
+- Do not assume the user's first request is the best solution. Challenge ideas, ask questions, and surface confusion instead of hiding it.
+- Prioritize simplicity. Criticize when useful, explain tradeoffs, and suggest a smaller path when the requested approach looks too complex.
+- Use an available skill when it fits the task. If similar prompts are likely to recur, suggest creating a dedicated skill.
+- For technology choices, project structure, shell commands, and other local context, read the current plan before making changes.
 
-Do not hardcode static data in application code. Store static prompts, templates, schemas, fixtures, examples, and other long-lived reference content in dedicated files or data resources, then load them from the implementation. Keep code responsible for orchestration, validation, and transformation rather than embedding large static payloads directly.
+## Branch and Change Hygiene
 
-Node.js
+- Start every new change on a new git branch before editing files.
+- If a focused branch is not already checked out, create one before implementation unless the user explicitly says not to.
+- Update `CHANGELOG.md` in the same change whenever code, tests, docs, configuration, or user-facing behavior is modified.
+- Check whether the root `README.md` still matches the purpose and user-visible behavior of the change. Update it in the same change if it would otherwise become stale or misleading.
+- At the end of each completed change, explicitly ask whether to commit. Include:
+  - a concise suggested commit message
+  - short commit details covering the files and behavior changed
 
-InferHarness is pinned to Node 25.x. Before running npm install, npm rebuild, backend startup, tests, or any command that can compile native modules, verify:
+## Static Data and Reference Content
 
+- Do not hardcode static data in application code.
+- Store static prompts, templates, schemas, fixtures, examples, and other long-lived reference content in dedicated files or data resources.
+- Keep code responsible for orchestration, validation, and transformation rather than embedding large static payloads directly.
+
+## Node.js Runtime
+
+InferHarness is pinned to Node 25.x. Before running `npm install`, `npm rebuild`, backend startup, tests, or any command that can compile native modules, verify:
+
+```sh
 node -v
 npm run check:node
+```
 
-Do not run dependency install or rebuild commands from a shell using Node 26+ or Node <25. Native modules such as better-sqlite3 can be compiled against the wrong Node ABI and break backend startup in other worktrees.
+Do not run dependency install or rebuild commands from a shell using Node 26+ or Node <25. Native modules such as `better-sqlite3` can be compiled against the wrong Node ABI and break backend startup in other worktrees.

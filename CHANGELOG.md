@@ -14,6 +14,10 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - **Benchmark template agent** — Templates now includes a review-first benchmark-template agent that uses a database-persisted Settings model, challenges underspecified requests, loads its prompt from Markdown with the full `test_template` schema and example injected, validates generated drafts server-side, and applies drafts to the existing editor without auto-saving.
 - **Run-page persisted benchmark plan checkpoint** — Run can now select saved chat benchmark templates, prepare inline or server-side dataset manifests, persist unique runtime/dataset/plan artifacts per click, execute `/benchmark/plans/:id/run`, and render per-target results including failed targets without result documents.
 
+### Changed
+
+- **Human-readable agent workflow guidance** — `AGENTS.md` now groups workflow rules into clearer sections, directs agents to create a focused branch without pausing for confirmation, and asks agents to explicitly request commit approval with a suggested message and details.
+
 ### Fixed
 
 - **Benchmark foundation stress test timeout** — the indexed lookup stress test now has an explicit timeout that matches its own 10-second performance budget, avoiding Vitest preemption on slower CI runners.
