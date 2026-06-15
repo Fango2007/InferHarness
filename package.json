@@ -1,13 +1,13 @@
 {
   "name": "inferharness",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "workspaces": [
     "backend",
     "frontend"
   ],
   "engines": {
-    "node": ">=22.19 <26"
+    "node": "25.x"
   },
   "dependencies": {
     "better-sqlite3": "^12.9.0",
@@ -16,7 +16,9 @@
   "scripts": {
     "build": "npm run build:frontend",
     "build:frontend": "npm -w frontend run build",
+    "check:node": "node scripts/check-node-version.mjs",
     "dev": "concurrently \"npm -w backend run dev\" \"npm -w frontend run dev\"",
+    "preinstall": "node scripts/check-node-version.mjs",
     "predev": "npm -w backend run bootstrap-env",
     "e2e:serve": "concurrently --kill-others-on-fail \"npm run start:backend\" \"npm -w frontend run dev\"",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
