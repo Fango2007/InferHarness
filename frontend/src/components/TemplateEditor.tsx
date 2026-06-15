@@ -8,6 +8,7 @@ import {
 
 interface TemplateEditorProps {
   template: BenchmarkTestTemplateRecord | null;
+  initialDocument?: BenchmarkTestTemplateDocument | null;
   onSave: (input: BenchmarkTestTemplateDocument, isUpdate: boolean) => Promise<void>;
   error?: string | null;
   busy?: boolean;
@@ -242,7 +243,7 @@ function normalizeCapabilities(operation: BenchmarkOperation, value: Record<stri
   return capabilities;
 }
 
-export function TemplateEditor({ template, onSave, error, busy }: TemplateEditorProps) {
+export function TemplateEditor({ template, initialDocument, onSave, error, busy }: TemplateEditorProps) {
   const [id, setId] = useState('');
   const [name, setName] = useState('');
   const [version, setVersion] = useState('1.0.0');
@@ -308,8 +309,8 @@ export function TemplateEditor({ template, onSave, error, busy }: TemplateEditor
   }
 
   useEffect(() => {
-    loadDocument(template?.document ?? DEFAULT_BENCHMARK_TEMPLATE);
-  }, [template]);
+    loadDocument(initialDocument ?? template?.document ?? DEFAULT_BENCHMARK_TEMPLATE);
+  }, [initialDocument, template]);
 
   const isUpdate = Boolean(template);
 

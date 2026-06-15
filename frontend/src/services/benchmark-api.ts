@@ -285,6 +285,26 @@ export async function saveBenchmarkDocument<TDocument extends Record<string, unk
   return apiPost<BenchmarkDocumentRecord<TDocument>>('/benchmark/documents', document);
 }
 
+export interface TemplateAgentMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface TemplateAgentRequest {
+  mode: 'create' | 'modify';
+  message: string;
+  conversation?: TemplateAgentMessage[];
+  existing_template?: BenchmarkTestTemplateDocument;
+}
+
+export type TemplateAgentResponse =
+  | { status: 'needs_input'; reply: string; questions?: string[] }
+  | { status: 'draft_ready'; reply: string; template: BenchmarkTestTemplateDocument; validation: { ok: true; issues: [] } };
+
+export async function runTemplateAgent(payload: TemplateAgentRequest): Promise<TemplateAgentResponse> {
+  return apiPost<TemplateAgentResponse>('/benchmark/template-agent', payload);
+}
+
 export async function deleteBenchmarkDocument(kind: BenchmarkDocumentKind, id: string): Promise<void> {
   await apiDelete(`/benchmark/documents/${kind}/${id}`);
 }

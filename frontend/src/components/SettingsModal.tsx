@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { EnvEntry } from '../services/system-api.js';
+import type { AppSettings } from '../services/system-api.js';
 import { type ModelRecord } from '../services/models-api.js';
 import type { OnboardingStatus, OnboardingUiState } from '../onboarding.js';
 
@@ -14,10 +15,12 @@ type SettingsModalProps = {
   message: string | null;
   models: ModelRecord[];
   modelsError: string | null;
+  appSettings: AppSettings;
   onboardingState: OnboardingUiState;
   onboardingStatus: OnboardingStatus;
   onClose: () => void;
   onSaveEntry: (key: string, value: string | null) => Promise<void>;
+  onSaveTemplateAgentModel: (serverId: string, modelId: string) => Promise<void>;
   onClearDatabase: () => Promise<void>;
   onResetOnboarding: () => void;
   onReplayOnboarding: () => void;
@@ -186,10 +189,12 @@ export function SettingsModal({
   message,
   models,
   modelsError,
+  appSettings,
   onboardingState,
   onboardingStatus,
   onClose,
   onSaveEntry,
+  onSaveTemplateAgentModel,
   onClearDatabase,
   onResetOnboarding,
   onReplayOnboarding
@@ -261,14 +266,19 @@ export function SettingsModal({
   const canAdd = VALID_ENV_KEY.test(newKey) && !existingKeys.has(newKey);
 
   useEffect(() => {
-    if (selectableModels.length === 0) {
-      if (selectedModelKey) setSelectedModelKey('');
+    const persisted = appSettings.template_agent_model
+      ? `${appSettings.template_agent_model.server_id}::${appSettings.template_agent_model.model_id}`
+      : '';
+    if (persisted && selectableModels.some((record) => modelKey(record) === persisted)) {
+      setSelectedModelKey(persisted);
       return;
     }
-    if (!selectableModels.some((record) => modelKey(record) === selectedModelKey)) {
-      setSelectedModelKey(modelKey(selectableModels[0]));
+    if (selectableModels.length === 0) {
+      setSelectedModelKey('');
+      return;
     }
-  }, [selectableModels, selectedModelKey]);
+    setSelectedModelKey('');
+  }, [appSettings.template_agent_model, selectableModels]);
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === 'Escape') {
@@ -331,6 +341,18 @@ export function SettingsModal({
       setNewValue('');
       setHighlightedKey(key);
       setActiveSection(sectionForEntry({ key, value: newValue }));
+    } catch {
+      // The parent owns the rendered error message.
+    }
+  }
+
+  async function saveTemplateAgentModel(value: string) {
+    setSelectedModelKey(value);
+    const record = selectableModels.find((entry) => modelKey(entry) === value);
+    if (!record) return;
+    try {
+      await onSaveTemplateAgentModel(record.model.server_id, record.model.model_id);
+      setSavedKey('template_agent_model');
     } catch {
       // The parent owns the rendered error message.
     }
@@ -491,9 +513,10 @@ export function SettingsModal({
                         id="settings-model-picker"
                         className="field"
                         value={selectedModelKey}
-                        onChange={(event) => setSelectedModelKey(event.target.value)}
+                        onChange={(event) => void saveTemplateAgentModel(event.target.value)}
                         disabled={busy}
                       >
+                        <option value="">Select an agent model</option>
                         {selectableModels.map((record) => (
                           <option value={modelKey(record)} key={modelKey(record)}>
                             {modelLabel(record)} ({record.model.server_id})
@@ -520,7 +543,7 @@ export function SettingsModal({
                           </div>
                         </div>
                       ) : null}
-                      <p className="muted">Stored locally in this dialog until the execution feature is ready.</p>
+                      <p className="muted">Used by the Templates benchmark agent.</p>
                     </>
                   )}
                 </div>

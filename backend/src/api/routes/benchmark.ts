@@ -13,6 +13,7 @@ import { prepareBenchmarkDatasetManifest } from '../../services/benchmark-datase
 import { BenchmarkKind } from '../../services/benchmark-schemas.js';
 import { runBenchmarkInstantiation } from '../../services/benchmark-runner.js';
 import { runBenchmarkPlan } from '../../services/benchmark-plan-runner.js';
+import { runBenchmarkTemplateAgent } from '../../services/benchmark-template-agent.js';
 import {
   BenchmarkDocumentKind,
   deleteBenchmarkDocument,
@@ -102,6 +103,20 @@ export function registerBenchmarkRoutes(app: FastifyInstance): void {
       if (!sendBenchmarkError(reply, error)) {
         throw error;
       }
+    }
+  });
+
+  app.post('/benchmark/template-agent', async (request, reply) => {
+    try {
+      reply.send(await runBenchmarkTemplateAgent(request.body as Parameters<typeof runBenchmarkTemplateAgent>[0]));
+    } catch (error) {
+      if (sendBenchmarkError(reply, error)) {
+        return;
+      }
+      const statusCode = typeof (error as { statusCode?: unknown }).statusCode === 'number'
+        ? (error as { statusCode: number }).statusCode
+        : 500;
+      reply.code(statusCode).send({ error: error instanceof Error ? error.message : 'Template agent failed' });
     }
   });
 

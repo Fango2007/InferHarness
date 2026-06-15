@@ -27,7 +27,15 @@ import { listBenchmarkDocuments, type BenchmarkTestTemplateDocument } from './se
 import { InferenceServerHealth, getConnectivityConfig, getInferenceServerHealth } from './services/connectivity-api.js';
 import { InferenceServerRecord, listInferenceServers } from './services/inference-servers-api.js';
 import { listModels, type ModelRecord } from './services/models-api.js';
-import { clearDatabase, EnvEntry, listEnvEntries, setEnvEntry } from './services/system-api.js';
+import {
+  clearDatabase,
+  EnvEntry,
+  getAppSettings,
+  listEnvEntries,
+  setEnvEntry,
+  setTemplateAgentModel,
+  type AppSettings
+} from './services/system-api.js';
 
 type SystemHealthMetrics = {
   db: {
@@ -155,6 +163,7 @@ export function App() {
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsModels, setSettingsModels] = useState<ModelRecord[]>([]);
   const [settingsModelsError, setSettingsModelsError] = useState<string | null>(null);
+  const [appSettings, setAppSettings] = useState<AppSettings>({ template_agent_model: null });
   const [servers, setServers] = useState<InferenceServerRecord[]>([]);
   const [serversLoaded, setServersLoaded] = useState(false);
   const [serversError, setServersError] = useState(false);
@@ -322,8 +331,8 @@ export function App() {
     setSettingsBusy(true);
     setSettingsError(null);
     setSettingsModelsError(null);
-    Promise.allSettled([listEnvEntries(), listModels()])
-      .then(([entriesResult, modelsResult]) => {
+    Promise.allSettled([listEnvEntries(), listModels(), getAppSettings()])
+      .then(([entriesResult, modelsResult, appSettingsResult]) => {
         if (!isActive) return;
         if (entriesResult.status === 'fulfilled') {
           setSettingsEntries(entriesResult.value);
@@ -337,6 +346,12 @@ export function App() {
         } else {
           const reason = modelsResult.reason;
           setSettingsModelsError(reason instanceof Error ? reason.message : 'Unable to load models');
+        }
+        if (appSettingsResult.status === 'fulfilled') {
+          setAppSettings(appSettingsResult.value);
+        } else {
+          const reason = appSettingsResult.reason;
+          setSettingsError(reason instanceof Error ? reason.message : 'Unable to load app settings');
         }
       })
       .finally(() => {
@@ -475,6 +490,21 @@ export function App() {
     }
   }
 
+  async function handleSaveTemplateAgentModel(serverId: string, modelId: string) {
+    setSettingsBusy(true);
+    setSettingsError(null);
+    try {
+      const settings = await setTemplateAgentModel({ server_id: serverId, model_id: modelId });
+      setAppSettings(settings);
+      setSettingsMessage('Saved template agent model.');
+    } catch (err) {
+      setSettingsError(err instanceof Error ? err.message : 'Unable to update template agent model');
+      throw err;
+    } finally {
+      setSettingsBusy(false);
+    }
+  }
+
   return (
     <OnboardingProvider value={onboardingContext}>
       <div className="app-shell">
@@ -508,10 +538,12 @@ export function App() {
             message={settingsMessage}
             models={settingsModels}
             modelsError={settingsModelsError}
+            appSettings={appSettings}
             onboardingState={onboardingUiState}
             onboardingStatus={onboardingStatus}
             onClose={() => setShowSettings(false)}
             onSaveEntry={handleSaveEnvEntry}
+            onSaveTemplateAgentModel={handleSaveTemplateAgentModel}
             onClearDatabase={handleClearDb}
             onResetOnboarding={handleResetOnboarding}
             onReplayOnboarding={handleReplayOnboarding}
