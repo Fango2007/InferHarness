@@ -215,6 +215,7 @@ InferHarness supports local inference servers and native cloud provider APIs.
 | [Cerebras](https://cerebras.ai) | OpenAI-compatible | `/v1/models` | Bearer token |
 
 Cloud providers use the direct public API (not Bedrock or Vertex AI). Tokens are never stored in plaintext; use the `token_env` field to reference an environment variable.
+Benchmark runs use provider-native request payloads for non-streaming Anthropic Messages and Gemini GenerateContent tool-call tests, including provider-specific tool declarations and normalized returned tool calls.
 
 Model formats supported in the catalog include `GGUF`, `MLX`, `GPTQ`, `AWQ`, and `SafeTensors`.
 

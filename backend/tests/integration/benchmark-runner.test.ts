@@ -40,6 +40,29 @@ function benchmarkTemplate(iterations = 1, stopOnError = false): Record<string, 
   };
 }
 
+function toolBenchmarkTemplate(): Record<string, unknown> {
+  return {
+    ...benchmarkTemplate(),
+    template_id: 'runner_tool_chat_v1',
+    required_capabilities: {
+      chat_completion: true,
+      streaming: false,
+      tool_calling: true,
+      structured_output: false
+    },
+    metrics: [
+      'tool_call_count',
+      'tool_selected_correctly',
+      'tool_arguments_valid',
+      'missing_tool_call',
+      'hallucinated_tool_call',
+      'input_tokens',
+      'output_tokens'
+    ],
+    aggregations: ['mean', 'count']
+  };
+}
+
 function pairedBenchmarkTemplate(stopOnError = false): Record<string, unknown> {
   return {
     ...benchmarkTemplate(1, stopOnError),
@@ -69,10 +92,11 @@ function pairedBenchmarkTemplate(stopOnError = false): Record<string, unknown> {
 
 function seedServerAndModel(
   baseUrl: string,
-  options: { schemaFamily?: string[]; streaming?: boolean; authToken?: string } = {}
+  options: { schemaFamily?: string[]; streaming?: boolean; authToken?: string; authHeader?: string; tools?: boolean } = {}
 ): void {
   const schemaFamily = options.schemaFamily ?? ['openai-compatible'];
   const streaming = options.streaming ?? true;
+  const tools = options.tools ?? false;
   createInferenceServer({
     inference_server: {
       server_id: 'srv-runner',
@@ -94,11 +118,11 @@ function seedServerAndModel(
     },
     endpoints: { base_url: baseUrl, health_url: null, https: false },
     auth: options.authToken
-      ? { type: 'bearer', header_name: 'Authorization', token_env: null, token: options.authToken }
+      ? { type: options.authHeader ? 'custom' : 'bearer', header_name: options.authHeader ?? 'Authorization', token_env: null, token: options.authToken }
       : { type: 'none', header_name: 'Authorization', token_env: null, token: null },
     capabilities: {
       server: { streaming, models_endpoint: true },
-      generation: { text: true, json_schema_output: true, tools: false, embeddings: false },
+      generation: { text: true, json_schema_output: true, tools, embeddings: false },
       multimodal: {
         vision: { input_images: false, output_images: false },
         audio: { input_audio: false, output_audio: false }
@@ -145,7 +169,7 @@ function seedServerAndModel(
     },
     modalities: { input: ['text'], output: ['text'] },
     capabilities: {
-      generation: { text: true, json_schema_output: true, tools: false, embeddings: false },
+      generation: { text: true, json_schema_output: true, tools, embeddings: false },
       multimodal: { vision: false, audio: false },
       reasoning: { supported: false, explicit_tokens: false },
       use_case: { thinking: false, coding: false, instruct: true, mixture_of_experts: false }
@@ -169,6 +193,47 @@ function seedServerAndModel(
     discovery: { retrieved_at: '2026-06-05T10:00:00.000Z', source: 'manual' },
     raw: {}
   });
+}
+
+function toolDataset(): Record<string, unknown> {
+  return {
+    dataset_id: 'embedded-tool-runner',
+    source: { source_type: 'inline', format: 'json' },
+    snapshot_policy: 'embedded',
+    items: [
+      {
+        id: 'item-1',
+        system_prompt: 'Use tools when they are the precise way to answer.',
+        prompt: 'What is the weather in Paris in celsius?',
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'get_weather',
+              description: 'Get current weather for a city.',
+              parameters: {
+                type: 'object',
+                properties: {
+                  city: { type: 'string' },
+                  unit: { type: 'string', enum: ['celsius', 'fahrenheit'] }
+                },
+                required: ['city', 'unit']
+              }
+            }
+          }
+        ],
+        tool_choice: 'get_weather',
+        expected_tool_calls: [
+          {
+            function: {
+              name: 'get_weather'
+            },
+            arguments: { city: 'Paris', unit: 'celsius' }
+          }
+        ]
+      }
+    ]
+  };
 }
 
 function installMockInferenceFetch(status: number | number[] = 200): { baseUrl: string; requests: unknown[]; headers: Record<string, string>[] } {
@@ -285,6 +350,78 @@ function installMockOllamaStreamFetch(): { baseUrl: string; requests: unknown[] 
   return { baseUrl: 'http://mock.local', requests };
 }
 
+function installMockAnthropicFetch(): { baseUrl: string; requests: unknown[]; headers: Record<string, string>[] } {
+  const requests: unknown[] = [];
+  const headers: Record<string, string>[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url !== 'http://mock.local/v1/messages') {
+      return new Response('', { status: 404 });
+    }
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
+    requests.push(body);
+    headers.push(Object.fromEntries(new Headers(init?.headers).entries()));
+    return new Response(JSON.stringify({
+      id: 'msg_1',
+      type: 'message',
+      role: 'assistant',
+      content: [
+        {
+          type: 'tool_use',
+          id: 'toolu_1',
+          name: 'get_weather',
+          input: { city: 'Paris', unit: 'celsius' }
+        }
+      ],
+      usage: { input_tokens: 21, output_tokens: 9 }
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }));
+  return { baseUrl: 'http://mock.local', requests, headers };
+}
+
+function installMockGeminiFetch(): { baseUrl: string; requests: unknown[]; headers: Record<string, string>[] } {
+  const requests: unknown[] = [];
+  const headers: Record<string, string>[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url !== 'http://mock.local/v1beta/models/mock-chat:generateContent') {
+      return new Response('', { status: 404 });
+    }
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
+    requests.push(body);
+    headers.push(Object.fromEntries(new Headers(init?.headers).entries()));
+    return new Response(JSON.stringify({
+      candidates: [
+        {
+          content: {
+            role: 'model',
+            parts: [
+              {
+                functionCall: {
+                  name: 'get_weather',
+                  args: { city: 'Paris', unit: 'celsius' }
+                }
+              }
+            ]
+          }
+        }
+      ],
+      usageMetadata: {
+        promptTokenCount: 19,
+        candidatesTokenCount: 7,
+        totalTokenCount: 26
+      }
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }));
+  return { baseUrl: 'http://mock.local', requests, headers };
+}
+
 function runtimeProfile(executionPolicy: Record<string, unknown>): Record<string, unknown> {
   return {
     kind: 'runtime_profile',
@@ -390,7 +527,7 @@ describe('benchmark runner API', () => {
       url: `/benchmark/instantiations/${instantiation.id}/run`,
       headers: AUTH_HEADERS
     });
-    expect(runResponse.statusCode).toBe(201);
+    expect(runResponse.statusCode, JSON.stringify(runResponse.json())).toBe(201);
     const result = runResponse.json();
     expect(result.instantiation_id).toBe(instantiation.id);
     expect(result.document.status).toBe('completed');
@@ -444,7 +581,7 @@ describe('benchmark runner API', () => {
       url: `/benchmark/instantiations/${createResponse.json().id}/run`,
       headers: AUTH_HEADERS
     });
-    expect(runResponse.statusCode).toBe(201);
+    expect(runResponse.statusCode, JSON.stringify(runResponse.json())).toBe(201);
     const result = runResponse.json();
     expect(result.document.status).toBe('completed');
     expect(mockServer.requests).toHaveLength(4);
@@ -492,11 +629,176 @@ describe('benchmark runner API', () => {
       url: `/benchmark/instantiations/${createResponse.json().id}/run`,
       headers: AUTH_HEADERS
     });
-    expect(runResponse.statusCode).toBe(201);
+    expect(runResponse.statusCode, JSON.stringify(runResponse.json())).toBe(201);
     expect(mockServer.headers?.[0]).toMatchObject({
       authorization: 'Bearer mistral-secret',
       'content-type': 'application/json'
     });
+    await app.close();
+  });
+
+  it('executes Anthropic Messages tool-call benchmarks with native payload and normalization', async () => {
+    mockServer = installMockAnthropicFetch();
+    const app = createServer();
+    seedServerAndModel(mockServer.baseUrl, {
+      schemaFamily: ['anthropic'],
+      streaming: true,
+      authToken: 'anthropic-secret',
+      authHeader: 'x-api-key',
+      tools: true
+    });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/benchmark/instantiations',
+      headers: AUTH_HEADERS,
+      payload: {
+        template: toolBenchmarkTemplate(),
+        server_id: 'srv-runner',
+        model_id: 'mock-chat',
+        runtime_profile: runtimeProfile({ timeout_ms: 5000 }),
+        dataset: toolDataset()
+      }
+    });
+    expect(createResponse.statusCode, JSON.stringify(createResponse.json())).toBe(201);
+    expect(createResponse.json().document.operation_spec.protocol).toBe('anthropic_messages');
+
+    const runResponse = await app.inject({
+      method: 'POST',
+      url: `/benchmark/instantiations/${createResponse.json().id}/run`,
+      headers: AUTH_HEADERS
+    });
+    expect(runResponse.statusCode, JSON.stringify(runResponse.json())).toBe(201);
+    const result = runResponse.json();
+    expect(result.document.status).toBe('completed');
+    expect(mockServer.headers?.[0]).toMatchObject({
+      'anthropic-version': '2023-06-01',
+      'x-api-key': 'anthropic-secret'
+    });
+    const request = mockServer.requests[0] as Record<string, unknown>;
+    expect(request).toMatchObject({
+      model: 'mock-chat',
+      system: 'Use tools when they are the precise way to answer.',
+      max_tokens: 32,
+      tool_choice: { type: 'tool', name: 'get_weather' }
+    });
+    expect(request.messages).toEqual([{ role: 'user', content: 'What is the weather in Paris in celsius?' }]);
+    expect(request.tools).toEqual([
+      {
+        name: 'get_weather',
+        description: 'Get current weather for a city.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            city: { type: 'string' },
+            unit: { type: 'string', enum: ['celsius', 'fahrenheit'] }
+          },
+          required: ['city', 'unit']
+        }
+      }
+    ]);
+    expect(result.document.normalized_responses[0].tool_calls[0]).toMatchObject({
+      id: 'toolu_1',
+      type: 'function',
+      function: {
+        name: 'get_weather',
+        arguments: { city: 'Paris', unit: 'celsius' }
+      }
+    });
+    expect(result.document.metric_results[0].tool_call_count).toBe(1);
+    expect(result.document.metric_results[0].tool_selected_correctly).toBe(true);
+    expect(result.document.metric_results[0].tool_arguments_valid).toBe(true);
+    expect(result.document.metric_results[0].missing_tool_call).toBe(false);
+    expect(result.document.metric_results[0].hallucinated_tool_call).toBe(false);
+    expect(result.document.metric_results[0].input_tokens).toBe(21);
+    expect(result.document.metric_results[0].output_tokens).toBe(9);
+    await app.close();
+  });
+
+  it('executes Gemini GenerateContent tool-call benchmarks with native payload and normalization', async () => {
+    mockServer = installMockGeminiFetch();
+    const app = createServer();
+    seedServerAndModel(mockServer.baseUrl, {
+      schemaFamily: ['gemini'],
+      streaming: true,
+      authToken: 'gemini-secret',
+      authHeader: 'x-goog-api-key',
+      tools: true
+    });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/benchmark/instantiations',
+      headers: AUTH_HEADERS,
+      payload: {
+        template: toolBenchmarkTemplate(),
+        server_id: 'srv-runner',
+        model_id: 'mock-chat',
+        runtime_profile: runtimeProfile({ timeout_ms: 5000 }),
+        dataset: toolDataset()
+      }
+    });
+    expect(createResponse.statusCode, JSON.stringify(createResponse.json())).toBe(201);
+    expect(createResponse.json().document.operation_spec.protocol).toBe('gemini_generate_content');
+
+    const runResponse = await app.inject({
+      method: 'POST',
+      url: `/benchmark/instantiations/${createResponse.json().id}/run`,
+      headers: AUTH_HEADERS
+    });
+    expect(runResponse.statusCode, JSON.stringify(runResponse.json())).toBe(201);
+    const result = runResponse.json();
+    expect(result.document.status).toBe('completed');
+    expect(mockServer.headers?.[0]).toMatchObject({
+      'x-goog-api-key': 'gemini-secret'
+    });
+    const request = mockServer.requests[0] as Record<string, unknown>;
+    expect(request).toMatchObject({
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: 'What is the weather in Paris in celsius?' }]
+        }
+      ],
+      systemInstruction: {
+        parts: [{ text: 'Use tools when they are the precise way to answer.' }]
+      },
+      generationConfig: { temperature: 0.1, maxOutputTokens: 32 },
+      toolConfig: {
+        functionCallingConfig: { mode: 'ANY', allowedFunctionNames: ['get_weather'] }
+      }
+    });
+    expect(request.tools).toEqual([
+      {
+        functionDeclarations: [
+          {
+            name: 'get_weather',
+            description: 'Get current weather for a city.',
+            parameters: {
+              type: 'object',
+              properties: {
+                city: { type: 'string' },
+                unit: { type: 'string', enum: ['celsius', 'fahrenheit'] }
+              },
+              required: ['city', 'unit']
+            }
+          }
+        ]
+      }
+    ]);
+    expect(result.document.normalized_responses[0].tool_calls[0]).toMatchObject({
+      type: 'function',
+      function: {
+        name: 'get_weather',
+        arguments: { city: 'Paris', unit: 'celsius' }
+      }
+    });
+    expect(result.document.metric_results[0].tool_call_count).toBe(1);
+    expect(result.document.metric_results[0].tool_selected_correctly).toBe(true);
+    expect(result.document.metric_results[0].tool_arguments_valid).toBe(true);
+    expect(result.document.metric_results[0].input_tokens).toBe(19);
+    expect(result.document.metric_results[0].output_tokens).toBe(7);
+    expect(result.document.metric_results[0].total_tokens).toBe(26);
     await app.close();
   });
 
