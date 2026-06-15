@@ -8,6 +8,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Added
 
+- **Benchmark template agent** — Templates now includes a review-first benchmark-template agent that uses a database-persisted Settings model, challenges underspecified requests, loads its prompt from Markdown with the full `test_template` schema and example injected, validates generated drafts server-side, and applies drafts to the existing editor without auto-saving.
 - **README project badges** — the root README now shows version, Node.js, Python, CI, and MIT license badges.
 
 ## [0.7.0] - 2026-06-14
