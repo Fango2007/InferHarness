@@ -55,7 +55,6 @@ CLAUDE.md
 .specify/
 .agents/
 .codex/
-AGENTS.md
 
 # Architecture cache
 backend/data/model/
