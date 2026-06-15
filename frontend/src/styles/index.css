@@ -1769,10 +1769,18 @@ button.is-pending::after {
 
 .run-template-picker {
   margin: 0;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
 }
 
 .run-template-picker select {
-  min-height: 96px;
+  min-height: 36px;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: none;
 }
 
 .run-prompt-field {

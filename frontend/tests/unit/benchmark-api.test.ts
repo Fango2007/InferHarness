@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  buildPersistedBenchmarkPlanDocument,
   buildBenchmarkSmokePayload,
   createBenchmarkInstantiation,
   deleteBenchmarkDocument,
+  getBenchmarkInstantiation,
   listBenchmarkDocuments,
   prepareBenchmarkDatasetManifest,
+  runPersistedBenchmarkPlan,
   runBenchmarkInstantiation,
+  saveBenchmarkPlan,
   saveBenchmarkDocument,
   starterBenchmarkTemplateDocument
 } from '../../src/services/benchmark-api.js';
@@ -159,6 +163,36 @@ describe('benchmark API helpers', () => {
     expect(manifest).toEqual({ dataset_id: 'codegen-small', item_count: 2 });
   });
 
+  it('prepares inline dataset manifests through the benchmark API', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ manifest: { dataset_id: 'run-dataset-1', snapshot_policy: 'embedded', item_count: 1 } })
+    } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const manifest = await prepareBenchmarkDatasetManifest({
+      dataset_id: 'run-dataset-1',
+      source: {
+        source_type: 'inline',
+        format: 'json'
+      },
+      snapshot_policy: 'embedded',
+      items: [{ id: 'item-1', prompt: 'Say OK' }]
+    });
+
+    expect((fetchMock.mock.calls[0][1] as RequestInit).body).toBe(JSON.stringify({
+      dataset_id: 'run-dataset-1',
+      source: {
+        source_type: 'inline',
+        format: 'json'
+      },
+      snapshot_policy: 'embedded',
+      items: [{ id: 'item-1', prompt: 'Say OK' }]
+    }));
+    expect(manifest).toEqual({ dataset_id: 'run-dataset-1', snapshot_policy: 'embedded', item_count: 1 });
+  });
+
   it('posts benchmark instantiation and run requests to the existing backend routes', async () => {
     const fetchMock = vi
       .fn()
@@ -228,5 +262,56 @@ describe('benchmark API helpers', () => {
     expect((fetchMock.mock.calls[1][1] as RequestInit).body).toBe(JSON.stringify(document));
     expect(fetchMock.mock.calls[2][0]).toBe('http://localhost:8080/benchmark/documents/test_template/ui-template');
     expect((fetchMock.mock.calls[2][1] as RequestInit).method).toBe('DELETE');
+  });
+
+  it('builds and runs persisted benchmark plan documents', async () => {
+    const document = buildPersistedBenchmarkPlanDocument({
+      planId: 'run-plan-1',
+      templateRef: 'run-template-1',
+      datasetRef: 'run-dataset-1',
+      runtimeProfileRef: 'run-runtime-1',
+      targets: [
+        { inference_server_id: 'srv-1', model_id: 'model-a' },
+        { inference_server_id: 'srv-1', model_id: 'model-b' }
+      ]
+    });
+    expect(document).toMatchObject({
+      kind: 'benchmark_plan',
+      schema_version: 'benchmark_plan_v1',
+      plan_id: 'run-plan-1',
+      template_ref: 'run-template-1',
+      dataset_ref: 'run-dataset-1',
+      runtime_profile_ref: 'run-runtime-1',
+      model_profile_refs: ['srv-1:model-a', 'srv-1:model-b'],
+      execution: { mode: 'sequential', continue_on_model_error: true, concurrency: 1 }
+    });
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: async () => ({ id: 'run-plan-1', kind: 'benchmark_plan', document })
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: async () => ({ kind: 'benchmark_plan_result', plan_id: 'run-plan-1', run_results: [] })
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ id: 'bti-1', document: {} })
+      } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await saveBenchmarkPlan(document);
+    await runPersistedBenchmarkPlan('run-plan-1');
+    await getBenchmarkInstantiation('bti-1');
+
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/benchmark/plans');
+    expect((fetchMock.mock.calls[0][1] as RequestInit).body).toBe(JSON.stringify(document));
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:8080/benchmark/plans/run-plan-1/run');
+    expect(fetchMock.mock.calls[2][0]).toBe('http://localhost:8080/benchmark/instantiations/bti-1');
   });
 });
