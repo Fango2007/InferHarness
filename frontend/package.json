@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.19 <26"
+    "node": "25.x"
   },
   "scripts": {
     "build": "vite build",
