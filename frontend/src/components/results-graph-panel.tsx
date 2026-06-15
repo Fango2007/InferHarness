@@ -10,6 +10,8 @@ import { ResultsPanel } from '../services/results-panels.js';
 
 interface ResultsGraphPanelProps {
   panel: ResultsPanel;
+  focusedLabel?: string | null;
+  embedded?: boolean;
 }
 
 function inferUnit(metricKey: string, panel: ResultsPanel): string {
@@ -59,7 +61,7 @@ function normalizeSeriesData(
   });
 }
 
-export function ResultsGraphPanel({ panel }: ResultsGraphPanelProps) {
+export function ResultsGraphPanel({ panel, focusedLabel = null, embedded = false }: ResultsGraphPanelProps) {
   const series = useMemo(() => panel.series ?? [], [panel.series]);
   const metricKey = panel.metric_keys[0] ?? panel.title;
   const unit = inferUnit(metricKey, panel);
@@ -136,13 +138,22 @@ export function ResultsGraphPanel({ panel }: ResultsGraphPanelProps) {
         symbolSize: 8,
         connectNulls: false,
         emphasis: { focus: 'series' },
+        lineStyle: {
+          opacity: focusedLabel && entry.name !== focusedLabel ? 0.28 : 1,
+          width: focusedLabel && entry.name === focusedLabel ? 3 : 2
+        },
+        itemStyle: {
+          opacity: focusedLabel && entry.name !== focusedLabel ? 0.32 : 1
+        },
         data: entry.data
       }))
     };
-  }, [logScale, metricKey, series, unit]);
+  }, [focusedLabel, logScale, metricKey, series, unit]);
+
+  const Wrapper = embedded ? 'div' : 'article';
 
   return (
-    <article className="card dashboard-panel" data-panel-type="graph">
+    <Wrapper className={embedded ? 'dashboard-panel dashboard-panel--embedded' : 'card dashboard-panel'} data-panel-type="graph">
       <header>
         <h3>{panel.title}</h3>
         <p className="muted">
@@ -161,6 +172,6 @@ export function ResultsGraphPanel({ panel }: ResultsGraphPanelProps) {
           <ReactECharts option={option} className="results-chart" notMerge lazyUpdate />
         </>
       )}
-    </article>
+    </Wrapper>
   );
 }

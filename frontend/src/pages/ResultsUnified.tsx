@@ -3,8 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { MergedPageHeader } from '../components/MergedPageHeader.js';
 import { FirstRunCompleteHero } from '../components/Onboarding.js';
-import { ResultsGraphPanel } from '../components/results-graph-panel.js';
-import { ResultsPerformanceComparisonPanel } from '../components/results-performance-comparison-panel.js';
+import { ResultsAdaptiveChartPanel } from '../components/results-adaptive-chart-panel.js';
 import { normalizeResultsTab } from '../navigation.js';
 import { useOnboardingContext } from '../onboarding-context.js';
 import { getLeaderboard, type LeaderboardEntry } from '../services/leaderboard-api.js';
@@ -21,7 +20,6 @@ import {
   type ResultsStatus,
   type ResultsTab
 } from '../services/results-view-api.js';
-import type { ResultsPanel } from '../services/results-panels.js';
 import { toLocalInputValue } from '../services/results-panels.js';
 import '../styles/dashboard-results.css';
 
@@ -179,23 +177,6 @@ function templatesForFunnel(options: ResultsFilterOptions | null, serverIds: str
     optionMatchesSelected(serverIds, option.server_ids) &&
     optionMatchesSelected(modelNames, option.model_names)
   ));
-}
-
-function seriesPanel(title: string, metric: string, series: Array<{ label: string; points: Array<{ x: string; y: number | null }> }>): ResultsPanel {
-  return {
-    panel_id: `results:${metric}`,
-    presentation_type: 'performance_graph',
-    title,
-    runtime_key: 'selected',
-    server_version: null,
-    model_id: 'selected',
-    test_ids: [],
-    metric_keys: [metric],
-    unit_keys: metric === 'pass_rate' ? ['%'] : ['ms'],
-    grouped: true,
-    series,
-    missing_fields: []
-  };
 }
 
 function ResultsFilterRail({
@@ -632,9 +613,19 @@ function FilterCheckGroup({
   );
 }
 
-function DashboardTab({ rows, dashboard, onOpenRun }: { rows: ResultsHistoryRow[]; dashboard: Awaited<ReturnType<typeof queryResultsView>>['dashboard']; onOpenRun: (id: string) => void }) {
+function DashboardTab({
+  rows,
+  dashboard,
+  filters,
+  onOpenRun
+}: {
+  rows: ResultsHistoryRow[];
+  dashboard: Awaited<ReturnType<typeof queryResultsView>>['dashboard'];
+  filters: ResultsFilterState;
+  onOpenRun: (id: string) => void;
+}) {
   const cards = dashboard.scorecards;
-  const hasPerformanceComparison = (dashboard.performance_comparison?.groups.length ?? 0) > 0;
+  const [focusedRun, setFocusedRun] = useState<ResultsHistoryRow | null>(null);
   return (
     <div className="results-main-stack">
       <div className="results-scorecards">
@@ -643,14 +634,7 @@ function DashboardTab({ rows, dashboard, onOpenRun }: { rows: ResultsHistoryRow[
         <div className="results-scorecard"><span>Median latency</span><strong>{formatNumber(cards.median_latency_ms, ' ms')}</strong></div>
         <div className="results-scorecard"><span>Median cost</span><strong>{cards.median_cost == null ? 'N/A' : `$${cards.median_cost.toFixed(6)}`}</strong></div>
       </div>
-      {hasPerformanceComparison ? (
-        <ResultsPerformanceComparisonPanel comparison={dashboard.performance_comparison} />
-      ) : (
-        <>
-          <ResultsGraphPanel panel={seriesPanel('Pass-rate over time', 'pass_rate', dashboard.pass_rate_series)} />
-          <ResultsGraphPanel panel={seriesPanel('Latency distribution', 'latency_ms', dashboard.latency_series)} />
-        </>
-      )}
+      <ResultsAdaptiveChartPanel dashboard={dashboard} filters={filters} focusedRun={focusedRun} />
       <section className="results-panel">
         <header className="results-panel__header">
           <h2>Recent runs</h2>
@@ -659,7 +643,16 @@ function DashboardTab({ rows, dashboard, onOpenRun }: { rows: ResultsHistoryRow[
         <div className="results-mini-list">
           {dashboard.recent_runs.length === 0 ? <p className="muted">No runs match the current filters.</p> : null}
           {dashboard.recent_runs.map((run) => (
-            <button key={run.run_id} type="button" className="results-run-row" onClick={() => onOpenRun(run.run_id)}>
+            <button
+              key={run.run_id}
+              type="button"
+              className="results-run-row"
+              onBlur={() => setFocusedRun(null)}
+              onClick={() => onOpenRun(run.run_id)}
+              onFocus={() => setFocusedRun(run)}
+              onMouseEnter={() => setFocusedRun(run)}
+              onMouseLeave={() => setFocusedRun(null)}
+            >
               <StatusPill status={run.status} />
               <span>{run.template_label}</span>
               <strong>{run.model_name}</strong>
@@ -1207,7 +1200,7 @@ export function ResultsUnified({ runCount }: { runCount: number | null }) {
           {showDashboardEmpty ? (
             <DashboardEmptyState onExpandRange={() => expandRange(90)} onGoToRun={() => navigate('/run')} />
           ) : data && activeTab === 'dashboard' ? (
-            <DashboardTab rows={data.history.rows} dashboard={data.dashboard} onOpenRun={openRun} />
+            <DashboardTab rows={data.history.rows} dashboard={data.dashboard} filters={filters} onOpenRun={openRun} />
           ) : null}
           {data && activeTab === 'leaderboard' ? (
             <LeaderboardTab

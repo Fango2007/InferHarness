@@ -13,6 +13,7 @@ const ReactECharts = _ReactECharts as unknown as ComponentType<EChartsReactProps
 
 interface ResultsPerformanceComparisonPanelProps {
   comparison: ResultsPerformanceComparisonView;
+  embedded?: boolean;
 }
 
 function formatValue(value: number | null | undefined, unit = ''): string {
@@ -27,7 +28,7 @@ function groupLabel(group: ResultsPerformanceComparisonView['groups'][number]): 
   return `${group.server_name} / ${group.model_name}`;
 }
 
-export function ResultsPerformanceComparisonPanel({ comparison }: ResultsPerformanceComparisonPanelProps) {
+export function ResultsPerformanceComparisonPanel({ comparison, embedded = false }: ResultsPerformanceComparisonPanelProps) {
   const metricOptions = comparison.metrics.filter((metric) =>
     comparison.groups.some((group) => group.metrics[metric.metric_key])
   );
@@ -112,8 +113,10 @@ export function ResultsPerformanceComparisonPanel({ comparison }: ResultsPerform
     return null;
   }
 
+  const Wrapper = embedded ? 'div' : 'section';
+
   return (
-    <section className="results-panel results-comparison-panel" data-panel-type="performance-comparison">
+    <Wrapper className={embedded ? 'results-comparison-panel' : 'results-panel results-comparison-panel'} data-panel-type="performance-comparison">
       <header className="results-panel__header">
         <div>
           <h2>Cold-start comparison</h2>
@@ -166,6 +169,6 @@ export function ResultsPerformanceComparisonPanel({ comparison }: ResultsPerform
         </table>
       </div>
       <ReactECharts option={option} className="results-comparison-chart" notMerge lazyUpdate />
-    </section>
+    </Wrapper>
   );
 }
