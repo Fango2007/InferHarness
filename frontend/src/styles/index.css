@@ -3482,6 +3482,15 @@ pre {
   overflow: auto;
 }
 
+.template-agent-modal .template-agent-message pre,
+.template-agent-modal .template-agent-draft pre {
+  color: var(--ink-9);
+}
+
+.template-agent-modal .template-agent-message.is-user pre {
+  color: var(--paper-1);
+}
+
 pre.code-block {
   background: var(--bg-pre-light);
   color: var(--ink-9);
