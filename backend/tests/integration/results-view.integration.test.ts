@@ -191,6 +191,43 @@ describe('results-view routes', () => {
     });
   });
 
+  it('returns model summaries for all filtered rows, independent of history pagination', async () => {
+    const app = createServer();
+    seedRun({ runId: 'run-a1', model: 'model-a', verdict: 'pass', startedAt: '2026-05-01T10:00:00.000Z', latency: 100 });
+    seedRun({ runId: 'run-a2', model: 'model-a', verdict: 'fail', startedAt: '2026-05-01T11:00:00.000Z', latency: 200 });
+    seedRun({ runId: 'run-b1', model: 'model-b', verdict: 'pass', startedAt: '2026-05-01T12:00:00.000Z', latency: 80 });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/results-view/query',
+      headers: AUTH_HEADERS,
+      payload: {
+        date_from: '2026-05-01T00:00:00.000Z',
+        date_to: '2026-05-02T00:00:00.000Z',
+        page_size: 1
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().history.rows).toHaveLength(1);
+    expect(response.json().dashboard.model_summary).toEqual([
+      {
+        model_name: 'model-b',
+        run_count: 1,
+        pass_rate: 100,
+        median_latency_ms: 80,
+        median_cost: 0.001
+      },
+      {
+        model_name: 'model-a',
+        run_count: 2,
+        pass_rate: 50,
+        median_latency_ms: 150,
+        median_cost: 0.001
+      }
+    ]);
+  });
+
   it('returns cold-start sample comparisons grouped by server, model, and template', async () => {
     const app = createServer();
     seedServer('srv-other', 'Other Server');

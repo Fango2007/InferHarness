@@ -89,6 +89,12 @@ function resultsViewPayload(empty = false) {
       latency_series: rows.length
         ? [{ label: 'mistral:latest', points: [{ x: '2026-02-08T00:00:00.000Z', y: 80 }] }]
         : [],
+      model_summary: rows.length
+        ? [
+            { model_name: 'mistral:latest', run_count: 1, pass_rate: 100, median_latency_ms: 80, median_cost: 0.001 },
+            { model_name: 'qwen:latest', run_count: 1, pass_rate: 100, median_latency_ms: 120, median_cost: 0.002 }
+          ]
+        : [],
       performance_comparison: {
         default_metric: 'cold_penalty_ms',
         metrics: [
@@ -268,14 +274,25 @@ test('merged Results dashboard filter and render flow', async ({ page }) => {
 
   await expect(page.getByText('Total runs')).toBeVisible();
   await expect(page.getByText('Pass rate')).toBeVisible();
+  await expect(page.locator('[data-panel-type="adaptive-chart"]')).toBeVisible();
+  await expect(page.getByLabel('View')).toHaveValue('auto');
+  await expect(page.getByText('Auto selected: Cold-start comparison')).toBeVisible();
   await expect(page.locator('[data-panel-type="performance-comparison"]')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Cold-start comparison' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'mistral:latest' })).toBeVisible();
   await expect(page.getByRole('cell', { name: '80.00 ms' }).first()).toBeVisible();
+  await page.getByLabel('View').selectOption('latency-histogram');
+  await expect(page.locator('[data-panel-type="adaptive-chart"] p.muted')).toHaveText('Latency histogram');
+  await page.getByLabel('View').selectOption('model-summary');
+  await expect(page.getByRole('columnheader', { name: 'Runs' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: '1' }).first()).toBeVisible();
+  await page.getByLabel('View').selectOption('auto');
   await expect(page.getByRole('heading', { name: 'Recent runs' })).toBeVisible();
 
   const recentRun = page.locator('.results-run-row').filter({ hasText: 'latency-benchmark' });
   await expect(recentRun).toBeVisible();
+  await recentRun.hover();
+  await expect(page.getByText('Auto selected: Latency trend')).toBeVisible();
   await recentRun.click();
   await expect(page.getByText('Run detail')).toBeVisible();
   await expect(page.getByText('run-dashboard-1')).toBeVisible();

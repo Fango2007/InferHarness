@@ -95,6 +95,13 @@ export interface ResultsDashboardView {
   };
   pass_rate_series: Array<{ label: string; points: Array<{ x: string; y: number | null }> }>;
   latency_series: Array<{ label: string; points: Array<{ x: string; y: number | null }> }>;
+  model_summary: Array<{
+    model_name: string;
+    run_count: number;
+    pass_rate: number | null;
+    median_latency_ms: number | null;
+    median_cost: number | null;
+  }>;
   performance_comparison: ResultsPerformanceComparisonView;
   recent_runs: ResultsHistoryRow[];
 }
@@ -691,6 +698,27 @@ function dayBucket(iso: string): string {
   return iso.slice(0, 10);
 }
 
+function modelSummary(rows: ResultsHistoryRow[]): ResultsDashboardView['model_summary'] {
+  const byModel = new Map<string, ResultsHistoryRow[]>();
+  for (const row of rows) {
+    const modelRows = byModel.get(row.model_name) ?? [];
+    modelRows.push(row);
+    byModel.set(row.model_name, modelRows);
+  }
+  return Array.from(byModel.entries())
+    .map(([modelName, modelRows]) => {
+      const passCount = modelRows.filter((row) => row.status === 'pass').length;
+      return {
+        model_name: modelName,
+        run_count: modelRows.length,
+        pass_rate: modelRows.length > 0 ? (passCount / modelRows.length) * 100 : null,
+        median_latency_ms: median(modelRows.map((row) => row.latency_ms)),
+        median_cost: median(modelRows.map((row) => row.cost))
+      };
+    })
+    .sort((a, b) => (b.pass_rate ?? -1) - (a.pass_rate ?? -1) || (a.median_latency_ms ?? Number.MAX_SAFE_INTEGER) - (b.median_latency_ms ?? Number.MAX_SAFE_INTEGER));
+}
+
 function dashboard(rows: ResultsHistoryRow[]): ResultsDashboardView {
   const total = rows.length;
   const passRate = total > 0 ? (rows.filter((row) => row.status === 'pass').length / total) * 100 : null;
@@ -727,6 +755,7 @@ function dashboard(rows: ResultsHistoryRow[]): ResultsDashboardView {
     },
     pass_rate_series: Array.from(passSeries.entries()).map(([label, points]) => ({ label, points: points.sort((a, b) => a.x.localeCompare(b.x)) })),
     latency_series: Array.from(latencySeries.entries()).map(([label, points]) => ({ label, points: points.sort((a, b) => a.x.localeCompare(b.x)) })),
+    model_summary: modelSummary(rows),
     performance_comparison: emptyPerformanceComparison(),
     recent_runs: rows.slice().sort((a, b) => b.started_at.localeCompare(a.started_at)).slice(0, 8)
   };

@@ -246,7 +246,7 @@ Model formats supported in the catalog include `GGUF`, `MLX`, `GPTQ`, `AWQ`, and
   <tr>
     <td align="center">
       <img src=".github/assets/5-Results-page.png" width="100%" alt="Results" /><br>
-      <b>Results</b> · Dashboard, history, and leaderboard
+      <b>Results</b> · Adaptive performance charts, history, and leaderboard
     </td>
     <td align="center">
       <img src=".github/assets/Evaluate-page.png" width="100%" alt="Evaluate" /><br>

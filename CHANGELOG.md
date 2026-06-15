@@ -8,11 +8,13 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Added
 
+- **Adaptive Results performance views** — the Results dashboard now has an Auto performance view with manual modes for cold-start comparison, latency trend, pass-rate trend, latency histogram, and model-summary table comparisons backed by filtered model aggregates.
 - **Project workflow guardrails** — `AGENTS.md` now combines the main branch workflow, Node 25 rules, challenge-and-skill behavior instructions, and a static-data rule that keeps prompts, schemas, fixtures, and examples out of application code.
 - **Benchmark template agent** — Templates now includes a review-first benchmark-template agent that uses a database-persisted Settings model, challenges underspecified requests, loads its prompt from Markdown with the full `test_template` schema and example injected, validates generated drafts server-side, and applies drafts to the existing editor without auto-saving.
 
 ### Fixed
 
+- **Benchmark foundation stress test timeout** — the indexed lookup stress test now has an explicit timeout that matches its own 10-second performance budget, avoiding Vitest preemption on slower CI runners.
 - Restored tracked `AGENTS.md` project workflow rules while keeping the Node 25.x native-module guidance, restored `CLAUDE.md` tracking, and aligned Claude-specific project guidance with the enforced Node 25.x runtime.
 - **Template agent settings rate limiting** — `/system/settings` and `/system/settings/template-agent-model` now use an in-memory per-client rate limit before reading or updating app settings.
 

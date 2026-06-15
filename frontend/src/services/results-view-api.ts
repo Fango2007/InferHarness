@@ -48,6 +48,13 @@ export interface ResultsDashboardView {
   };
   pass_rate_series: Array<{ label: string; points: Array<{ x: string; y: number | null }> }>;
   latency_series: Array<{ label: string; points: Array<{ x: string; y: number | null }> }>;
+  model_summary: Array<{
+    model_name: string;
+    run_count: number;
+    pass_rate: number | null;
+    median_latency_ms: number | null;
+    median_cost: number | null;
+  }>;
   performance_comparison: ResultsPerformanceComparisonView;
   recent_runs: ResultsHistoryRow[];
 }
