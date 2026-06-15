@@ -16,7 +16,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Changed
 
-- **Human-readable agent workflow guidance** — `AGENTS.md` now groups workflow rules into clearer sections, directs agents to create a focused branch without pausing for confirmation, and asks agents to explicitly request commit approval with a suggested message and details.
+- **Human-readable agent workflow guidance** — `AGENTS.md` now groups workflow rules into clearer sections, documents parallel worktree expectations, directs agents to create a focused branch without pausing for confirmation, and asks agents to explicitly request commit approval with a suggested message and details.
 
 ### Fixed
 

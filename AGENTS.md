@@ -17,6 +17,14 @@
   - a concise suggested commit message
   - short commit details covering the files and behavior changed
 
+## Parallel Worktrees
+
+- This repo may use multiple git worktrees in parallel for separate features or agents.
+- Treat each worktree as isolated. Do not assume changes from another worktree are available locally.
+- Before asking for review or merge, commit and push the current branch.
+- After a branch is merged, resync any related worktrees from the updated base branch before continuing dependent work.
+- Re-check the Node.js runtime before installs, rebuilds, backend startup, or tests in each worktree.
+
 ## Static Data and Reference Content
 
 - Do not hardcode static data in application code.
