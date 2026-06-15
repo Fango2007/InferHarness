@@ -51,7 +51,6 @@ Thumbs.db
 # Coding assistant
 .copilot/
 .claude/
-CLAUDE.md
 .specify/
 .agents/
 .codex/

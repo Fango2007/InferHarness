@@ -6,6 +6,10 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+### Fixed
+
+- Restored tracked `AGENTS.md` project workflow rules while keeping the Node 25.x native-module guidance, and allowed `CLAUDE.md` to be tracked when needed.
+
 ## [0.8.0] - 2026-06-14
 
 ### Added

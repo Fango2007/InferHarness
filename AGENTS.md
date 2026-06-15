@@ -1,3 +1,15 @@
+## Project Workflow Rules
+
+- Start every new change on a new git branch before editing files. If the user has not already confirmed or created a branch for the change, ask before beginning implementation.
+- Update `CHANGELOG.md` in the same change whenever code, tests, docs, configuration, or user-facing behavior is modified.
+- Check whether the root `README.md` remains aligned with the purpose and user-visible behavior of each change; update it in the same change when it would otherwise become stale or misleading.
+- At the end of each completed change, suggest a concise commit message and a short commit-details summary covering the files and behavior changed.
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+<!-- SPECKIT END -->
+
 ## Node.js
 
 InferHarness is pinned to Node 25.x. Before running `npm install`, `npm rebuild`,
