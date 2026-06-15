@@ -226,3 +226,9 @@ CREATE TABLE IF NOT EXISTS benchmark_documents (
   updated_at     TEXT NOT NULL,
   PRIMARY KEY (kind, id)
 );
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);

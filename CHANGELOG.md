@@ -14,14 +14,13 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Added
 
-- **Real first-run onboarding** — added a frontend-only guided setup path that uses existing server, model, benchmark document, and run/result APIs to help users create their first production-ready server, model selection, starter benchmark template, and successful run without demo data or new backend endpoints.
-- **Automatic local API token bootstrap** — first local startup now creates or syncs `INFERHARNESS_API_TOKEN` and `VITE_INFERHARNESS_API_TOKEN` in `.env` when missing, keeping the frontend and backend able to communicate on a fresh install.
+- **Project workflow guardrails** — `AGENTS.md` now combines the main branch workflow, Node 25 rules, challenge-and-skill behavior instructions, and a static-data rule that keeps prompts, schemas, fixtures, and examples out of application code.
+- **Benchmark template agent** — Templates now includes a review-first benchmark-template agent that uses a database-persisted Settings model, challenges underspecified requests, loads its prompt from Markdown with the full `test_template` schema and example injected, validates generated drafts server-side, and applies drafts to the existing editor without auto-saving.
 - **README project badges** — the root README now shows version, Node.js, Python, CI, and MIT license badges.
 
-### Changed
+### Fixed
 
-- **Onboarding-aware shell** — added the setup pill, welcome page, progress ribbons, handoff prompts, Settings tour controls, sidebar setup locking, and first-run completion prompt while keeping users on the Run page after a successful benchmark.
-- **Starter benchmark creation** — the Run page can create a valid reusable `test_template` starter benchmark through the existing benchmark document API.
+- **Template agent settings rate limiting** — `/system/settings` and `/system/settings/template-agent-model` now use an in-memory per-client rate limit before reading or updating app settings.
 
 ## [0.7.0] - 2026-06-14
 

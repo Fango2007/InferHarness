@@ -83,6 +83,9 @@ Register local or remote inference servers, discover available models, and maint
 **Reusable test definitions**
 Create tests for one prompt, a dataset loop, tool-calling behavior, structured output, or multi-model comparisons.
 
+**Benchmark template agent**
+Use the Templates page agent to challenge underspecified benchmark ideas, draft runnable `chat_completion` benchmark templates, validate them against the benchmark schema, and review them in the editor before saving.
+
 **Benchmark runs**
 Run the same test against one model, many models, or the same model served by different inference servers.
 
@@ -233,7 +236,7 @@ Model formats supported in the catalog include `GGUF`, `MLX`, `GPTQ`, `AWQ`, and
   <tr>
     <td align="center">
       <img src=".github/assets/3-Templates-page.png" width="100%" alt="Templates" /><br>
-      <b>Templates</b> · Author reusable JSON and Python test templates
+      <b>Templates</b> · Author reusable benchmark templates, with an agent-assisted draft flow
     </td>
     <td align="center">
       <img src=".github/assets/4-Run-page-06082026.png" width="100%" alt="Run" /><br>
@@ -322,7 +325,7 @@ npm -w frontend run test
 
 ## Environment Variables
 
-Environment values can be edited in Settings after startup. Settings groups them by Runtime, Providers & Auth, Connectivity, Frontend, and Advanced so backend and frontend values are not mixed into one catch-all view.
+Environment values can be edited in Settings after startup. Settings groups them by Runtime, Providers & Auth, Connectivity, Frontend, and Advanced so backend and frontend values are not mixed into one catch-all view. Settings also stores the model used by the Templates benchmark-template agent.
 
 **Required**
 
