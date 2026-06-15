@@ -112,7 +112,7 @@ Check whether a model still answers one important prompt correctly.
 
 ```text
 Question: Does the model answer our support escalation prompt correctly?
-Input: one customer-support scenario
+Input: one customer-support prompt
 Expected behavior: includes the required policy decision and avoids forbidden claims
 Metrics: latency, output tokens, answer quality score
 Pass condition: required decision is present and no forbidden claim appears
@@ -348,7 +348,6 @@ Environment values can be edited in Settings after startup. Settings groups them
 | Variable | Default | Description |
 |---|---|---|
 | `INFERHARNESS_DB_PATH` | `./backend/data/db/inferharness.sqlite` | SQLite database file path. |
-| `INFERHARNESS_TEST_TEMPLATES_DIR` | `./backend/data/templates` | Test template storage directory. |
 | `RETENTION_DAYS` | `30` | Days to keep run results. |
 
 **Inference connectivity**
@@ -396,10 +395,10 @@ React single-page application served by Vite. It talks to the backend through th
 Fastify HTTP server responsible for server registration, model discovery, test execution, evaluation records, leaderboard data, and persistence.
 
 **Persistence**
-SQLite stores application data. Local files store templates, cached metadata, and generated artifacts.
+SQLite stores application data. Local files store cached metadata and generated artifacts.
 
 **Python subprocess**
-Used when a feature needs Python tooling, such as architecture inspection or Python-based test logic. Architecture inspection reads model configuration or GGUF metadata without loading model weights.
+Used when a feature needs Python tooling. Architecture inspection reads model configuration or GGUF metadata without loading model weights.
 
 **Inference servers**
 External local or remote servers provide model inference through OpenAI-compatible, Ollama-compatible, Anthropic native, or Gemini native HTTP APIs.

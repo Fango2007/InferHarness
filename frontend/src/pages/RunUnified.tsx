@@ -622,7 +622,7 @@ function BenchmarkDetail({
   const estimatedLoadMs = loadEstimate?.model_load_detected ? loadEstimate.estimated_load_ms : null;
   const correctness = correctnessMetrics(result);
   return (
-    <div className="run-single-detail">
+    <div className="run-detail">
       <main className="run-transcript">
         <header className="run-response-header">
           <span className="run-avatar is-large" style={{ background: RUN_ACCENTS[0] }}>A</span>

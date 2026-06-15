@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import { cleanupTemplateIds } from './helpers.js';
 
-test('creates, updates, and deletes templates from the dashboard', async ({ page }) => {
+test('creates, updates, and deletes templates from the Templates page', async ({ page }) => {
   const suffix = Date.now();
   const templateId = `e2e-template-${suffix}`;
   const templateName = `E2E Template ${suffix}`;
