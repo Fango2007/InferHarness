@@ -14,7 +14,15 @@ export function registerSystemRoutes(app: FastifyInstance): void {
     windowMs: 60_000
   });
 
-  app.get('/system/settings', { preHandler: systemSettingsRateLimit }, async () => getAppSettings());
+  app.get('/system/settings', {
+    preHandler: systemSettingsRateLimit,
+    config: {
+      rateLimit: {
+        max: 60,
+        timeWindow: 60_000
+      }
+    }
+  }, async () => getAppSettings());
 
   app.patch('/system/settings/template-agent-model', { preHandler: systemSettingsRateLimit }, async (request, reply) => {
     const body = request.body as { server_id?: string; model_id?: string };
