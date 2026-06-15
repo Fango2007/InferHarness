@@ -1972,7 +1972,7 @@ button.is-pending::after {
   background: var(--paper-2);
 }
 
-.run-single-detail {
+.run-detail {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
   min-height: 520px;

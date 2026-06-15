@@ -102,7 +102,7 @@ function seedRun(input: {
     resultId,
     input.runId,
     templateId,
-    JSON.stringify({ test: { tags: ['nightly'], type: 'scenario-json' }, selected_model: { id: input.model }, steps: [] }),
+    JSON.stringify({ test: { tags: ['nightly'], type: 'benchmark-test-template' }, selected_model: { id: input.model }, steps: [] }),
     input.startedAt
   );
 }

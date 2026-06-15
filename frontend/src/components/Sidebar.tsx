@@ -24,7 +24,7 @@ interface SidebarProps {
 
 const navItems = [
   { id: 'catalog', to: '/catalog?tab=servers', section: '/catalog', label: 'Catalog', sub: 'Servers · Models' },
-  { id: 'templates', to: '/templates', section: '/templates', label: 'Templates', sub: 'JSON · Python', badge: 'templates' },
+  { id: 'templates', to: '/templates', section: '/templates', label: 'Templates', sub: 'Benchmark docs', badge: 'templates' },
   { id: 'run', to: '/run', section: '/run', label: 'Run', sub: '1-8 models' },
   { id: 'results', to: '/results?tab=dashboard', section: '/results', label: 'Results', sub: 'Dash · Board · History', badge: 'runs' },
   { id: 'evaluate', to: '/evaluate', section: '/evaluate', label: 'Evaluate', sub: 'Score queue' }
