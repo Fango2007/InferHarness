@@ -99,6 +99,40 @@ describe('benchmark dataset resolver', () => {
     })));
   });
 
+  it('prepares an embedded inline dataset manifest', () => {
+    const prepared = prepareBenchmarkDatasetManifest({
+      dataset_id: 'inline-dataset',
+      source: { source_type: 'inline', format: 'json' },
+      snapshot_policy: 'embedded',
+      items
+    });
+
+    expect(prepared).toMatchObject({
+      kind: 'dataset_manifest',
+      schema_version: 'benchmark_dataset_manifest_v1',
+      dataset_id: 'inline-dataset',
+      source: { source_type: 'inline', format: 'json' },
+      snapshot_policy: 'embedded',
+      item_count: 2,
+      items
+    });
+    expect(prepared.dataset_hash).toBe(sha256Document({
+      source: { source_type: 'inline', format: 'json' },
+      canonicalization_version: 'dataset_canonical_v1',
+      item_count: items.length,
+      items
+    }));
+  });
+
+  it('rejects manifest_only inline dataset manifests', () => {
+    expect(() => prepareBenchmarkDatasetManifest({
+      dataset_id: 'inline-dataset',
+      source: { source_type: 'inline', format: 'json' },
+      snapshot_policy: 'manifest_only',
+      items
+    })).toThrow(/snapshot_policy=embedded/);
+  });
+
   it('loads manifest_only JSON array datasets', () => {
     const jsonSource = { ...source, format: 'json', path: 'dataset.json' };
     write(path.join(tmpDir, 'dataset.json'), JSON.stringify(items));

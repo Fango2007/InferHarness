@@ -60,6 +60,47 @@ export interface BenchmarkTestTemplateDocument extends Record<string, unknown> {
 
 export type BenchmarkTestTemplateRecord = BenchmarkDocumentRecord<BenchmarkTestTemplateDocument>;
 
+export interface BenchmarkRuntimeProfileDocument extends Record<string, unknown> {
+  kind: 'runtime_profile';
+  schema_version: 'benchmark_runtime_profile_v1';
+  profile_id: string;
+  runtime_parameters?: Record<string, unknown>;
+  execution_policy?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  extensions?: Record<string, unknown>;
+}
+
+export interface BenchmarkDatasetManifestDocument extends Record<string, unknown> {
+  kind: 'dataset_manifest';
+  schema_version: 'benchmark_dataset_manifest_v1';
+  dataset_id: string;
+  source: Record<string, unknown>;
+  canonicalization_version?: string;
+  snapshot_policy: 'embedded' | 'manifest_only' | 'compressed_blob';
+  dataset_hash?: string;
+  item_count?: number;
+  items?: Array<Record<string, unknown>>;
+  item_hashes?: Array<Record<string, unknown>>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface BenchmarkPlanDocument extends Record<string, unknown> {
+  kind: 'benchmark_plan';
+  schema_version: 'benchmark_plan_v1';
+  plan_id: string;
+  template_ref: string;
+  dataset_ref: string;
+  runtime_profile_ref: string;
+  model_profile_refs: string[];
+  execution: {
+    mode: 'sequential' | 'parallel';
+    continue_on_model_error: boolean;
+    concurrency?: number;
+  };
+  metadata?: Record<string, unknown>;
+  extensions?: Record<string, unknown>;
+}
+
 export interface BenchmarkRunResultDocument {
   kind: 'test_run_result';
   schema_version: 'benchmark_test_run_result_v1';
@@ -119,10 +160,12 @@ export interface CreateBenchmarkInstantiationPayload {
 export interface PrepareBenchmarkDatasetManifestInput {
   dataset_id: string;
   source: {
-    source_type: 'file';
+    source_type: 'file' | 'inline';
     format: BenchmarkDatasetFormat;
-    path: string;
+    path?: string;
   };
+  items?: Array<Record<string, unknown>>;
+  snapshot_policy?: 'embedded' | 'manifest_only';
   metadata?: Record<string, unknown>;
 }
 
@@ -337,6 +380,44 @@ export interface BenchmarkPlanPayload {
 
 export async function runBenchmarkPlan(payload: BenchmarkPlanPayload): Promise<BenchmarkPlanResult> {
   return apiPost<BenchmarkPlanResult>('/benchmark/plans/run', payload);
+}
+
+export async function saveBenchmarkPlan(document: BenchmarkPlanDocument): Promise<BenchmarkDocumentRecord<BenchmarkPlanDocument>> {
+  return apiPost<BenchmarkDocumentRecord<BenchmarkPlanDocument>>('/benchmark/plans', document);
+}
+
+export async function runPersistedBenchmarkPlan(id: string): Promise<BenchmarkPlanResult> {
+  return apiPost<BenchmarkPlanResult>(`/benchmark/plans/${id}/run`, {});
+}
+
+export async function getBenchmarkInstantiation(id: string): Promise<BenchmarkInstantiationRecord> {
+  return apiGet<BenchmarkInstantiationRecord>(`/benchmark/instantiations/${id}`);
+}
+
+export function buildPersistedBenchmarkPlanDocument(input: {
+  planId: string;
+  templateRef: string;
+  datasetRef: string;
+  runtimeProfileRef: string;
+  targets: RunTarget[];
+  continueOnModelError?: boolean;
+  metadata?: Record<string, unknown>;
+}): BenchmarkPlanDocument {
+  return {
+    kind: 'benchmark_plan',
+    schema_version: 'benchmark_plan_v1',
+    plan_id: input.planId,
+    template_ref: input.templateRef,
+    dataset_ref: input.datasetRef,
+    runtime_profile_ref: input.runtimeProfileRef,
+    model_profile_refs: input.targets.map((target) => `${target.inference_server_id}:${target.model_id}`),
+    execution: {
+      mode: 'sequential',
+      continue_on_model_error: input.continueOnModelError ?? true,
+      concurrency: 1
+    },
+    metadata: input.metadata
+  };
 }
 
 export function buildBenchmarkPlanPayload(input: {
