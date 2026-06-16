@@ -20,6 +20,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Fixed
 
+- **Benchmark-only Results history** — Results dashboard, history, detail drawers, and deletion now read benchmark test run records instead of legacy run/result tables, so benchmark smoke runs appear after completion.
 - **Template agent starter drafting** — The benchmark-template agent now drafts conservative starter templates for recognizable benchmark families such as tool-call compliance instead of blocking on follow-up questions when reasonable assumptions are available.
 - **Benchmark foundation stress test timeout** — the indexed lookup stress test now has an explicit timeout that matches its own 10-second performance budget, avoiding Vitest preemption on slower CI runners.
 - Restored tracked `AGENTS.md` project workflow rules while keeping the Node 25.x native-module guidance, restored `CLAUDE.md` tracking, and aligned Claude-specific project guidance with the enforced Node 25.x runtime.

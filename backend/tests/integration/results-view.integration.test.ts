@@ -53,56 +53,116 @@ function seedRun(input: {
   const db = getDb();
   const templateId = input.templateId ?? 'cold-start';
   const serverId = input.serverId ?? 'srv-results';
+  const instantiationId = `inst-${input.runId}`;
+  const status = input.verdict === 'pass' ? 'completed' : 'completed_with_errors';
+  const metricResults = input.coldStartSamples
+    ? input.coldStartSamples.cold_penalty_ms.map((coldPenalty, index) => ({
+        stage_id: 'stage-1',
+        item_index: index,
+        elapsed_ms: input.latency + index,
+        estimated_cost: index === 0 ? 0.001 : 0,
+        cold_penalty_ms: coldPenalty,
+        cold_total_ms: input.coldStartSamples?.cold_total_ms[index],
+        hot_total_ms: input.coldStartSamples?.hot_total_ms[index]
+      }))
+    : [{ stage_id: 'stage-1', item_index: 0, elapsed_ms: input.latency, estimated_cost: 0.001 }];
+  const instantiationDocument = {
+    template_id: templateId,
+    model_id: input.model,
+    server_id: serverId,
+    template: { template_id: templateId, name: templateId, kind: 'JSON', tags: ['nightly'] }
+  };
 
   db.prepare(`
-    INSERT INTO runs (
-      id, inference_server_id, suite_id, test_id, profile_id, profile_version,
-      status, started_at, ended_at, environment_snapshot, retention_days
-    ) VALUES (?, ?, null, ?, null, null, 'completed', ?, ?, ?, 30)
+    INSERT OR IGNORE INTO models (
+      server_id, model_id, display_name, active, archived, created_at, updated_at,
+      model_schema_version, identity, architecture, modalities, capabilities,
+      limits, performance, configuration, discovery, raw
+    ) VALUES (?, ?, ?, 1, 0, ?, ?, 'model_v1', ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    input.runId,
     serverId,
-    templateId,
+    input.model,
+    input.model,
     input.startedAt,
     input.startedAt,
-    JSON.stringify({ effective_config: { model: input.model } })
+    JSON.stringify({ id: input.model }),
+    JSON.stringify({}),
+    JSON.stringify({}),
+    JSON.stringify({}),
+    JSON.stringify({}),
+    JSON.stringify({}),
+    JSON.stringify({}),
+    JSON.stringify({}),
+    JSON.stringify({})
   );
 
-  const resultId = `result-${input.runId}`;
   db.prepare(`
-    INSERT INTO test_results (
-      id, run_id, test_id, verdict, failure_reason, metrics, artefacts, raw_events,
-      repetition_stats, started_at, ended_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?)
+    INSERT INTO benchmark_test_instantiations (
+      id, schema_version, document_hash, template_id, template_version, server_id,
+      model_id, dataset_hash, status, document, created_at, updated_at
+    ) VALUES (?, 'benchmark_test_instantiation_v1', ?, ?, '1.0.0', ?, ?, ?, 'created', ?, ?, ?)
   `).run(
-    resultId,
-    input.runId,
+    instantiationId,
+    `hash-${instantiationId}`,
     templateId,
-    input.verdict,
-    input.verdict === 'fail' ? 'assertion failed' : null,
-    JSON.stringify({ latency_ms: input.latency, estimated_cost: 0.001 }),
-    JSON.stringify(
-      input.coldStartSamples
-        ? {
-            python_result: {
-              samples: input.coldStartSamples
-            }
-          }
-        : {}
-    ),
-    JSON.stringify({ repetitions: 1 }),
+    serverId,
+    input.model,
+    `dataset-${input.runId}`,
+    JSON.stringify(instantiationDocument),
     input.startedAt,
     input.startedAt
   );
 
+  const resultId = `result-${input.runId}`;
   db.prepare(`
-    INSERT INTO test_result_documents (test_result_id, run_id, test_id, schema_version, document, created_at)
-    VALUES (?, ?, ?, '1.0.0', ?, ?)
+    INSERT INTO benchmark_test_run_results (
+      id, schema_version, document_hash, instantiation_id, run_id, status, document, created_at
+    ) VALUES (?, 'benchmark_test_run_result_v1', ?, ?, ?, ?, ?, ?)
   `).run(
     resultId,
+    `hash-${resultId}`,
+    instantiationId,
     input.runId,
-    templateId,
-    JSON.stringify({ test: { tags: ['nightly'], type: 'benchmark-test-template' }, selected_model: { id: input.model }, steps: [] }),
+    status,
+    JSON.stringify({
+      kind: 'test_run_result',
+      schema_version: 'benchmark_test_run_result_v1',
+      engine_version: 'test',
+      run_id: input.runId,
+      instantiation_id: instantiationId,
+      status,
+      started_at: input.startedAt,
+      completed_at: input.startedAt,
+      instantiation_snapshot: instantiationDocument,
+      stage_results: [
+        {
+          stage_id: 'stage-1',
+          stage_type: 'dataset_loop',
+          status: input.verdict === 'pass' ? 'completed' : 'failed',
+          record_metrics: true,
+          run_count: 1,
+          results: [
+            {
+              item_index: 0,
+              status: input.verdict === 'pass' ? 'completed' : 'failed',
+              started_at: input.startedAt,
+              completed_at: input.startedAt,
+              elapsed_ms: input.latency
+            }
+          ],
+          errors: input.verdict === 'fail' ? [{ code: 'assertion_failed', message: 'assertion failed' }] : [],
+          warnings: []
+        }
+      ],
+      raw_responses: [{ body: { id: input.runId } }],
+      normalized_responses: [{ answer_text: input.verdict === 'pass' ? 'OK' : 'not OK' }],
+      metric_results: metricResults,
+      aggregated_metrics: {
+        elapsed_ms: { median: input.latency, mean: input.latency, valid_sample_count: metricResults.length }
+      },
+      errors: input.verdict === 'fail' ? [{ code: 'assertion_failed', message: 'assertion failed' }] : [],
+      warnings: []
+    }),
     input.startedAt
   );
 }
@@ -136,7 +196,7 @@ describe('results-view routes', () => {
     expect(response.json().history.rows).toEqual([]);
   });
 
-  it('filters run-backed history by status, model, score and tag', async () => {
+  it('filters benchmark-backed history by status, model, score and tag', async () => {
     const app = createServer();
     seedRun({ runId: 'run-pass', model: 'model-a', verdict: 'pass', startedAt: '2026-05-01T10:00:00.000Z', latency: 100 });
     seedRun({ runId: 'run-fail', model: 'model-b', verdict: 'fail', startedAt: '2026-05-01T11:00:00.000Z', latency: 200 });
@@ -307,5 +367,20 @@ describe('results-view routes', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().run.run_id).toBe('run-detail');
     expect(response.json().results[0].metrics.latency_ms).toBe(100);
+    expect(response.json().raw_run.metric_results[0].elapsed_ms).toBe(100);
+  });
+
+  it('deletes benchmark result rows without legacy runs', async () => {
+    const app = createServer();
+    seedRun({ runId: 'run-delete', model: 'model-a', verdict: 'pass', startedAt: '2026-05-01T10:00:00.000Z', latency: 100 });
+
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/results-view/runs/run-delete',
+      headers: AUTH_HEADERS
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect((getDb().prepare('SELECT COUNT(*) AS count FROM benchmark_test_run_results WHERE run_id = ?').get('run-delete') as { count: number }).count).toBe(0);
   });
 });
