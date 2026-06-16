@@ -1,0 +1,121 @@
+{
+  "kind": "dataset_manifest",
+  "schema_version": "benchmark_dataset_manifest_v1",
+  "dataset_id": "dataset-functional-code-spec-json-v1",
+  "source": {
+    "source_type": "inline",
+    "format": "json"
+  },
+  "canonicalization_version": "dataset_canonical_v1",
+  "snapshot_policy": "embedded",
+  "dataset_hash": "sha256:bb1d3f0f371d3960fbad593ff7add227030f05ee96146e88b86fefe7f23bbbfd",
+  "item_count": 2,
+  "items": [
+    {
+      "id": "implement-clamp",
+      "system_prompt": "Return only valid JSON. No markdown.",
+      "prompt": "Implement a JavaScript function clamp(value, min, max). Return JSON with language, function_name, code, and tests array. The code must return min when value is below min, max when above max, otherwise value.",
+      "interaction_mode": "structured_output",
+      "expected_format": "json",
+      "expected_answer": [
+        "clamp",
+        "Math.min",
+        "Math.max"
+      ],
+      "expected_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "language",
+          "function_name",
+          "code",
+          "tests"
+        ],
+        "properties": {
+          "language": {
+            "const": "javascript"
+          },
+          "function_name": {
+            "const": "clamp"
+          },
+          "code": {
+            "type": "string",
+            "minLength": 20
+          },
+          "tests": {
+            "type": "array",
+            "minItems": 3,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "tags": [
+        "functional",
+        "codegen",
+        "json-schema"
+      ]
+    },
+    {
+      "id": "implement-slugify",
+      "system_prompt": "Return only valid JSON. No markdown.",
+      "prompt": "Implement a Python function slugify(text) that lowercases, trims, replaces non-alphanumeric runs with hyphens, and strips surrounding hyphens. Return JSON with language, function_name, code, and tests array.",
+      "interaction_mode": "structured_output",
+      "expected_format": "json",
+      "expected_answer": [
+        "slugify",
+        "re.sub",
+        "lower"
+      ],
+      "expected_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "language",
+          "function_name",
+          "code",
+          "tests"
+        ],
+        "properties": {
+          "language": {
+            "const": "python"
+          },
+          "function_name": {
+            "const": "slugify"
+          },
+          "code": {
+            "type": "string",
+            "minLength": 40
+          },
+          "tests": {
+            "type": "array",
+            "minItems": 3,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "tags": [
+        "functional",
+        "codegen",
+        "json-schema"
+      ]
+    }
+  ],
+  "item_hashes": [
+    {
+      "item_id": "implement-clamp",
+      "hash": "sha256:7e5627d5318f1d0a8997e589b1395e66bebf15c76ccf331a2c74414682758b65"
+    },
+    {
+      "item_id": "implement-slugify",
+      "hash": "sha256:b845259e2b4085122192c5ea6e4f759d1b29952089d5f2ecce75b200cd0ed3d1"
+    }
+  ],
+  "metadata": {
+    "source": "built-in-agent-tool-call-library",
+    "template_id": "functional-code-spec-json-v1"
+  }
+}

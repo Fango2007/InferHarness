@@ -1,0 +1,168 @@
+{
+  "kind": "dataset_manifest",
+  "schema_version": "benchmark_dataset_manifest_v1",
+  "dataset_id": "dataset-agent-copilot-workspace-v1",
+  "source": {
+    "source_type": "inline",
+    "format": "json"
+  },
+  "canonicalization_version": "dataset_canonical_v1",
+  "snapshot_policy": "embedded",
+  "dataset_hash": "sha256:097514cd599fdd335ad26cf93165cd9075bd097d2a0b71b3b39b3af5fe5b2ec9",
+  "item_count": 2,
+  "items": [
+    {
+      "id": "copilot-read-file",
+      "system_prompt": "Use the workspace tool that satisfies the user request. Do not answer directly.",
+      "prompt": "Inspect package.json before suggesting dependency commands.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "description": "Read a workspace file.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Workspace-relative path."
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "edit_file",
+            "description": "Edit a workspace file.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Workspace-relative path."
+                },
+                "instructions": {
+                  "type": "string",
+                  "description": "Edit instructions."
+                }
+              },
+              "required": [
+                "path",
+                "instructions"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto",
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "read_file",
+            "arguments": {
+              "path": "package.json"
+            }
+          }
+        }
+      ],
+      "tags": [
+        "copilot",
+        "workspace",
+        "read"
+      ]
+    },
+    {
+      "id": "copilot-edit-file",
+      "system_prompt": "Use the workspace tool that satisfies the user request. Do not answer directly.",
+      "prompt": "Change src/config.ts so DEFAULT_TIMEOUT_MS is 30000.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "description": "Read a workspace file.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Workspace-relative path."
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "edit_file",
+            "description": "Edit a workspace file.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Workspace-relative path."
+                },
+                "instructions": {
+                  "type": "string",
+                  "description": "Edit instructions."
+                }
+              },
+              "required": [
+                "path",
+                "instructions"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto",
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "edit_file",
+            "arguments": {
+              "path": "src/config.ts",
+              "instructions": "Set DEFAULT_TIMEOUT_MS to 30000."
+            }
+          }
+        }
+      ],
+      "tags": [
+        "copilot",
+        "workspace",
+        "edit"
+      ]
+    }
+  ],
+  "item_hashes": [
+    {
+      "item_id": "copilot-read-file",
+      "hash": "sha256:118c5b302e9ca55d5bad91efe9bddecb295332302153360ec56be53fadd0b9b4"
+    },
+    {
+      "item_id": "copilot-edit-file",
+      "hash": "sha256:42e31313fa92e96e95bdb7cce215fc8151c79b9544f482307d901cd2ad1da6e6"
+    }
+  ],
+  "metadata": {
+    "source": "built-in-agent-tool-call-library",
+    "template_id": "agent-copilot-workspace-v1"
+  }
+}

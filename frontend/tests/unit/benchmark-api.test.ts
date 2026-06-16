@@ -5,9 +5,11 @@ import {
   buildBenchmarkSmokePayload,
   createBenchmarkInstantiation,
   deleteBenchmarkDocument,
+  getBenchmarkLibraryStatus,
   getBenchmarkInstantiation,
   listBenchmarkDocuments,
   prepareBenchmarkDatasetManifest,
+  reloadBenchmarkLibrary,
   runPersistedBenchmarkPlan,
   runBenchmarkInstantiation,
   saveBenchmarkPlan,
@@ -262,6 +264,29 @@ describe('benchmark API helpers', () => {
     expect((fetchMock.mock.calls[1][1] as RequestInit).body).toBe(JSON.stringify(document));
     expect(fetchMock.mock.calls[2][0]).toBe('http://localhost:8080/benchmark/documents/test_template/ui-template');
     expect((fetchMock.mock.calls[2][1] as RequestInit).method).toBe('DELETE');
+  });
+
+  it('reads and reloads the benchmark library through the benchmark API', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ built_in_root: '/built-in', user_root: '/user', entries: [] })
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ installed: [], skipped: [], invalid: [], deleted: [] })
+      } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await getBenchmarkLibraryStatus();
+    await reloadBenchmarkLibrary();
+
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/benchmark/library');
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:8080/benchmark/library/reload');
+    expect((fetchMock.mock.calls[1][1] as RequestInit).method).toBe('POST');
   });
 
   it('builds and runs persisted benchmark plan documents', async () => {

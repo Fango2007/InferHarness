@@ -1,0 +1,159 @@
+{
+  "kind": "dataset_manifest",
+  "schema_version": "benchmark_dataset_manifest_v1",
+  "dataset_id": "dataset-server-enum-coercion-v1",
+  "source": {
+    "source_type": "inline",
+    "format": "json"
+  },
+  "canonicalization_version": "dataset_canonical_v1",
+  "snapshot_policy": "embedded",
+  "dataset_hash": "sha256:48d4b5eaa07c10c754c4537ddedea19c1256398ad9ccebe67ff029cfa0c66fae",
+  "item_count": 2,
+  "items": [
+    {
+      "id": "typed-deployment",
+      "system_prompt": "Call the deployment tool with typed arguments.",
+      "prompt": "Deploy service api-gateway to production with canary 0.25 and rollback enabled.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "deploy_service",
+            "description": "Deploy a service.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "service": {
+                  "type": "string",
+                  "description": "Service."
+                },
+                "environment": {
+                  "type": "string",
+                  "description": "Environment.",
+                  "enum": [
+                    "staging",
+                    "production"
+                  ]
+                },
+                "canary_fraction": {
+                  "type": "number",
+                  "description": "Canary fraction."
+                },
+                "rollback_enabled": {
+                  "type": "boolean",
+                  "description": "Rollback flag."
+                }
+              },
+              "required": [
+                "service",
+                "environment",
+                "canary_fraction",
+                "rollback_enabled"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "deploy_service"
+        }
+      },
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "deploy_service",
+            "arguments": {
+              "service": "api-gateway",
+              "environment": "production",
+              "canary_fraction": 0.25,
+              "rollback_enabled": true
+            }
+          }
+        }
+      ],
+      "tags": [
+        "server",
+        "typed-arguments"
+      ]
+    },
+    {
+      "id": "typed-rate-limit",
+      "system_prompt": "Call the rate limit tool with typed arguments.",
+      "prompt": "Set user-login rate limit to 120 requests per minute in dry-run mode.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "set_rate_limit",
+            "description": "Set a rate limit.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "description": "Limit key."
+                },
+                "requests_per_minute": {
+                  "type": "integer",
+                  "description": "RPM value."
+                },
+                "dry_run": {
+                  "type": "boolean",
+                  "description": "Dry-run flag."
+                }
+              },
+              "required": [
+                "key",
+                "requests_per_minute",
+                "dry_run"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "set_rate_limit"
+        }
+      },
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "set_rate_limit",
+            "arguments": {
+              "key": "user-login",
+              "requests_per_minute": 120,
+              "dry_run": true
+            }
+          }
+        }
+      ],
+      "tags": [
+        "server",
+        "typed-arguments"
+      ]
+    }
+  ],
+  "item_hashes": [
+    {
+      "item_id": "typed-deployment",
+      "hash": "sha256:9f1cbc723a5209d82f872e4097b48052ee6f6dd2099735149502bdd412f528ea"
+    },
+    {
+      "item_id": "typed-rate-limit",
+      "hash": "sha256:8319ee2f374e25db1f8de3380fc84de72077d54d2ae709cd330ec5da6a958314"
+    }
+  ],
+  "metadata": {
+    "source": "built-in-agent-tool-call-library",
+    "template_id": "server-enum-coercion-v1"
+  }
+}

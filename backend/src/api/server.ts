@@ -17,6 +17,7 @@ import { registerArchitectureRoutes } from './routes/architecture.js';
 import { registerBenchmarkRoutes } from './routes/benchmark.js';
 import { registerInferenceParamPresetRoutes } from './routes/inference-param-presets.js';
 import { registerEvaluationQueueRoutes } from './routes/evaluation-queue.js';
+import { installBenchmarkLibraryDocuments, shouldAutoSeedBenchmarkLibrary } from '../services/benchmark-library.js';
 
 function applyColumnMigrations(): void {
   const db = getDb();
@@ -46,6 +47,13 @@ export function createServer() {
     runSchema(fs.readFileSync(schemaPath, 'utf8'));
   }
   applyColumnMigrations();
+  if (shouldAutoSeedBenchmarkLibrary()) {
+    const report = installBenchmarkLibraryDocuments();
+    const invalidCount = report.invalid.length;
+    if (invalidCount > 0) {
+      app.log.warn({ invalidCount }, 'Benchmark library loaded with invalid documents');
+    }
+  }
   if (process.env.INFERHARNESS_E2E === '1' && process.env.INFERHARNESS_E2E_MARKER_PATH) {
     fs.mkdirSync(path.dirname(process.env.INFERHARNESS_E2E_MARKER_PATH), { recursive: true });
     fs.writeFileSync(

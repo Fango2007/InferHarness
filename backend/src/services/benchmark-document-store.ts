@@ -43,7 +43,7 @@ function mapRow(row: BenchmarkDocumentRow): BenchmarkDocumentRecord {
   };
 }
 
-function naturalDocumentId(kind: BenchmarkDocumentKind, document: Record<string, unknown>): string {
+export function benchmarkDocumentNaturalId(kind: BenchmarkDocumentKind, document: Record<string, unknown>): string {
   const fieldByKind: Record<BenchmarkDocumentKind, string> = {
     test_template: 'template_id',
     runtime_profile: 'profile_id',
@@ -74,7 +74,7 @@ export function putBenchmarkDocument(document: Record<string, unknown>): Benchma
   }
   assertSupportedKind(kind);
   assertValidDocument(kind, document);
-  const id = naturalDocumentId(kind, document);
+  const id = benchmarkDocumentNaturalId(kind, document);
   const schemaVersion = String(document.schema_version);
   const db = getDb();
   const now = nowIso();

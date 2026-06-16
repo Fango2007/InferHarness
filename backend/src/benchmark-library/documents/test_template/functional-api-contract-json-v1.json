@@ -1,0 +1,60 @@
+{
+  "kind": "test_template",
+  "schema_version": "benchmark_test_template_v1",
+  "template_id": "functional-api-contract-json-v1",
+  "template_version": "1.0.0",
+  "name": "Functional - API contract JSON",
+  "description": "Checks whether a model can transform functional requirements into a strict API contract object.",
+  "operation": "chat_completion",
+  "required_capabilities": {
+    "chat_completion": true,
+    "streaming": false,
+    "tool_calling": false,
+    "structured_output": true
+  },
+  "input_contract": {
+    "required_fields": [
+      "prompt",
+      "expected_schema"
+    ],
+    "optional_fields": [
+      "system_prompt",
+      "expected_format",
+      "expected_answer",
+      "tags",
+      "metadata"
+    ],
+    "min_items": 1
+  },
+  "stages": [
+    {
+      "id": "structured_answer",
+      "type": "dataset_loop",
+      "iterations_per_item": 1,
+      "record_metrics": true,
+      "order": "sequential",
+      "cooldown_ms": 0,
+      "stop_on_error": false
+    }
+  ],
+  "metrics": [
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "elapsed_ms",
+    "json_valid",
+    "schema_valid"
+  ],
+  "aggregations": [
+    "mean",
+    "p50",
+    "p95",
+    "count"
+  ],
+  "metadata": {
+    "source": "built-in-agent-tool-call-library",
+    "benchmark_family": "functional_structured_output",
+    "functional_mode": "schema_validation"
+  },
+  "extensions": {}
+}

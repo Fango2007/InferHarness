@@ -1,0 +1,206 @@
+{
+  "kind": "dataset_manifest",
+  "schema_version": "benchmark_dataset_manifest_v1",
+  "dataset_id": "dataset-server-nested-tool-args-v1",
+  "source": {
+    "source_type": "inline",
+    "format": "json"
+  },
+  "canonicalization_version": "dataset_canonical_v1",
+  "snapshot_policy": "embedded",
+  "dataset_hash": "sha256:4de594dc3f4a1d974181ad8647af9a9bfe9319672d63fa64af9bdbcabaa0a9a3",
+  "item_count": 2,
+  "items": [
+    {
+      "id": "nested-filter-query",
+      "system_prompt": "Use the query tool with exactly the requested filter object.",
+      "prompt": "Search active enterprise accounts in EMEA tagged renewal and expansion, limit 25.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "query_accounts",
+            "description": "Query accounts.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "filter": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "description": "Status."
+                    },
+                    "segment": {
+                      "type": "string",
+                      "description": "Segment."
+                    },
+                    "region": {
+                      "type": "string",
+                      "description": "Region."
+                    },
+                    "tags": {
+                      "type": "array",
+                      "description": "Tags.",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "segment",
+                    "region",
+                    "tags"
+                  ]
+                },
+                "limit": {
+                  "type": "integer",
+                  "description": "Maximum results."
+                }
+              },
+              "required": [
+                "filter",
+                "limit"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "query_accounts"
+        }
+      },
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "query_accounts",
+            "arguments": {
+              "filter": {
+                "status": "active",
+                "segment": "enterprise",
+                "region": "EMEA",
+                "tags": [
+                  "renewal",
+                  "expansion"
+                ]
+              },
+              "limit": 25
+            }
+          }
+        }
+      ],
+      "tags": [
+        "server",
+        "nested-arguments"
+      ]
+    },
+    {
+      "id": "nested-code-review",
+      "system_prompt": "Use the review tool with exactly the requested nested payload.",
+      "prompt": "Request a blocking review for src/auth.ts on security and tests with severity high.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "request_review",
+            "description": "Request code review.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "file": {
+                  "type": "string",
+                  "description": "File path."
+                },
+                "checks": {
+                  "type": "array",
+                  "description": "Review check names.",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "policy": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "blocking": {
+                      "type": "boolean",
+                      "description": "Whether review is blocking."
+                    },
+                    "severity": {
+                      "type": "string",
+                      "description": "Severity.",
+                      "enum": [
+                        "low",
+                        "medium",
+                        "high"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "blocking",
+                    "severity"
+                  ]
+                }
+              },
+              "required": [
+                "file",
+                "checks",
+                "policy"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "request_review"
+        }
+      },
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "request_review",
+            "arguments": {
+              "file": "src/auth.ts",
+              "checks": [
+                "security",
+                "tests"
+              ],
+              "policy": {
+                "blocking": true,
+                "severity": "high"
+              }
+            }
+          }
+        }
+      ],
+      "tags": [
+        "server",
+        "nested-arguments"
+      ]
+    }
+  ],
+  "item_hashes": [
+    {
+      "item_id": "nested-filter-query",
+      "hash": "sha256:1b7c49107fc169e2e93a2c7c1f6f21f21f75d933105eb69d6ce81f40454b6bd3"
+    },
+    {
+      "item_id": "nested-code-review",
+      "hash": "sha256:f33f2af97a6a29199b273f02186af78d7b0c5a1b56eefd7313ef2c1d824f8edb"
+    }
+  ],
+  "metadata": {
+    "source": "built-in-agent-tool-call-library",
+    "template_id": "server-nested-tool-args-v1"
+  }
+}

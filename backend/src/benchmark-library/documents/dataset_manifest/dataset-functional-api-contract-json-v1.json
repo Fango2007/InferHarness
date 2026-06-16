@@ -1,0 +1,142 @@
+{
+  "kind": "dataset_manifest",
+  "schema_version": "benchmark_dataset_manifest_v1",
+  "dataset_id": "dataset-functional-api-contract-json-v1",
+  "source": {
+    "source_type": "inline",
+    "format": "json"
+  },
+  "canonicalization_version": "dataset_canonical_v1",
+  "snapshot_policy": "embedded",
+  "dataset_hash": "sha256:c55621ae86630fb5836f50c3d5827f23ec065e0b64981d7d6c32f7223d450fda",
+  "item_count": 2,
+  "items": [
+    {
+      "id": "api-contract-pagination",
+      "system_prompt": "Return only valid JSON. No markdown.",
+      "prompt": "Design a GET /events API contract. It must include method, path, query_params, response_fields, and errors. Query params must include cursor and limit.",
+      "interaction_mode": "structured_output",
+      "expected_format": "json",
+      "expected_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "method",
+          "path",
+          "query_params",
+          "response_fields",
+          "errors"
+        ],
+        "properties": {
+          "method": {
+            "const": "GET"
+          },
+          "path": {
+            "const": "/events"
+          },
+          "query_params": {
+            "type": "array",
+            "contains": {
+              "type": "object",
+              "required": [
+                "name"
+              ],
+              "properties": {
+                "name": {
+                  "const": "cursor"
+                }
+              }
+            },
+            "minItems": 2
+          },
+          "response_fields": {
+            "type": "array",
+            "minItems": 2
+          },
+          "errors": {
+            "type": "array",
+            "minItems": 1
+          }
+        }
+      },
+      "tags": [
+        "functional",
+        "api-contract",
+        "json-schema"
+      ]
+    },
+    {
+      "id": "api-contract-idempotency",
+      "system_prompt": "Return only valid JSON. No markdown.",
+      "prompt": "Design a POST /payments API contract. It must include method, path, headers, request_fields, response_fields, and errors. Headers must include Idempotency-Key.",
+      "interaction_mode": "structured_output",
+      "expected_format": "json",
+      "expected_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "method",
+          "path",
+          "headers",
+          "request_fields",
+          "response_fields",
+          "errors"
+        ],
+        "properties": {
+          "method": {
+            "const": "POST"
+          },
+          "path": {
+            "const": "/payments"
+          },
+          "headers": {
+            "type": "array",
+            "contains": {
+              "type": "object",
+              "required": [
+                "name"
+              ],
+              "properties": {
+                "name": {
+                  "const": "Idempotency-Key"
+                }
+              }
+            },
+            "minItems": 1
+          },
+          "request_fields": {
+            "type": "array",
+            "minItems": 2
+          },
+          "response_fields": {
+            "type": "array",
+            "minItems": 2
+          },
+          "errors": {
+            "type": "array",
+            "minItems": 1
+          }
+        }
+      },
+      "tags": [
+        "functional",
+        "api-contract",
+        "json-schema"
+      ]
+    }
+  ],
+  "item_hashes": [
+    {
+      "item_id": "api-contract-pagination",
+      "hash": "sha256:d0b3efad648b03e89fcc02c17dd76a64f33fcedafd3cbecec74f1257ea282159"
+    },
+    {
+      "item_id": "api-contract-idempotency",
+      "hash": "sha256:b66ebf62a5a1d36ae60190fc5eb1332c0119297bb4cff1f545cf1e0aeb5d24fa"
+    }
+  ],
+  "metadata": {
+    "source": "built-in-agent-tool-call-library",
+    "template_id": "functional-api-contract-json-v1"
+  }
+}
