@@ -27,29 +27,46 @@ type ResultDocument = {
   selected_model?: { id?: string | null } | null;
 };
 
-type ResultsViewRow = {
+type BenchmarkStageResult = {
+  stage_id?: string;
+  stage_type?: string;
+  status?: string;
+  run_count?: number;
+  results?: Array<Record<string, unknown>>;
+  errors?: Array<Record<string, unknown>>;
+  warnings?: Array<Record<string, unknown>>;
+};
+
+type BenchmarkDocument = {
+  run_id?: string;
+  instantiation_id?: string;
+  status?: string;
+  started_at?: string;
+  completed_at?: string | null;
+  instantiation_snapshot?: Record<string, unknown>;
+  stage_results?: BenchmarkStageResult[];
+  raw_responses?: Array<Record<string, unknown>>;
+  normalized_responses?: Array<Record<string, unknown>>;
+  metric_results?: Array<Record<string, unknown>>;
+  aggregated_metrics?: Record<string, Record<string, unknown>>;
+  errors?: Array<Record<string, unknown>>;
+  warnings?: Array<Record<string, unknown>>;
+  load_estimate?: Record<string, unknown> | null;
+};
+
+type BenchmarkResultRow = {
+  id: string;
   run_id: string;
-  inference_server_id: string;
-  run_status: string;
-  run_started_at: string;
-  run_ended_at: string | null;
-  environment_snapshot: string | null;
+  status: string;
+  created_at: string;
+  document: string;
+  instantiation_id: string;
+  template_id: string;
+  server_id: string;
+  model_id: string;
+  instantiation_document: string;
   server_display_name: string | null;
   server_runtime: string | null;
-  result_id: string | null;
-  test_result_test_id: string | null;
-  run_test_id: string | null;
-  template_id: string | null;
-  test_definition_name: string | null;
-  runner_type: string | null;
-  verdict: string | null;
-  failure_reason: string | null;
-  metrics: string | null;
-  artefacts: string | null;
-  raw_events: string | null;
-  result_started_at: string | null;
-  result_ended_at: string | null;
-  document: string | null;
 };
 
 export interface ResultsFilterState {
@@ -179,6 +196,9 @@ type RunAccumulator = {
   environment_snapshot: EnvironmentSnapshot | null;
   server_display_name: string | null;
   server_runtime: RuntimeSnapshot | null;
+  raw_run: Record<string, unknown>;
+  benchmark_document: BenchmarkDocument;
+  instantiation_document: Record<string, unknown>;
   results: Array<{
     id: string;
     test_id: string;
@@ -195,6 +215,10 @@ type RunAccumulator = {
     document: ResultDocument | null;
   }>;
 };
+
+export type DeleteResultsRunResult =
+  | { ok: true }
+  | { ok: false; code: 'RUN_NOT_FOUND'; error: string };
 
 function defaultRange(now = new Date()): { date_from: string; date_to: string } {
   const to = new Date(now);
@@ -278,6 +302,24 @@ function safeJson<T>(value: string | null): T | null {
   }
 }
 
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0).map((entry) => entry.trim())
+    : [];
+}
+
 function selectedModel(snapshot: EnvironmentSnapshot | null, document: ResultDocument | null): string {
   return snapshot?.effective_config?.model?.trim() || snapshot?.model?.trim() || document?.selected_model?.id?.trim() || 'unknown';
 }
@@ -289,8 +331,9 @@ function templateLabel(name: string | null, testId: string): string {
   return name.replace(/\s*\([^)]*\)\s*$/, '').trim() || name.trim();
 }
 
-function templateKey(row: ResultsViewRow): string {
-  return row.template_id?.trim() || templateLabel(row.test_definition_name, row.test_result_test_id ?? row.run_test_id ?? 'unknown');
+function benchmarkTemplateLabel(instantiation: Record<string, unknown>, templateId: string): string {
+  const template = objectValue(instantiation.template);
+  return stringValue(template?.name) ?? stringValue(template?.label) ?? stringValue(template?.template_id) ?? templateId;
 }
 
 function metricNumber(metrics: Record<string, unknown> | null, keys: string[]): number | null {
@@ -425,13 +468,24 @@ function resultTags(result: RunAccumulator['results'][number]): string[] {
 }
 
 function rowStatus(run: RunAccumulator): ResultsHistoryRow['status'] {
-  if (run.run_status === 'running' || run.run_status === 'queued') {
+  if (run.run_status === 'created' || run.run_status === 'running') {
     return 'streaming';
   }
-  const verdicts = run.results.map((result) => result.verdict).filter(Boolean);
-  if (verdicts.length === 0) {
-    return run.run_status === 'completed' ? 'partial' : 'fail';
+  if (run.run_status === 'completed_with_errors') {
+    return 'partial';
   }
+  if (run.run_status === 'cancelled' || run.run_status === 'failed' || run.run_status === 'timeout') {
+    return 'fail';
+  }
+  const stageResults = run.benchmark_document.stage_results ?? [];
+  const failedItems = stageResults.flatMap((stage) => stage.results ?? []).filter((result) => result.status === 'failed').length;
+  if (failedItems > 0 || (run.benchmark_document.errors?.length ?? 0) > 0) {
+    return 'partial';
+  }
+  if (run.run_status === 'completed') {
+    return 'pass';
+  }
+  const verdicts = run.results.map((result) => result.verdict).filter(Boolean);
   const passes = verdicts.filter((verdict) => verdict === 'pass').length;
   if (passes === verdicts.length) {
     return 'pass';
@@ -442,17 +496,108 @@ function rowStatus(run: RunAccumulator): ResultsHistoryRow['status'] {
   return 'fail';
 }
 
+function rowScore(status: ResultsHistoryRow['status']): number | null {
+  if (status === 'pass') {
+    return 100;
+  }
+  if (status === 'partial') {
+    return 50;
+  }
+  if (status === 'fail') {
+    return 0;
+  }
+  return null;
+}
+
+function metricAggregateNumber(aggregated: Record<string, Record<string, unknown>> | undefined, metricName: string): number | null {
+  const aggregate = aggregated?.[metricName];
+  if (!aggregate) {
+    return null;
+  }
+  return numberValue(aggregate.median)
+    ?? numberValue(aggregate.p50)
+    ?? numberValue(aggregate.mean)
+    ?? numberValue(aggregate.average)
+    ?? numberValue(aggregate.min)
+    ?? numberValue(aggregate.max);
+}
+
+function benchmarkLatency(document: BenchmarkDocument): number | null {
+  const directSamples = (document.metric_results ?? [])
+    .map((entry) => numberValue(entry.elapsed_ms) ?? numberValue(entry.latency_ms) ?? numberValue(entry.total_ms) ?? numberValue(entry.duration_ms))
+    .filter((entry): entry is number => entry !== null);
+  return median(directSamples) ?? metricAggregateNumber(document.aggregated_metrics, 'elapsed_ms');
+}
+
+function benchmarkCost(document: BenchmarkDocument): number | null {
+  const directCosts = (document.metric_results ?? [])
+    .map((entry) => numberValue(entry.estimated_cost) ?? numberValue(entry.cost) ?? numberValue(entry.cost_usd))
+    .filter((entry): entry is number => entry !== null);
+  return directCosts.reduce<number>((sum, value) => sum + value, 0) || null;
+}
+
+function benchmarkSamples(document: BenchmarkDocument): Record<ResultsPerformanceComparisonMetricKey, number[]> {
+  return {
+    cold_penalty_ms: (document.metric_results ?? []).map((entry) => numberValue(entry.cold_penalty_ms)).filter((entry): entry is number => entry !== null),
+    cold_total_ms: (document.metric_results ?? []).map((entry) => numberValue(entry.cold_total_ms)).filter((entry): entry is number => entry !== null),
+    hot_total_ms: (document.metric_results ?? []).map((entry) => numberValue(entry.hot_total_ms)).filter((entry): entry is number => entry !== null)
+  };
+}
+
+function benchmarkResultCount(document: BenchmarkDocument): number {
+  const count = (document.stage_results ?? []).reduce((sum, stage) => {
+    if (typeof stage.run_count === 'number' && Number.isFinite(stage.run_count)) {
+      return sum + stage.run_count;
+    }
+    return sum + (stage.results?.length ?? 0);
+  }, 0);
+  return count > 0 ? count : 1;
+}
+
+function benchmarkTags(instantiation: Record<string, unknown>, document: BenchmarkDocument): string[] {
+  const snapshot = objectValue(document.instantiation_snapshot);
+  const template = objectValue(instantiation.template) ?? objectValue(snapshot?.template);
+  const test = objectValue(instantiation.test) ?? objectValue(snapshot?.test);
+  const tags = [
+    ...stringArray(template?.tags),
+    ...stringArray(test?.tags),
+    ...stringArray(instantiation.tags),
+    ...stringArray(snapshot?.tags)
+  ];
+  return Array.from(new Set(tags));
+}
+
+function benchmarkDocumentForResult(instantiation: Record<string, unknown>, document: BenchmarkDocument, modelId: string): ResultDocument {
+  const snapshot = objectValue(document.instantiation_snapshot);
+  const template = objectValue(instantiation.template) ?? objectValue(snapshot?.template);
+  const test = objectValue(instantiation.test) ?? objectValue(snapshot?.test);
+  const tags = benchmarkTags(instantiation, document);
+  return {
+    test: {
+      tags,
+      type: stringValue(template?.kind) ?? stringValue(test?.type) ?? 'benchmark'
+    },
+    selected_model: { id: modelId },
+    summary: {
+      status: document.status,
+      errors: document.errors ?? [],
+      warnings: document.warnings ?? []
+    }
+  };
+}
+
 function toHistoryRow(run: RunAccumulator): ResultsHistoryRow {
   const firstResult = run.results[0];
   const allLatencies = run.results.map((result) => latency(result.metrics));
   const allCosts = run.results.map((result) => cost(result.metrics, result.artefacts));
-  const scores = run.results.map((result) => verdictScore(result.verdict));
+  const status = rowStatus(run);
+  const scores = [rowScore(status), ...run.results.map((result) => verdictScore(result.verdict))];
   const tags = Array.from(new Set(run.results.flatMap(resultTags)));
   const document = firstResult?.document ?? null;
   const model = selectedModel(run.environment_snapshot, document);
   return {
     run_id: run.run_id,
-    status: rowStatus(run),
+    status,
     started_at: run.run_started_at,
     ended_at: run.run_ended_at,
     duration_ms: durationMs(run.run_started_at, run.run_ended_at),
@@ -469,113 +614,122 @@ function toHistoryRow(run: RunAccumulator): ResultsHistoryRow {
   };
 }
 
-function fetchRows(filters: ResultsFilterState): ResultsViewRow[] {
+function fetchRows(filters: ResultsFilterState): BenchmarkResultRow[] {
   const db = getDb();
   return db.prepare(`
     SELECT
-      r.id AS run_id,
-      r.inference_server_id,
-      r.status AS run_status,
-      r.started_at AS run_started_at,
-      r.ended_at AS run_ended_at,
-      r.environment_snapshot,
-      i.display_name AS server_display_name,
-      i.runtime AS server_runtime,
-      tr.id AS result_id,
-      tr.test_id AS test_result_test_id,
-      r.test_id AS run_test_id,
-      COALESCE(tr.test_id, r.test_id) AS template_id,
-      COALESCE(tr.test_id, r.test_id) AS test_definition_name,
-      NULL AS runner_type,
-      tr.verdict,
-      tr.failure_reason,
-      tr.metrics,
-      tr.artefacts,
-      tr.raw_events,
-      tr.started_at AS result_started_at,
-      tr.ended_at AS result_ended_at,
-      trd.document
-    FROM runs r
-    LEFT JOIN inference_servers i ON i.server_id = r.inference_server_id
-    LEFT JOIN test_results tr ON tr.run_id = r.id
-    LEFT JOIN test_result_documents trd ON trd.test_result_id = tr.id
-    WHERE r.started_at >= ? AND r.started_at <= ?
-    ORDER BY r.started_at DESC
+      b.id,
+      b.run_id,
+      b.status,
+      b.created_at,
+      b.document,
+      b.instantiation_id,
+      i.template_id,
+      i.server_id,
+      i.model_id,
+      i.document AS instantiation_document,
+      s.display_name AS server_display_name,
+      s.runtime AS server_runtime
+    FROM benchmark_test_run_results b
+    JOIN benchmark_test_instantiations i ON i.id = b.instantiation_id
+    LEFT JOIN inference_servers s ON s.server_id = i.server_id
+    WHERE b.created_at >= ? AND b.created_at <= ?
+    ORDER BY b.created_at DESC
     LIMIT ${MAX_SOURCE_ROWS}
-  `).all(filters.date_from, filters.date_to) as ResultsViewRow[];
+  `).all(filters.date_from, filters.date_to) as BenchmarkResultRow[];
 }
 
-function fetchRowsForRun(runId: string): ResultsViewRow[] {
+function fetchRowsForRun(runId: string): BenchmarkResultRow[] {
   const db = getDb();
   return db.prepare(`
     SELECT
-      r.id AS run_id,
-      r.inference_server_id,
-      r.status AS run_status,
-      r.started_at AS run_started_at,
-      r.ended_at AS run_ended_at,
-      r.environment_snapshot,
-      i.display_name AS server_display_name,
-      i.runtime AS server_runtime,
-      tr.id AS result_id,
-      tr.test_id AS test_result_test_id,
-      r.test_id AS run_test_id,
-      COALESCE(tr.test_id, r.test_id) AS template_id,
-      COALESCE(tr.test_id, r.test_id) AS test_definition_name,
-      NULL AS runner_type,
-      tr.verdict,
-      tr.failure_reason,
-      tr.metrics,
-      tr.artefacts,
-      tr.raw_events,
-      tr.started_at AS result_started_at,
-      tr.ended_at AS result_ended_at,
-      trd.document
-    FROM runs r
-    LEFT JOIN inference_servers i ON i.server_id = r.inference_server_id
-    LEFT JOIN test_results tr ON tr.run_id = r.id
-    LEFT JOIN test_result_documents trd ON trd.test_result_id = tr.id
-    WHERE r.id = ?
-    ORDER BY tr.started_at ASC
-  `).all(runId) as ResultsViewRow[];
+      b.id,
+      b.run_id,
+      b.status,
+      b.created_at,
+      b.document,
+      b.instantiation_id,
+      i.template_id,
+      i.server_id,
+      i.model_id,
+      i.document AS instantiation_document,
+      s.display_name AS server_display_name,
+      s.runtime AS server_runtime
+    FROM benchmark_test_run_results b
+    JOIN benchmark_test_instantiations i ON i.id = b.instantiation_id
+    LEFT JOIN inference_servers s ON s.server_id = i.server_id
+    WHERE b.run_id = ? OR b.id = ?
+    ORDER BY b.created_at DESC
+    LIMIT 1
+  `).all(runId, runId) as BenchmarkResultRow[];
 }
 
-function materializeRuns(rows: ResultsViewRow[]): RunAccumulator[] {
-  const byRun = new Map<string, RunAccumulator>();
+function materializeRuns(rows: BenchmarkResultRow[]): RunAccumulator[] {
+  const runs: RunAccumulator[] = [];
   for (const row of rows) {
-    const run = byRun.get(row.run_id) ?? {
+    const benchmarkDocument = safeJson<BenchmarkDocument>(row.document) ?? {};
+    const instantiationDocument = safeJson<Record<string, unknown>>(row.instantiation_document) ?? {};
+    const startedAt = stringValue(benchmarkDocument.started_at) ?? row.created_at;
+    const endedAt = stringValue(benchmarkDocument.completed_at) ?? null;
+    const templateId = stringValue(row.template_id) ?? stringValue(instantiationDocument.template_id) ?? row.instantiation_id;
+    const modelId = stringValue(row.model_id) ?? stringValue(instantiationDocument.model_id) ?? 'unknown';
+    const status = stringValue(benchmarkDocument.status) ?? row.status;
+    const latencyMs = benchmarkLatency(benchmarkDocument);
+    const costUsd = benchmarkCost(benchmarkDocument);
+    const samples = benchmarkSamples(benchmarkDocument);
+    const resultDocument = benchmarkDocumentForResult(instantiationDocument, benchmarkDocument, modelId);
+    const resultCount = benchmarkResultCount(benchmarkDocument);
+    const result = {
+      id: row.id,
+      test_id: templateId,
+      template_id: templateId,
+      template_label: benchmarkTemplateLabel(instantiationDocument, templateId),
+      kind: 'benchmark',
+      verdict: status === 'completed' ? 'pass' : status === 'completed_with_errors' ? 'skip' : 'fail',
+      failure_reason: (benchmarkDocument.errors ?? []).map((error) => stringValue(error.message) ?? stringValue(error.code)).filter(Boolean).join('; ') || null,
+      metrics: {
+        latency_ms: latencyMs,
+        elapsed_ms: latencyMs,
+        estimated_cost: costUsd,
+        result_count: resultCount
+      },
+      artefacts: {
+        samples,
+        raw_responses: benchmarkDocument.raw_responses ?? [],
+        normalized_responses: benchmarkDocument.normalized_responses ?? [],
+        aggregated_metrics: benchmarkDocument.aggregated_metrics ?? {}
+      },
+      raw_events: benchmarkDocument.raw_responses ?? [],
+      started_at: startedAt,
+      ended_at: endedAt,
+      document: resultDocument
+    };
+    runs.push({
       run_id: row.run_id,
-      inference_server_id: row.inference_server_id,
-      run_status: row.run_status,
-      run_started_at: row.run_started_at,
-      run_ended_at: row.run_ended_at,
-      environment_snapshot: safeJson<EnvironmentSnapshot>(row.environment_snapshot),
+      inference_server_id: row.server_id,
+      run_status: status,
+      run_started_at: startedAt,
+      run_ended_at: endedAt,
+      environment_snapshot: { effective_config: { model: modelId }, model: modelId },
       server_display_name: row.server_display_name,
       server_runtime: safeJson<RuntimeSnapshot>(row.server_runtime),
-      results: []
-    };
-    if (row.result_id) {
-      const testId = row.test_result_test_id ?? row.run_test_id ?? row.result_id;
-      const document = safeJson<ResultDocument>(row.document);
-      run.results.push({
-        id: row.result_id,
-        test_id: testId,
-        template_id: templateKey(row),
-        template_label: templateLabel(row.test_definition_name, testId),
-        kind: row.runner_type === 'python' || document?.test?.type?.includes('python') ? 'PY' : 'JSON',
-        verdict: row.verdict,
-        failure_reason: row.failure_reason,
-        metrics: safeJson<Record<string, unknown>>(row.metrics),
-        artefacts: safeJson<Record<string, unknown>>(row.artefacts),
-        raw_events: safeJson<unknown>(row.raw_events),
-        started_at: row.result_started_at,
-        ended_at: row.result_ended_at,
-        document
-      });
-    }
-    byRun.set(row.run_id, run);
+      raw_run: {
+        id: row.id,
+        run_id: row.run_id,
+        instantiation_id: row.instantiation_id,
+        status: row.status,
+        created_at: row.created_at,
+        document: benchmarkDocument
+      },
+      benchmark_document: benchmarkDocument,
+      instantiation_document: instantiationDocument,
+      results: Array.from({ length: resultCount }, (_, index) => ({
+        ...result,
+        id: index === 0 ? result.id : `${result.id}:${index + 1}`
+      }))
+    });
   }
-  return Array.from(byRun.values());
+  return runs;
 }
 
 function matchesFilters(row: ResultsHistoryRow, filters: ResultsFilterState): boolean {
@@ -903,11 +1057,16 @@ export function getResultsRunDetail(runId: string): ResultsRunDetail | null {
   if (!run) {
     return null;
   }
-  const db = getDb();
-  const rawRun = db.prepare('SELECT * FROM runs WHERE id = ?').get(runId) as Record<string, unknown>;
   return {
     run: toHistoryRow(run),
-    raw_run: { ...rawRun, environment_snapshot: safeJson<Record<string, unknown>>((rawRun.environment_snapshot as string | null) ?? null) },
+    raw_run: {
+      ...run.raw_run,
+      instantiation: run.instantiation_document,
+      raw_responses: run.benchmark_document.raw_responses ?? [],
+      normalized_responses: run.benchmark_document.normalized_responses ?? [],
+      metric_results: run.benchmark_document.metric_results ?? [],
+      aggregated_metrics: run.benchmark_document.aggregated_metrics ?? {}
+    },
     results: run.results.map((result) => ({
       id: result.id,
       test_id: result.test_id,
@@ -922,6 +1081,21 @@ export function getResultsRunDetail(runId: string): ResultsRunDetail | null {
       started_at: result.started_at,
       ended_at: result.ended_at
     })),
-    documents: run.results.map((result) => result.document ?? {})
+    documents: [
+      run.benchmark_document as Record<string, unknown>,
+      run.instantiation_document
+    ]
   };
+}
+
+export function deleteResultsRun(runId: string): DeleteResultsRunResult {
+  const db = getDb();
+  const row = db
+    .prepare('SELECT id FROM benchmark_test_run_results WHERE run_id = ? OR id = ?')
+    .get(runId, runId) as { id: string } | undefined;
+  if (!row) {
+    return { ok: false, code: 'RUN_NOT_FOUND', error: 'Run not found' };
+  }
+  db.prepare('DELETE FROM benchmark_test_run_results WHERE id = ?').run(row.id);
+  return { ok: true };
 }

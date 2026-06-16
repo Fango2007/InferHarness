@@ -165,5 +165,5 @@ export function getResultsEvaluationDetail(evaluationId: string): Promise<Result
 }
 
 export async function deleteRun(runId: string): Promise<void> {
-  await apiDelete(`/runs/${encodeURIComponent(runId)}`);
+  await apiDelete(`/results-view/runs/${encodeURIComponent(runId)}`);
 }
