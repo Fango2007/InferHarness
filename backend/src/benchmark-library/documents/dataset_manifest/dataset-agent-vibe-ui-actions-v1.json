@@ -1,0 +1,168 @@
+{
+  "kind": "dataset_manifest",
+  "schema_version": "benchmark_dataset_manifest_v1",
+  "dataset_id": "dataset-agent-vibe-ui-actions-v1",
+  "source": {
+    "source_type": "inline",
+    "format": "json"
+  },
+  "canonicalization_version": "dataset_canonical_v1",
+  "snapshot_policy": "embedded",
+  "dataset_hash": "sha256:51391baa1eabe77c1fc2c17b7de7dfcb50a3816f1a71bb05e913d1bc89f09097",
+  "item_count": 2,
+  "items": [
+    {
+      "id": "vibe-open-preview",
+      "system_prompt": "You are a UI agent. Use exactly one tool call.",
+      "prompt": "Open the local preview at http://localhost:5173/settings to inspect the current page.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "open_preview",
+            "description": "Open a local app preview URL.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "description": "URL to open."
+                }
+              },
+              "required": [
+                "url"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "modify_component",
+            "description": "Modify a component file.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "file": {
+                  "type": "string",
+                  "description": "Component path."
+                },
+                "change": {
+                  "type": "string",
+                  "description": "Requested change."
+                }
+              },
+              "required": [
+                "file",
+                "change"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto",
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "open_preview",
+            "arguments": {
+              "url": "http://localhost:5173/settings"
+            }
+          }
+        }
+      ],
+      "tags": [
+        "vibe",
+        "browser",
+        "preview"
+      ]
+    },
+    {
+      "id": "vibe-modify-component",
+      "system_prompt": "You are a UI agent. Use exactly one tool call.",
+      "prompt": "In src/components/Toolbar.tsx, rename the primary button label to Save draft.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "open_preview",
+            "description": "Open a local app preview URL.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "description": "URL to open."
+                }
+              },
+              "required": [
+                "url"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "modify_component",
+            "description": "Modify a component file.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "file": {
+                  "type": "string",
+                  "description": "Component path."
+                },
+                "change": {
+                  "type": "string",
+                  "description": "Requested change."
+                }
+              },
+              "required": [
+                "file",
+                "change"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto",
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "modify_component",
+            "arguments": {
+              "file": "src/components/Toolbar.tsx",
+              "change": "Rename the primary button label to Save draft."
+            }
+          }
+        }
+      ],
+      "tags": [
+        "vibe",
+        "frontend",
+        "edit"
+      ]
+    }
+  ],
+  "item_hashes": [
+    {
+      "item_id": "vibe-open-preview",
+      "hash": "sha256:d63700a5a696b162f9021110d3bf84c56f80dc1825339969c992f8937e88f26c"
+    },
+    {
+      "item_id": "vibe-modify-component",
+      "hash": "sha256:b4ddb7e3072269abd3f0a29a383399e6963fd7bc4aab990ff29fa68c670c8933"
+    }
+  ],
+  "metadata": {
+    "source": "built-in-agent-tool-call-library",
+    "template_id": "agent-vibe-ui-actions-v1"
+  }
+}

@@ -1,0 +1,168 @@
+{
+  "kind": "dataset_manifest",
+  "schema_version": "benchmark_dataset_manifest_v1",
+  "dataset_id": "dataset-agent-mcp-resource-routing-v1",
+  "source": {
+    "source_type": "inline",
+    "format": "json"
+  },
+  "canonicalization_version": "dataset_canonical_v1",
+  "snapshot_policy": "embedded",
+  "dataset_hash": "sha256:a4c5f6de33a9cc4086c08000c255d34a308156b8e7e5cde7b839f4471a6837e4",
+  "item_count": 2,
+  "items": [
+    {
+      "id": "mcp-read-db-schema",
+      "system_prompt": "Use MCP resource tools when the user asks for repository context.",
+      "prompt": "Read the database schema resource before explaining benchmark document storage.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "read_mcp_resource",
+            "description": "Read a named MCP resource.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "server": {
+                  "type": "string",
+                  "description": "MCP server name."
+                },
+                "uri": {
+                  "type": "string",
+                  "description": "Resource URI."
+                }
+              },
+              "required": [
+                "server",
+                "uri"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "search_workspace",
+            "description": "Search local files.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "query": {
+                  "type": "string",
+                  "description": "Search query."
+                }
+              },
+              "required": [
+                "query"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto",
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "read_mcp_resource",
+            "arguments": {
+              "server": "inferharness",
+              "uri": "resource://schema/benchmark_documents"
+            }
+          }
+        }
+      ],
+      "tags": [
+        "mcp",
+        "resource",
+        "routing"
+      ]
+    },
+    {
+      "id": "mcp-search-fallback",
+      "system_prompt": "Use MCP resource tools when a resource URI is supplied; otherwise search.",
+      "prompt": "Find files mentioning benchmark_plan_v1. No resource URI is available.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "read_mcp_resource",
+            "description": "Read a named MCP resource.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "server": {
+                  "type": "string",
+                  "description": "MCP server name."
+                },
+                "uri": {
+                  "type": "string",
+                  "description": "Resource URI."
+                }
+              },
+              "required": [
+                "server",
+                "uri"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "search_workspace",
+            "description": "Search local files.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "query": {
+                  "type": "string",
+                  "description": "Search query."
+                }
+              },
+              "required": [
+                "query"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto",
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "search_workspace",
+            "arguments": {
+              "query": "benchmark_plan_v1"
+            }
+          }
+        }
+      ],
+      "tags": [
+        "mcp",
+        "fallback",
+        "routing"
+      ]
+    }
+  ],
+  "item_hashes": [
+    {
+      "item_id": "mcp-read-db-schema",
+      "hash": "sha256:8c409542890e07a9450e0b618abff86c3ed2422680eb7d59e07effffa51a3b1f"
+    },
+    {
+      "item_id": "mcp-search-fallback",
+      "hash": "sha256:85f5a2108326ba551aba3ba0fa66e01ee9131a3a5476a0c1c04120f224246c7b"
+    }
+  ],
+  "metadata": {
+    "source": "built-in-agent-tool-call-library",
+    "template_id": "agent-mcp-resource-routing-v1"
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "kind": "test_template",
+  "schema_version": "benchmark_test_template_v1",
+  "template_id": "server-enum-coercion-v1",
+  "template_version": "1.0.0",
+  "name": "Server - enum and numeric argument fidelity",
+  "description": "Checks whether tool arguments preserve enum labels, booleans, and numeric values without string coercion.",
+  "operation": "chat_completion",
+  "required_capabilities": {
+    "chat_completion": true,
+    "streaming": false,
+    "tool_calling": true,
+    "structured_output": false
+  },
+  "input_contract": {
+    "required_fields": [
+      "prompt",
+      "tools",
+      "expected_tool_calls"
+    ],
+    "optional_fields": [
+      "system_prompt",
+      "tool_choice",
+      "tags",
+      "metadata"
+    ],
+    "min_items": 1
+  },
+  "stages": [
+    {
+      "id": "tool_call",
+      "type": "dataset_loop",
+      "iterations_per_item": 1,
+      "record_metrics": true,
+      "order": "sequential",
+      "cooldown_ms": 0,
+      "stop_on_error": false
+    }
+  ],
+  "metrics": [
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "elapsed_ms",
+    "first_token_ms",
+    "tokens_per_second",
+    "tool_call_count",
+    "tool_selected_correctly",
+    "tool_arguments_valid",
+    "missing_tool_call",
+    "hallucinated_tool_call"
+  ],
+  "aggregations": [
+    "mean",
+    "p50",
+    "p95",
+    "count"
+  ],
+  "metadata": {
+    "source": "built-in-agent-tool-call-library",
+    "benchmark_family": "agent_tool_call_compliance",
+    "target_agent": "Strict typed tool caller"
+  },
+  "extensions": {}
+}

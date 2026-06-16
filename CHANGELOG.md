@@ -8,6 +8,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Added
 
+- **File-backed benchmark document library** — benchmark templates, datasets, runtime profiles, and plans now load from built-in JSON documents plus a writable local library, with API saves persisted to files so documents can be reconstructed after SQLite loss.
 - **Native Anthropic and Gemini benchmark tool calls** — benchmark execution now resolves Anthropic Messages and Gemini GenerateContent operations, maps dataset tools and `tool_choice` into provider-native payloads, and normalizes returned tool calls and usage metrics.
 - **Adaptive Results performance views** — the Results dashboard now has an Auto performance view with manual modes for cold-start comparison, latency trend, pass-rate trend, latency histogram, and model-summary table comparisons backed by filtered model aggregates.
 - **Project workflow guardrails** — `AGENTS.md` now combines the main branch workflow, Node 25 rules, challenge-and-skill behavior instructions, and a static-data rule that keeps prompts, schemas, fixtures, and examples out of application code.

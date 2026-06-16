@@ -83,6 +83,8 @@ Register local or remote inference servers, discover available models, and maint
 **Reusable test definitions**
 Create tests for one prompt, a dataset loop, tool-calling behavior, structured output, or multi-model comparisons.
 
+Benchmark documents are persisted as JSON in a file-backed library and indexed into SQLite for runtime use. Built-in documents ship with the app, while user-created templates, datasets, runtime profiles, and plans are written to a local library directory so they can be restored if the database is rebuilt.
+
 **Benchmark template agent**
 Use the Templates page agent to challenge underspecified benchmark ideas, draft runnable `chat_completion` benchmark templates, validate them against the benchmark schema, and review them in the editor before saving.
 
@@ -348,6 +350,8 @@ Environment values can be edited in Settings after startup. Settings groups them
 | Variable | Default | Description |
 |---|---|---|
 | `INFERHARNESS_DB_PATH` | `./backend/data/db/inferharness.sqlite` | SQLite database file path. |
+| `INFERHARNESS_BENCHMARK_LIBRARY_ROOT` | `./backend/data/benchmark-library/documents` | Writable local benchmark document library. Documents saved through the API are stored here as JSON and re-imported into SQLite on startup. |
+| `INFERHARNESS_BENCHMARK_LIBRARY_AUTOSEED` | enabled outside tests | Set to `false`/`0` to skip startup import of built-in and local benchmark library documents, or `true`/`1` to force it in test-like environments. |
 | `RETENTION_DAYS` | `30` | Days to keep run results. |
 
 **Inference connectivity**

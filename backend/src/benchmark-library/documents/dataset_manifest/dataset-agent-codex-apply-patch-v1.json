@@ -1,0 +1,127 @@
+{
+  "kind": "dataset_manifest",
+  "schema_version": "benchmark_dataset_manifest_v1",
+  "dataset_id": "dataset-agent-codex-apply-patch-v1",
+  "source": {
+    "source_type": "inline",
+    "format": "json"
+  },
+  "canonicalization_version": "dataset_canonical_v1",
+  "snapshot_policy": "embedded",
+  "dataset_hash": "sha256:0fe35750e0ad1e883fe3b1414798775209e3043b48810138620d8ea74f70d66f",
+  "item_count": 2,
+  "items": [
+    {
+      "id": "codex-add-test-file",
+      "system_prompt": "You are an editing agent. Use the provided tool. Do not answer in prose.",
+      "prompt": "Create tests/smoke/example.test.ts containing exactly: export const ok = true; Use the patch tool once.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "apply_patch",
+            "description": "Apply a unified patch to the repository.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "patch": {
+                  "type": "string",
+                  "description": "Complete apply_patch patch body."
+                }
+              },
+              "required": [
+                "patch"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "apply_patch"
+        }
+      },
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "apply_patch",
+            "arguments": {
+              "patch": "*** Begin Patch\n*** Add File: tests/smoke/example.test.ts\n+export const ok = true;\n*** End Patch"
+            }
+          }
+        }
+      ],
+      "tags": [
+        "codex",
+        "patch",
+        "create-file"
+      ]
+    },
+    {
+      "id": "codex-update-readme-line",
+      "system_prompt": "You are an editing agent. Use the provided tool. Do not answer in prose.",
+      "prompt": "Patch README.md by replacing the line \"Status: draft\" with \"Status: ready\". Use the patch tool once.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "apply_patch",
+            "description": "Apply a unified patch to the repository.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "patch": {
+                  "type": "string",
+                  "description": "Complete apply_patch patch body."
+                }
+              },
+              "required": [
+                "patch"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "apply_patch"
+        }
+      },
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "apply_patch",
+            "arguments": {
+              "patch": "*** Begin Patch\n*** Update File: README.md\n@@\n-Status: draft\n+Status: ready\n*** End Patch"
+            }
+          }
+        }
+      ],
+      "tags": [
+        "codex",
+        "patch",
+        "update-file"
+      ]
+    }
+  ],
+  "item_hashes": [
+    {
+      "item_id": "codex-add-test-file",
+      "hash": "sha256:c13ce4141a24171a098b5e6013d243ddb4933ab8260671ec24ce800294ad8f68"
+    },
+    {
+      "item_id": "codex-update-readme-line",
+      "hash": "sha256:fb1aa88f52b7c45227bd84a25dbf164ad8485a442ce8026da598aa7279eb67c5"
+    }
+  ],
+  "metadata": {
+    "source": "built-in-agent-tool-call-library",
+    "template_id": "agent-codex-apply-patch-v1"
+  }
+}
