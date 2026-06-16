@@ -48,7 +48,7 @@
         "method": { "type": "string", "enum": ["GET", "POST"] },
         "url": { "type": "string", "minLength": 1 },
         "endpoint": { "type": "string", "minLength": 1 },
-        "protocol": { "type": "string", "enum": ["ollama_chat", "ollama_generate", "ollama_embedding", "ollama_list_models", "openai_chat", "openai_embedding", "openai_list_models"] },
+        "protocol": { "type": "string", "enum": ["ollama_chat", "ollama_generate", "ollama_embedding", "ollama_list_models", "openai_chat", "openai_embedding", "openai_list_models", "anthropic_messages", "gemini_generate_content"] },
         "operation": { "type": "string", "enum": ["chat_completion", "completion", "embedding", "list_models", "healthcheck"] },
         "supports_streaming": { "type": "boolean" },
         "supports_usage": { "type": "boolean" }

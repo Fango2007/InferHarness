@@ -300,6 +300,126 @@ function messagesFromItem(item: Record<string, unknown>): Array<Record<string, s
   return messages;
 }
 
+function arrayFromItem(item: Record<string, unknown>, key: string): unknown[] {
+  const value = item[key];
+  return Array.isArray(value) ? value : [];
+}
+
+function functionName(tool: unknown): string | null {
+  const record = objectValue(tool);
+  const fn = objectValue(record?.function);
+  return textFromValue(fn?.name) ?? textFromValue(record?.name);
+}
+
+function functionDescription(tool: unknown): string | undefined {
+  const record = objectValue(tool);
+  const fn = objectValue(record?.function);
+  return textFromValue(fn?.description) ?? textFromValue(record?.description) ?? undefined;
+}
+
+function functionParameters(tool: unknown): Record<string, unknown> {
+  const record = objectValue(tool);
+  const fn = objectValue(record?.function);
+  const parameters = objectValue(fn?.parameters) ?? objectValue(record?.parameters) ?? objectValue(record?.input_schema);
+  return parameters ?? { type: 'object', properties: {} };
+}
+
+function openAiToolsFromItem(item: Record<string, unknown>): unknown[] | undefined {
+  const tools = arrayFromItem(item, 'tools');
+  return tools.length > 0 ? tools : undefined;
+}
+
+function anthropicToolsFromItem(item: Record<string, unknown>): Array<Record<string, unknown>> | undefined {
+  const tools = arrayFromItem(item, 'tools')
+    .map((tool) => {
+      const name = functionName(tool);
+      if (!name) return null;
+      const declaration: Record<string, unknown> = {
+        name,
+        ...(functionDescription(tool) ? { description: functionDescription(tool) } : {}),
+        input_schema: functionParameters(tool)
+      };
+      return declaration;
+    })
+    .filter((tool): tool is Record<string, unknown> => tool !== null);
+  return tools.length > 0 ? tools : undefined;
+}
+
+function geminiToolsFromItem(item: Record<string, unknown>): Array<Record<string, unknown>> | undefined {
+  const functionDeclarations = arrayFromItem(item, 'tools')
+    .map((tool) => {
+      const name = functionName(tool);
+      if (!name) return null;
+      const declaration: Record<string, unknown> = {
+        name,
+        ...(functionDescription(tool) ? { description: functionDescription(tool) } : {}),
+        parameters: functionParameters(tool)
+      };
+      return declaration;
+    })
+    .filter((tool): tool is Record<string, unknown> => tool !== null);
+  return functionDeclarations.length > 0 ? [{ functionDeclarations }] : undefined;
+}
+
+function toolChoiceFromSource(item: Record<string, unknown>, params: Record<string, unknown>): unknown {
+  return item.tool_choice ?? params.tool_choice;
+}
+
+function openAiToolChoice(choice: unknown): unknown {
+  return choice;
+}
+
+function anthropicToolChoice(choice: unknown): unknown {
+  if (choice === 'auto' || choice === undefined || choice === null) return undefined;
+  if (choice === 'none') return { type: 'none' };
+  if (choice === 'required') return { type: 'any' };
+  if (typeof choice === 'string') return { type: 'tool', name: choice };
+  const record = objectValue(choice);
+  const fn = objectValue(record?.function);
+  const name = textFromValue(fn?.name) ?? textFromValue(record?.name);
+  return name ? { type: 'tool', name } : choice;
+}
+
+function geminiToolConfig(choice: unknown): unknown {
+  if (choice === undefined || choice === null || choice === 'auto') return undefined;
+  if (choice === 'none') {
+    return { functionCallingConfig: { mode: 'NONE' } };
+  }
+  if (choice === 'required') {
+    return { functionCallingConfig: { mode: 'ANY' } };
+  }
+  if (typeof choice === 'string') {
+    return { functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [choice] } };
+  }
+  const record = objectValue(choice);
+  const fn = objectValue(record?.function);
+  const name = textFromValue(fn?.name) ?? textFromValue(record?.name);
+  return name ? { functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [name] } } : choice;
+}
+
+function anthropicMessages(messages: Array<Record<string, string>>): Array<Record<string, string>> {
+  return messages
+    .filter((message) => message.role !== 'system')
+    .map((message) => ({
+      role: message.role === 'assistant' ? 'assistant' : 'user',
+      content: message.content
+    }));
+}
+
+function systemPromptFromMessages(messages: Array<Record<string, string>>): string | undefined {
+  const system = messages.filter((message) => message.role === 'system').map((message) => message.content).join('\n\n');
+  return system.trim().length > 0 ? system : undefined;
+}
+
+function geminiContents(messages: Array<Record<string, string>>): Array<Record<string, unknown>> {
+  return messages
+    .filter((message) => message.role !== 'system')
+    .map((message) => ({
+      role: message.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: message.content }]
+    }));
+}
+
 function runtimeParameters(instantiation: Record<string, unknown>): Record<string, unknown> {
   return objectAt(instantiation, 'runtime_parameters') ?? {};
 }
@@ -385,6 +505,10 @@ export function buildBenchmarkRequestPayload(
         payload[key] = params[key];
       }
     }
+    const tools = openAiToolsFromItem(item);
+    const toolChoice = openAiToolChoice(toolChoiceFromSource(item, params));
+    if (tools) payload.tools = tools;
+    if (toolChoice !== undefined && toolChoice !== null) payload.tool_choice = toolChoice;
     return payload;
   }
 
@@ -398,7 +522,50 @@ export function buildBenchmarkRequestPayload(
       model,
       messages,
       stream,
+      ...(openAiToolsFromItem(item) ? { tools: openAiToolsFromItem(item) } : {}),
       ...(Object.keys(options).length > 0 ? { options } : {})
+    };
+  }
+
+  if (protocol === 'anthropic_messages') {
+    if (stream) {
+      throw new BenchmarkValidationError('Streaming benchmark execution is not supported for anthropic_messages in this checkpoint.');
+    }
+    const payload: Record<string, unknown> = {
+      model,
+      messages: anthropicMessages(messages),
+      max_tokens: typeof params.max_tokens === 'number' ? params.max_tokens : 1024
+    };
+    const system = systemPromptFromMessages(messages);
+    const tools = anthropicToolsFromItem(item);
+    const toolChoice = anthropicToolChoice(toolChoiceFromSource(item, params));
+    if (system) payload.system = system;
+    if (params.temperature !== undefined && params.temperature !== null) payload.temperature = params.temperature;
+    if (params.top_p !== undefined && params.top_p !== null) payload.top_p = params.top_p;
+    if (params.stop !== undefined && params.stop !== null) payload.stop_sequences = params.stop;
+    if (tools) payload.tools = tools;
+    if (toolChoice !== undefined && toolChoice !== null) payload.tool_choice = toolChoice;
+    return payload;
+  }
+
+  if (protocol === 'gemini_generate_content') {
+    if (stream) {
+      throw new BenchmarkValidationError('Streaming benchmark execution is not supported for gemini_generate_content in this checkpoint.');
+    }
+    const generationConfig: Record<string, unknown> = {};
+    if (params.temperature !== undefined && params.temperature !== null) generationConfig.temperature = params.temperature;
+    if (params.top_p !== undefined && params.top_p !== null) generationConfig.topP = params.top_p;
+    if (params.max_tokens !== undefined && params.max_tokens !== null) generationConfig.maxOutputTokens = params.max_tokens;
+    if (params.stop !== undefined && params.stop !== null) generationConfig.stopSequences = params.stop;
+    const system = systemPromptFromMessages(messages);
+    const tools = geminiToolsFromItem(item);
+    const toolConfig = geminiToolConfig(toolChoiceFromSource(item, params));
+    return {
+      contents: geminiContents(messages),
+      ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+      ...(Object.keys(generationConfig).length > 0 ? { generationConfig } : {}),
+      ...(tools ? { tools } : {}),
+      ...(toolConfig ? { toolConfig } : {})
     };
   }
 
@@ -443,12 +610,21 @@ function extractServerEvalMs(metadata: Record<string, unknown> | null): number |
 
 function usageTokens(metadata: Record<string, unknown> | null): Pick<NormalizedResponse, 'input_tokens' | 'output_tokens' | 'total_tokens'> {
   const usage = objectValue(metadata?.usage);
-  const inputTokens = numberAt(usage, 'prompt_tokens') ?? numberAt(metadata, 'prompt_eval_count');
-  const outputTokens = numberAt(usage, 'completion_tokens') ?? numberAt(metadata, 'eval_count');
+  const usageMetadata = objectValue(metadata?.usageMetadata);
+  const inputTokens = numberAt(usage, 'prompt_tokens')
+    ?? numberAt(usage, 'input_tokens')
+    ?? numberAt(usageMetadata, 'promptTokenCount')
+    ?? numberAt(metadata, 'prompt_eval_count');
+  const outputTokens = numberAt(usage, 'completion_tokens')
+    ?? numberAt(usage, 'output_tokens')
+    ?? numberAt(usageMetadata, 'candidatesTokenCount')
+    ?? numberAt(metadata, 'eval_count');
   return {
     input_tokens: inputTokens,
     output_tokens: outputTokens,
-    total_tokens: numberAt(usage, 'total_tokens') ?? (inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null)
+    total_tokens: numberAt(usage, 'total_tokens')
+      ?? numberAt(usageMetadata, 'totalTokenCount')
+      ?? (inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null)
   };
 }
 
@@ -566,9 +742,90 @@ function normalizeStreamResponse(protocol: unknown, contentType: string, respons
   };
 }
 
-function normalizeResponse(body: unknown, text: string | null): NormalizedResponse {
+function normalizeAnthropicResponse(record: Record<string, unknown>): NormalizedResponse {
+  const content = Array.isArray(record.content) ? record.content : [];
+  const textParts: string[] = [];
+  const toolCalls: unknown[] = [];
+  for (const block of content) {
+    const entry = objectValue(block);
+    if (!entry) continue;
+    if (entry.type === 'text' && typeof entry.text === 'string') {
+      textParts.push(entry.text);
+    }
+    if (entry.type === 'tool_use') {
+      const name = textFromValue(entry.name);
+      if (name) {
+        toolCalls.push({
+          id: textFromValue(entry.id) ?? undefined,
+          type: 'function',
+          function: {
+            name,
+            arguments: entry.input ?? {}
+          }
+        });
+      }
+    }
+  }
+  return {
+    answer_text: textParts.join(''),
+    ...usageTokens(record),
+    load_duration_ms: extractLoadDurationMs(record),
+    server_total_time_ms: extractServerTotalTimeMs(record),
+    server_prompt_eval_ms: extractServerPromptEvalMs(record),
+    server_eval_ms: extractServerEvalMs(record),
+    tool_calls: toolCalls.length > 0 ? toolCalls : null,
+    body: record,
+    text: null
+  };
+}
+
+function normalizeGeminiResponse(record: Record<string, unknown>): NormalizedResponse {
+  const candidates = Array.isArray(record.candidates) ? record.candidates : [];
+  const firstCandidate = objectValue(candidates[0]);
+  const content = objectValue(firstCandidate?.content);
+  const parts = Array.isArray(content?.parts) ? content.parts : [];
+  const textParts: string[] = [];
+  const toolCalls: unknown[] = [];
+  for (const part of parts) {
+    const entry = objectValue(part);
+    if (!entry) continue;
+    if (typeof entry.text === 'string') {
+      textParts.push(entry.text);
+    }
+    const functionCall = objectValue(entry.functionCall);
+    const name = textFromValue(functionCall?.name);
+    if (name) {
+      toolCalls.push({
+        type: 'function',
+        function: {
+          name,
+          arguments: objectValue(functionCall?.args) ?? {}
+        }
+      });
+    }
+  }
+  return {
+    answer_text: textParts.join(''),
+    ...usageTokens(record),
+    load_duration_ms: extractLoadDurationMs(record),
+    server_total_time_ms: extractServerTotalTimeMs(record),
+    server_prompt_eval_ms: extractServerPromptEvalMs(record),
+    server_eval_ms: extractServerEvalMs(record),
+    tool_calls: toolCalls.length > 0 ? toolCalls : null,
+    body: record,
+    text: null
+  };
+}
+
+function normalizeResponse(protocol: unknown, body: unknown, text: string | null): NormalizedResponse {
   if (body && typeof body === 'object' && !Array.isArray(body)) {
     const record = body as Record<string, unknown>;
+    if (protocol === 'anthropic_messages') {
+      return normalizeAnthropicResponse(record);
+    }
+    if (protocol === 'gemini_generate_content') {
+      return normalizeGeminiResponse(record);
+    }
     const choices = Array.isArray(record.choices) ? record.choices : [];
     const firstChoice = choices[0] as Record<string, unknown> | undefined;
     const message = firstChoice && typeof firstChoice.message === 'object' && !Array.isArray(firstChoice.message)
@@ -616,6 +873,13 @@ function normalizeResponse(body: unknown, text: string | null): NormalizedRespon
   };
 }
 
+function providerHeaders(protocol: unknown): Record<string, string> {
+  if (protocol === 'anthropic_messages') {
+    return { 'anthropic-version': '2023-06-01' };
+  }
+  return {};
+}
+
 async function executeItem(
   instantiation: Record<string, unknown>,
   stage: BenchmarkStage,
@@ -651,7 +915,7 @@ async function executeItem(
     try {
       const response = await backendFetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: { 'Content-Type': 'application/json', ...providerHeaders(operationSpec?.protocol), ...authHeaders },
         body: JSON.stringify(payload),
         signal: controller.signal
       });
@@ -692,7 +956,7 @@ async function executeItem(
       try {
         normalized = effectiveStreaming
           ? normalizeStreamResponse(operationSpec?.protocol, contentType, responseText)
-          : normalizeResponse(responseBody, responseBody === null ? responseText : null);
+          : normalizeResponse(operationSpec?.protocol, responseBody, responseBody === null ? responseText : null);
       } catch (error) {
         if (!(error instanceof BenchmarkStreamParseError)) {
           throw error;

@@ -11,10 +11,12 @@ type DatasetItem = Record<string, unknown>;
 export interface PrepareDatasetManifestInput {
   dataset_id: string;
   source: {
-    source_type: 'file';
+    source_type: 'file' | 'inline';
     format: 'json' | 'jsonl' | 'csv';
-    path: string;
+    path?: string;
   };
+  items?: DatasetItem[];
+  snapshot_policy?: 'embedded' | 'manifest_only';
   metadata?: Record<string, unknown>;
 }
 
@@ -22,6 +24,7 @@ const optionalItemFields: Record<string, (value: unknown) => boolean> = {
   system_prompt: (value) => value === null || typeof value === 'string',
   interaction_mode: (value) => ['chat', 'tool_calling', 'structured_output', 'multi_turn', 'agentic'].includes(String(value)),
   tools: Array.isArray,
+  tool_choice: (value) => value === null || typeof value === 'string' || (typeof value === 'object' && !Array.isArray(value)),
   expected_tool_calls: Array.isArray,
   expected_answer: () => true,
   expected_format: (value) => ['free_text', 'json', 'markdown', 'code', 'boolean', 'number', 'schema', 'regex'].includes(String(value)),
@@ -219,10 +222,31 @@ export function prepareBenchmarkDatasetManifest(input: PrepareDatasetManifestInp
   if (!datasetId) {
     throw new BenchmarkValidationError('Benchmark dataset manifest requires dataset_id.');
   }
+  if (input.source.source_type === 'inline') {
+    if (input.snapshot_policy && input.snapshot_policy !== 'embedded') {
+      throw new BenchmarkValidationError('Inline benchmark datasets must use snapshot_policy=embedded.');
+    }
+    const items = normalizeItems(input.items ?? []);
+    return buildDatasetManifest({
+      dataset_id: datasetId,
+      source: {
+        source_type: 'inline',
+        format: input.source.format
+      },
+      snapshot_policy: 'embedded',
+      item_count: items.length,
+      items,
+      metadata: input.metadata
+    });
+  }
+  const sourcePath = input.source.path?.trim();
+  if (!sourcePath) {
+    throw new BenchmarkValidationError('Benchmark dataset manifest requires source.path for file datasets.');
+  }
   const source = {
     source_type: input.source.source_type,
     format: input.source.format,
-    path: input.source.path.trim()
+    path: sourcePath
   };
   const items = readBenchmarkDatasetFile(source);
   return buildDatasetManifest({

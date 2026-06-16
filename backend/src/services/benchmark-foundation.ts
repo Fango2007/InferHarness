@@ -277,6 +277,30 @@ export function resolveOperationSpec(
       supports_usage: false
     };
   }
+  if (schemaFamily.includes('anthropic')) {
+    return {
+      method: 'POST',
+      url: new URL('/v1/messages', baseUrl).toString(),
+      endpoint: '/v1/messages',
+      protocol: 'anthropic_messages',
+      operation,
+      supports_streaming: false,
+      supports_usage: true
+    };
+  }
+  if (schemaFamily.includes('gemini')) {
+    const modelId = String((snapshot.model as { model_id?: unknown } | undefined)?.model_id ?? '');
+    const modelPath = modelId.startsWith('models/') ? modelId : `models/${modelId}`;
+    return {
+      method: 'POST',
+      url: new URL(`/v1beta/${modelPath}:generateContent`, baseUrl).toString(),
+      endpoint: `/v1beta/{model}:generateContent`,
+      protocol: 'gemini_generate_content',
+      operation,
+      supports_streaming: false,
+      supports_usage: true
+    };
+  }
   if (schemaFamily.includes('openai-compatible')) {
     return {
       method: 'POST',

@@ -8,16 +8,25 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Added
 
+- **Native Anthropic and Gemini benchmark tool calls** — benchmark execution now resolves Anthropic Messages and Gemini GenerateContent operations, maps dataset tools and `tool_choice` into provider-native payloads, and normalizes returned tool calls and usage metrics.
 - **Adaptive Results performance views** — the Results dashboard now has an Auto performance view with manual modes for cold-start comparison, latency trend, pass-rate trend, latency histogram, and model-summary table comparisons backed by filtered model aggregates.
 - **Project workflow guardrails** — `AGENTS.md` now combines the main branch workflow, Node 25 rules, challenge-and-skill behavior instructions, and a static-data rule that keeps prompts, schemas, fixtures, and examples out of application code.
 - **Benchmark template agent** — Templates now includes a review-first benchmark-template agent that uses a database-persisted Settings model, challenges underspecified requests, loads its prompt from Markdown with the full `test_template` schema and example injected, validates generated drafts server-side, and applies drafts to the existing editor without auto-saving.
+- **Run-page persisted benchmark plan checkpoint** — Run can now select saved chat benchmark templates, prepare inline or server-side dataset manifests, persist unique runtime/dataset/plan artifacts per click, execute `/benchmark/plans/:id/run`, and render per-target results including failed targets without result documents.
+
+### Changed
+
+- **Human-readable agent workflow guidance** — `AGENTS.md` now groups workflow rules into clearer sections, documents parallel worktree expectations including when to resync before validation or merge, directs agents to create a focused branch without pausing for confirmation, and asks agents to explicitly request commit approval with a suggested message and details.
 
 ### Fixed
 
 - **Benchmark-only Results history** — Results dashboard, history, detail drawers, and deletion now read benchmark test run records instead of legacy run/result tables, so benchmark smoke runs appear after completion.
+- **Template agent starter drafting** — The benchmark-template agent now drafts conservative starter templates for recognizable benchmark families such as tool-call compliance instead of blocking on follow-up questions when reasonable assumptions are available.
 - **Benchmark foundation stress test timeout** — the indexed lookup stress test now has an explicit timeout that matches its own 10-second performance budget, avoiding Vitest preemption on slower CI runners.
 - Restored tracked `AGENTS.md` project workflow rules while keeping the Node 25.x native-module guidance, restored `CLAUDE.md` tracking, and aligned Claude-specific project guidance with the enforced Node 25.x runtime.
 - **Template agent settings rate limiting** — `/system/settings` and `/system/settings/template-agent-model` now use an in-memory per-client rate limit before reading or updating app settings.
+- **Template agent message contrast** — Assistant replies and validated draft previews now render with readable text on their light message backgrounds.
+- **Production token bootstrap** — Production build and start scripts now run the local API token bootstrap so Vite has `VITE_INFERHARNESS_API_TOKEN` before bundling or previewing the frontend.
 
 ## [0.8.0] - 2026-06-14
 

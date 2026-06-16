@@ -1,8 +1,6 @@
 # Backend Schemas
 
-The active application schemas live in this directory. These files are the canonical shapes for persisted records, runtime snapshots, evaluation payloads, and architecture inspection output. New benchmark pipeline contracts should reuse these object names and nested structures directly, or extend the canonical schema when a benchmark need is missing.
-
-Legacy test-template and test-result schemas are intentionally excluded from this active catalog: `json-test-template-schema.json`, `python-test-template-schema.json`, and `test-run-result.schema.json` are scenario-era contracts that the new benchmark pipeline is expected to replace.
+The active application schemas live in this directory. These files are the canonical shapes for persisted records, runtime snapshots, evaluation payloads, benchmark documents, and architecture inspection output. New benchmark pipeline contracts should reuse these object names and nested structures directly, or extend the canonical schema when a benchmark need is missing.
 
 **`model-schema.json`**
 Role: canonical model catalog record.
@@ -58,4 +56,4 @@ Role: runtime-promoted contract pack for the new benchmark pipeline foundations.
 Producer/consumer: produced by benchmark validation, offline instantiation, and synthetic result persistence; consumed by benchmark foundation APIs before the Python execution engine is wired in.
 Key objects: `model_profile`, `model_snapshot`, `runtime_profile`, `dataset_manifest`, `test_template`, `test_instantiation`, `test_run_result`, and `benchmark_plan`.
 Persistence/runtime usage: `benchmark_test_instantiations` and `benchmark_test_run_results` store validated immutable JSON documents plus stable document hashes.
-Compatibility notes: these schemas stay standalone for the current AJV-by-file validator. Scenario-era template and result schemas remain separate until the benchmark engine replaces that path.
+Compatibility notes: these schemas stay standalone for the current AJV-by-file validator.

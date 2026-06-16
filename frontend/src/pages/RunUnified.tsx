@@ -8,20 +8,22 @@ import { useOnboardingContext } from '../onboarding-context.js';
 import { isRibbonDismissed } from '../onboarding.js';
 import {
   STARTER_BENCHMARK_TEMPLATE_ID,
-  buildBenchmarkPlanPayload,
+  buildPersistedBenchmarkPlanDocument,
   buildBenchmarkSmokePayload,
-  createBenchmarkInstantiation,
+  getBenchmarkInstantiation,
   getBenchmarkResult,
   listBenchmarkDocuments,
   prepareBenchmarkDatasetManifest,
-  runBenchmarkInstantiation,
-  runBenchmarkPlan,
+  runPersistedBenchmarkPlan,
   saveBenchmarkDocument,
+  saveBenchmarkPlan,
   starterBenchmarkTemplateDocument,
   type BenchmarkDatasetFormat,
   type BenchmarkInstantiationRecord,
+  type BenchmarkPlanRunResult,
   type BenchmarkResultRecord,
-  type BenchmarkTestTemplateDocument
+  type BenchmarkTestTemplateDocument,
+  type BenchmarkTestTemplateRecord
 } from '../services/benchmark-api.js';
 import type { InferenceServerHealth } from '../services/connectivity-api.js';
 import { DEFAULT_INFERENCE_PARAMS, type InferenceParams } from '../services/inference-param-presets-api.js';
@@ -184,6 +186,13 @@ function streamSummary(result: BenchmarkResultRecord | null): string {
 
 type RunDatasetMode = 'inline' | 'manifest_only';
 
+function newRunId(prefix: string): string {
+  if (globalThis.crypto && 'randomUUID' in globalThis.crypto) {
+    return `${prefix}-${globalThis.crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 function datasetManifest(instantiation: BenchmarkInstantiationRecord | null): Record<string, unknown> | null {
   const dataset = instantiation?.document.dataset;
   return dataset && typeof dataset === 'object' && !Array.isArray(dataset)
@@ -196,6 +205,11 @@ function resultStatus(result: BenchmarkResultRecord | null, busy: boolean): stri
     return 'running';
   }
   return result?.document.status ?? 'idle';
+}
+
+function planResultForTarget(planResults: BenchmarkPlanRunResult[], target: RunTarget): BenchmarkPlanRunResult | null {
+  const ref = `${target.inference_server_id}:${target.model_id}`;
+  return planResults.find((entry) => entry.model_profile_ref === ref) ?? null;
 }
 
 function ConfigRail({
@@ -213,6 +227,8 @@ function ConfigRail({
   datasetId,
   datasetFormat,
   datasetPath,
+  templates,
+  selectedTemplateId,
   inferenceParams,
   onboardingActive,
   starterTemplateReady,
@@ -229,6 +245,7 @@ function ConfigRail({
   onDatasetIdChange,
   onDatasetFormatChange,
   onDatasetPathChange,
+  onTemplateChange,
   onRun,
   onUseStarterTemplate
 }: {
@@ -246,6 +263,8 @@ function ConfigRail({
   datasetId: string;
   datasetFormat: BenchmarkDatasetFormat;
   datasetPath: string;
+  templates: BenchmarkTestTemplateRecord[];
+  selectedTemplateId: string;
   inferenceParams: InferenceParams;
   onboardingActive?: boolean;
   starterTemplateReady?: boolean;
@@ -262,6 +281,7 @@ function ConfigRail({
   onDatasetIdChange: (value: string) => void;
   onDatasetFormatChange: (value: BenchmarkDatasetFormat) => void;
   onDatasetPathChange: (value: string) => void;
+  onTemplateChange: (value: string) => void;
   onRun: () => void;
   onUseStarterTemplate: () => Promise<void>;
 }) {
@@ -345,7 +365,7 @@ function ConfigRail({
       </div>
 
       <div className="run-config-step">
-        <div className="run-step-label">Step 3 · dataset</div>
+        <div className="run-step-label">Step 3 · template</div>
         {onboardingActive && selectedTargets.length > 0 ? (
           <div className="run-starter-template">
             <div>
@@ -357,6 +377,22 @@ function ConfigRail({
             </button>
           </div>
         ) : null}
+        <label className="run-template-picker">
+          Benchmark template
+          <select value={selectedTemplateId} onChange={(event) => onTemplateChange(event.target.value)}>
+            <option value="">Run smoke chat</option>
+            {templates.map((template) => (
+              <option key={template.id} value={template.id}>
+                {template.document.name || template.document.template_id}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="run-hint">Saved chat templates run against the selected dataset. The smoke template remains available for quick checks.</p>
+      </div>
+
+      <div className="run-config-step">
+        <div className="run-step-label">Step 4 · dataset</div>
         <div className="segmented-control run-dataset-mode" aria-label="Dataset mode">
           <button type="button" className={datasetMode === 'inline' ? 'is-active' : ''} onClick={() => onDatasetModeChange('inline')}>
             Prompt
@@ -422,7 +458,7 @@ function ConfigRail({
       </div>
 
       <div className={selectedTargets.length === 0 ? 'run-config-step is-disabled' : 'run-config-step'}>
-        <div className="run-step-label">Step 4 · options</div>
+        <div className="run-step-label">Step 5 · options</div>
         <div className="run-options-grid">
           <label>
             Items
@@ -557,16 +593,20 @@ function BenchmarkDetail({
   option,
   instantiation,
   result,
+  planResult,
+  planId,
   busy
 }: {
   target: RunTarget;
   option: RunModelOption | undefined;
   instantiation: BenchmarkInstantiationRecord | null;
   result: BenchmarkResultRecord | null;
+  planResult?: BenchmarkPlanRunResult | null;
+  planId?: string | null;
   busy: boolean;
 }) {
   const metrics = benchmarkMetrics(result);
-  const status = resultStatus(result, busy);
+  const status = planResult?.status ?? resultStatus(result, busy);
   const manifest = datasetManifest(instantiation);
   const responses = normalizedResponseItems(result);
   const itemCount = aggStat(result, 'elapsed_ms', 'count');
@@ -582,7 +622,7 @@ function BenchmarkDetail({
   const estimatedLoadMs = loadEstimate?.model_load_detected ? loadEstimate.estimated_load_ms : null;
   const correctness = correctnessMetrics(result);
   return (
-    <div className="run-single-detail">
+    <div className="run-detail">
       <main className="run-transcript">
         <header className="run-response-header">
           <span className="run-avatar is-large" style={{ background: RUN_ACCENTS[0] }}>A</span>
@@ -596,6 +636,12 @@ function BenchmarkDetail({
           <div className="run-failure-banner">
             <strong>Benchmark completed with errors.</strong>
             <span>{result.document.errors.map((error) => String(error.message ?? error.code ?? 'Unknown error')).join('; ')}</span>
+          </div>
+        ) : null}
+        {!result && planResult && planResult.status !== 'completed' ? (
+          <div className="run-failure-banner">
+            <strong>Benchmark target did not produce a result.</strong>
+            <span>{planResult.status}</span>
           </div>
         ) : null}
         <div className="run-message-list">
@@ -621,6 +667,10 @@ function BenchmarkDetail({
           <div className="run-assert-row">
             <span>id</span>
             <code>{instantiation?.id ?? 'no-instantiation'}</code>
+          </div>
+          <div className="run-assert-row">
+            <span>plan</span>
+            <code>{planId ?? 'no-plan'}</code>
           </div>
           <div className="run-assert-row">
             <span>run</span>
@@ -732,21 +782,27 @@ export function RunUnified({
   const [datasetId, setDatasetId] = useState('codegen-small');
   const [datasetFormat, setDatasetFormat] = useState<BenchmarkDatasetFormat>('jsonl');
   const [datasetPath, setDatasetPath] = useState('codegen-small.jsonl');
+  const [templates, setTemplates] = useState<BenchmarkTestTemplateRecord[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [inferenceParams, setInferenceParams] = useState<InferenceParams>(DEFAULT_INFERENCE_PARAMS);
   const [starterTemplate, setStarterTemplate] = useState<BenchmarkTestTemplateDocument | null>(null);
   const [starterBusy, setStarterBusy] = useState(false);
   const [instantiation, setInstantiation] = useState<BenchmarkInstantiationRecord | null>(null);
   const [result, setResult] = useState<BenchmarkResultRecord | null>(null);
+  const [planId, setPlanId] = useState<string | null>(null);
+  const [planResults, setPlanResults] = useState<BenchmarkPlanRunResult[]>([]);
+  const [instantiations, setInstantiations] = useState<(BenchmarkInstantiationRecord | null)[]>([]);
   const [multiResults, setMultiResults] = useState<(BenchmarkResultRecord | null)[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showResultsHandoff, setShowResultsHandoff] = useState(false);
 
   useEffect(() => {
-    Promise.all([listInferenceServers(), listModels()])
-      .then(([serverData, modelData]) => {
+    Promise.all([listInferenceServers(), listModels(), listBenchmarkDocuments<BenchmarkTestTemplateDocument>('test_template')])
+      .then(([serverData, modelData, templateData]) => {
         setServers(serverData);
         setModels(modelData);
+        setTemplates(templateData.filter((entry) => entry.document.operation === 'chat_completion'));
         setCustomServerId((current) => current || serverData[0]?.inference_server.server_id || '');
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load run configuration.'));
@@ -795,11 +851,18 @@ export function RunUnified({
     ? `${selectedTarget.model_id} · ${datasetMode === 'manifest_only' ? 'dataset run' : 'benchmark smoke'}`
     : `No model · ${datasetMode === 'manifest_only' ? 'dataset run' : 'benchmark smoke'}`;
 
-  function addTarget(target: RunTarget) {
+  function clearRunState() {
     setInstantiation(null);
     setResult(null);
+    setPlanId(null);
+    setPlanResults([]);
+    setInstantiations([]);
     setMultiResults([]);
     setShowResultsHandoff(false);
+  }
+
+  function addTarget(target: RunTarget) {
+    clearRunState();
     setSelectedTargets((current) => {
       const key = targetKey(target);
       if (current.some((entry) => targetKey(entry) === key)) {
@@ -810,10 +873,7 @@ export function RunUnified({
   }
 
   function removeTarget(target: RunTarget) {
-    setInstantiation(null);
-    setResult(null);
-    setMultiResults([]);
-    setShowResultsHandoff(false);
+    clearRunState();
     setSelectedTargets((current) => current.filter((entry) => targetKey(entry) !== targetKey(target)));
   }
 
@@ -825,11 +885,17 @@ export function RunUnified({
         .then((documents) => documents.find((record) => record.id === STARTER_BENCHMARK_TEMPLATE_ID || record.document.template_id === STARTER_BENCHMARK_TEMPLATE_ID))
         .catch(() => null);
       const document = existing?.document ?? starterBenchmarkTemplateDocument();
+      let savedTemplate = existing ?? null;
       if (!existing) {
-        await saveBenchmarkDocument(document);
+        savedTemplate = await saveBenchmarkDocument(document);
         window.dispatchEvent(new CustomEvent('templates:changed'));
       }
       setStarterTemplate(document);
+      const readyTemplate = savedTemplate;
+      if (readyTemplate) {
+        setTemplates((current) => current.some((record) => record.id === readyTemplate.id) ? current : [readyTemplate, ...current]);
+        setSelectedTemplateId(readyTemplate.id);
+      }
       setDatasetMode('inline');
       setPrompt('Explain what this function does, identify one edge case, and describe the time complexity:\n\nfunction clamp(value, min, max) {\n  return Math.min(Math.max(value, min), max);\n}');
       setSystemPrompt('You are a careful code reviewer. Be concise and specific.');
@@ -853,65 +919,106 @@ export function RunUnified({
     }
     setBusy(true);
     setError(null);
-    setResult(null);
-    setMultiResults([]);
-    setShowResultsHandoff(false);
+    clearRunState();
     try {
+      const runSuffix = newRunId('run');
+      const smokePayload = buildBenchmarkSmokePayload({
+        target: selectedTarget,
+        prompt: prompt.trim(),
+        systemPrompt,
+        inferenceParams,
+        timeoutSec,
+        seed
+      });
       const preparedDataset = datasetMode === 'manifest_only'
         ? await prepareBenchmarkDatasetManifest({
-            dataset_id: datasetId.trim(),
+            dataset_id: `run-dataset-${runSuffix}`,
             source: {
               source_type: 'file',
               format: datasetFormat,
               path: datasetPath.trim()
             },
-            metadata: { source: 'run-page-dataset-path' }
+            metadata: {
+              source: 'run-page-dataset-path',
+              requested_dataset_id: datasetId.trim()
+            }
           })
-        : undefined;
-      const datasetInput = preparedDataset
-        ? { mode: 'manifest_only' as const, manifest: preparedDataset }
-        : { mode: 'inline' as const, prompt: prompt.trim(), systemPrompt };
+        : await prepareBenchmarkDatasetManifest({
+            dataset_id: `run-dataset-${runSuffix}`,
+            source: {
+              source_type: 'inline',
+              format: 'json'
+            },
+            snapshot_policy: 'embedded',
+            items: [
+              {
+                id: 'item-1',
+                prompt: prompt.trim(),
+                ...(systemPrompt.trim() ? { system_prompt: systemPrompt.trim() } : {})
+              }
+            ],
+            metadata: { source: 'run-page-inline' }
+          });
 
-      if (selectedTargets.length > 1) {
-        const payload = buildBenchmarkPlanPayload({
-          targets: selectedTargets,
-          prompt: prompt.trim(),
-          systemPrompt,
-          inferenceParams,
-          timeoutSec,
-          seed,
-          dataset: datasetInput,
-          template: starterTemplate ?? undefined
-        });
-        const plan = await runBenchmarkPlan(payload);
-        const fetched = await Promise.all(
-          plan.run_results.map((r) =>
-            r.run_id ? getBenchmarkResult(r.run_id).catch(() => null) : Promise.resolve(null)
-          )
-        );
-        setMultiResults(fetched);
-        window.dispatchEvent(new CustomEvent('runs:changed'));
-      } else {
-        const payload = buildBenchmarkSmokePayload({
-          target: selectedTarget,
-          prompt: prompt.trim(),
-          systemPrompt,
-          inferenceParams,
-          timeoutSec,
-          seed,
-          dataset: datasetInput,
-          template: starterTemplate ?? undefined
-        });
-        const created = await createBenchmarkInstantiation(payload);
-        setInstantiation(created);
-        const completed = await runBenchmarkInstantiation(created.id);
-        setResult(completed);
-        if (completed.document.status === 'completed' && completed.document.errors.length === 0) {
-          onFirstRunSuccess?.();
-          setShowResultsHandoff(true);
-        }
-        window.dispatchEvent(new CustomEvent('runs:changed'));
+      const selectedTemplate = templates.find((entry) => entry.id === selectedTemplateId);
+      let templateRef = selectedTemplate?.id ?? starterTemplate?.template_id ?? '';
+      if (!templateRef) {
+        const smokeTemplate = {
+          ...smokePayload.template,
+          template_id: `run-template-${runSuffix}`,
+          metadata: {
+            source: 'run-page-smoke'
+          }
+        };
+        const savedTemplate = await saveBenchmarkDocument(smokeTemplate);
+        templateRef = savedTemplate.id;
       }
+
+      const runtimeProfile = {
+        ...smokePayload.runtime_profile,
+        profile_id: `run-runtime-${runSuffix}`,
+        metadata: {
+          source: 'run-page'
+        }
+      };
+      const savedDataset = await saveBenchmarkDocument(preparedDataset);
+      const savedRuntime = await saveBenchmarkDocument(runtimeProfile);
+      const planDocument = buildPersistedBenchmarkPlanDocument({
+        planId: `run-plan-${runSuffix}`,
+        templateRef,
+        datasetRef: savedDataset.id,
+        runtimeProfileRef: savedRuntime.id,
+        targets: selectedTargets,
+        metadata: {
+          source: 'run-page',
+          selected_template_id: selectedTemplate?.id ?? null
+        }
+      });
+      const savedPlan = await saveBenchmarkPlan(planDocument);
+      setPlanId(savedPlan.id);
+      const plan = await runPersistedBenchmarkPlan(savedPlan.id);
+      setPlanResults(plan.run_results);
+
+      const fetchedInstantiations = await Promise.all(
+        plan.run_results.map((entry) =>
+          entry.instantiation_id ? getBenchmarkInstantiation(entry.instantiation_id).catch(() => null) : Promise.resolve(null)
+        )
+      );
+      const fetchedResults = await Promise.all(
+        plan.run_results.map((entry) =>
+          entry.run_id ? getBenchmarkResult(entry.run_id).catch(() => null) : Promise.resolve(null)
+        )
+      );
+      setInstantiations(fetchedInstantiations);
+      setMultiResults(fetchedResults);
+      setInstantiation(fetchedInstantiations[0] ?? null);
+      setResult(fetchedResults[0] ?? null);
+      const firstResult = fetchedResults[0] ?? null;
+      if (firstResult?.document.status === 'completed' && firstResult.document.errors.length === 0) {
+        onFirstRunSuccess?.();
+        setShowResultsHandoff(true);
+      }
+      window.dispatchEvent(new CustomEvent('runs:changed'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to run benchmark.');
     } finally {
@@ -951,6 +1058,8 @@ export function RunUnified({
             datasetId={datasetId}
             datasetFormat={datasetFormat}
             datasetPath={datasetPath}
+            templates={templates}
+            selectedTemplateId={selectedTemplateId}
             inferenceParams={inferenceParams}
             onboardingActive={onboarding?.status.active}
             starterTemplateReady={Boolean(starterTemplate)}
@@ -967,6 +1076,7 @@ export function RunUnified({
             onDatasetIdChange={setDatasetId}
             onDatasetFormatChange={setDatasetFormat}
             onDatasetPathChange={setDatasetPath}
+            onTemplateChange={setSelectedTemplateId}
             onRun={handleRun}
             onUseStarterTemplate={ensureStarterTemplate}
           />
@@ -974,7 +1084,7 @@ export function RunUnified({
             <header className="run-page-header">
               <div>
                 <h1>Run</h1>
-                <p>{subtitle}{multiResults.length > 0 ? ` · ${multiResults.length} models` : result ? ` · ${result.document.status}` : busy ? ' · running' : ''}</p>
+                <p>{subtitle}{selectedTargets.length > 1 && planResults.length > 0 ? ` · ${planResults.length} models` : result ? ` · ${result.document.status}` : busy ? ' · running' : ''}</p>
               </div>
               <div className="run-header-actions">
                 <button type="button" disabled={!result}>Export</button>
@@ -989,15 +1099,17 @@ export function RunUnified({
             />
             {!selectedTarget ? (
               <RunUnifiedEmpty />
-            ) : selectedTargets.length > 1 || multiResults.length > 0 ? (
+            ) : selectedTargets.length > 1 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap' }}>
                 {selectedTargets.map((target, index) => (
                   <div key={targetKey(target)} style={{ flex: '1 1 50%', minWidth: 0, borderRight: '1px solid var(--paper-7)', borderBottom: '1px solid var(--paper-7)', boxSizing: 'border-box' }}>
                     <BenchmarkDetail
                       target={target}
                       option={optionMap.get(targetKey(target))}
-                      instantiation={null}
+                      instantiation={instantiations[index] ?? null}
                       result={multiResults[index] ?? null}
+                      planResult={planResultForTarget(planResults, target)}
+                      planId={planId}
                       busy={busy}
                     />
                   </div>
@@ -1009,6 +1121,8 @@ export function RunUnified({
                 option={selectedOption}
                 instantiation={instantiation}
                 result={result}
+                planResult={planResults[0] ?? null}
+                planId={planId}
                 busy={busy}
               />
             )}
