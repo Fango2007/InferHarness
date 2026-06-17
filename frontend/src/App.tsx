@@ -379,10 +379,9 @@ export function App() {
     return deriveOnboardingStatus({
       serverCount: serversLoaded ? servers.length : 0,
       modelCount: modelCount ?? 0,
-      templateCount: templateCount ?? 0,
       uiState: onboardingUiState
     });
-  }, [modelCount, onboardingUiState, servers.length, serversLoaded, templateCount]);
+  }, [modelCount, onboardingUiState, servers.length, serversLoaded]);
 
   function persistOnboarding(next: OnboardingUiState) {
     const saved = writeOnboardingUiState(next);
@@ -400,8 +399,7 @@ export function App() {
       replaying: false,
       resetBaseline: {
         serverCount: serversLoaded ? servers.length : 0,
-        modelCount: modelCount ?? 0,
-        templateCount: templateCount ?? 0
+        modelCount: modelCount ?? 0
       },
       ribbonsDismissed: []
     };
@@ -410,7 +408,6 @@ export function App() {
     const resetStatus = deriveOnboardingStatus({
       serverCount: serversLoaded ? servers.length : 0,
       modelCount: modelCount ?? 0,
-      templateCount: templateCount ?? 0,
       uiState: resetState
     });
     navigate(onboardingRouteForStep(resetStatus.step));

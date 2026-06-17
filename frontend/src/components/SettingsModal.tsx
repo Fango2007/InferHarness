@@ -485,8 +485,7 @@ export function SettingsModal({
                     {[
                       ['Connect a server', onboardingStatus.completedSteps >= 1],
                       ['Pick a discovered model', onboardingStatus.completedSteps >= 2],
-                      ['Create a starter template', onboardingStatus.completedSteps >= 3],
-                      ['Run your first successful benchmark', onboardingStatus.completedSteps >= 4]
+                      ['Run your first successful benchmark', onboardingStatus.completedSteps >= 3]
                     ].map(([label, done]) => (
                       <div key={String(label)} className={done ? 'is-done' : ''}>
                         <span aria-hidden="true">{done ? '✓' : '·'}</span>

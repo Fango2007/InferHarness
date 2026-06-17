@@ -195,46 +195,6 @@ export interface PrepareBenchmarkDatasetManifestInput {
   metadata?: Record<string, unknown>;
 }
 
-export const STARTER_BENCHMARK_TEMPLATE_ID = 'starter-code-explain';
-
-export function starterBenchmarkTemplateDocument(): BenchmarkTestTemplateDocument {
-  return {
-    kind: 'test_template',
-    schema_version: 'benchmark_test_template_v1',
-    template_id: STARTER_BENCHMARK_TEMPLATE_ID,
-    template_version: '1.0.0',
-    name: 'Starter · code explain',
-    description: 'A reusable starter benchmark for checking concise code explanation quality.',
-    operation: 'chat_completion',
-    required_capabilities: {
-      chat_completion: true,
-      streaming: false,
-      tool_calling: false,
-      structured_output: false
-    },
-    input_contract: {
-      required_fields: ['prompt'],
-      optional_fields: ['system_prompt', 'expected_format', 'tags', 'metadata'],
-      min_items: 1
-    },
-    stages: [
-      {
-        id: 'explain',
-        type: 'dataset_loop',
-        iterations_per_item: 1,
-        record_metrics: true,
-        stop_on_error: false
-      }
-    ],
-    metrics: ['input_tokens', 'output_tokens', 'total_tokens', 'elapsed_ms', 'first_token_ms', 'tokens_per_second', 'decode_tokens_per_second', 'prefill_tokens_per_second'],
-    aggregations: ['mean', 'p95', 'count'],
-    metadata: {
-      source: 'onboarding',
-      reusable: true
-    }
-  };
-}
-
 function optionalNumber(value: number | null): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }

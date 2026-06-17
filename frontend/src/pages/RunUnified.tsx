@@ -7,7 +7,6 @@ import { HandoffToast, ProgressRibbon } from '../components/Onboarding.js';
 import { useOnboardingContext } from '../onboarding-context.js';
 import { isRibbonDismissed } from '../onboarding.js';
 import {
-  STARTER_BENCHMARK_TEMPLATE_ID,
   buildPersistedBenchmarkPlanDocument,
   buildBenchmarkSmokePayload,
   getBenchmarkInstantiation,
@@ -17,7 +16,6 @@ import {
   runPersistedBenchmarkPlan,
   saveBenchmarkDocument,
   saveBenchmarkPlan,
-  starterBenchmarkTemplateDocument,
   type BenchmarkDatasetFormat,
   type BenchmarkInstantiationRecord,
   type BenchmarkPlanRunResult,
@@ -230,9 +228,6 @@ function ConfigRail({
   templates,
   selectedTemplateId,
   inferenceParams,
-  onboardingActive,
-  starterTemplateReady,
-  starterBusy,
   onAddTarget,
   onRemoveTarget,
   onCustomServerChange,
@@ -246,8 +241,7 @@ function ConfigRail({
   onDatasetFormatChange,
   onDatasetPathChange,
   onTemplateChange,
-  onRun,
-  onUseStarterTemplate
+  onRun
 }: {
   servers: InferenceServerRecord[];
   selectableServers: InferenceServerRecord[];
@@ -266,9 +260,6 @@ function ConfigRail({
   templates: BenchmarkTestTemplateRecord[];
   selectedTemplateId: string;
   inferenceParams: InferenceParams;
-  onboardingActive?: boolean;
-  starterTemplateReady?: boolean;
-  starterBusy?: boolean;
   onAddTarget: (target: RunTarget) => void;
   onRemoveTarget: (target: RunTarget) => void;
   onCustomServerChange: (value: string) => void;
@@ -283,7 +274,6 @@ function ConfigRail({
   onDatasetPathChange: (value: string) => void;
   onTemplateChange: (value: string) => void;
   onRun: () => void;
-  onUseStarterTemplate: () => Promise<void>;
 }) {
   const accentedTargets = assignRunAccents(selectedTargets);
   const selectedKeys = new Set(selectedTargets.map(targetKey));
@@ -365,18 +355,7 @@ function ConfigRail({
       </div>
 
       <div className="run-config-step">
-        <div className="run-step-label">Step 3 · template</div>
-        {onboardingActive && selectedTargets.length > 0 ? (
-          <div className="run-starter-template">
-            <div>
-              <strong>{starterTemplateReady ? 'Starter template ready' : 'Create your starter template'}</strong>
-              <p>A reusable benchmark document for code explanation quality. You can edit it later in Templates.</p>
-            </div>
-            <button type="button" className="btn btn--sm" onClick={onUseStarterTemplate} disabled={starterBusy}>
-              {starterBusy ? 'Preparing...' : starterTemplateReady ? 'Use starter template' : 'Create starter template'}
-            </button>
-          </div>
-        ) : null}
+        <div className="run-step-label">Step 3 · benchmark</div>
         <label className="run-template-picker">
           Benchmark template
           <select value={selectedTemplateId} onChange={(event) => onTemplateChange(event.target.value)}>
@@ -388,7 +367,7 @@ function ConfigRail({
             ))}
           </select>
         </label>
-        <p className="run-hint">Saved chat templates run against the selected dataset. The smoke template remains available for quick checks.</p>
+        <p className="run-hint">Built-in chat templates are selected automatically when available. The smoke template remains available for quick checks.</p>
       </div>
 
       <div className="run-config-step">
@@ -785,8 +764,6 @@ export function RunUnified({
   const [templates, setTemplates] = useState<BenchmarkTestTemplateRecord[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [inferenceParams, setInferenceParams] = useState<InferenceParams>(DEFAULT_INFERENCE_PARAMS);
-  const [starterTemplate, setStarterTemplate] = useState<BenchmarkTestTemplateDocument | null>(null);
-  const [starterBusy, setStarterBusy] = useState(false);
   const [instantiation, setInstantiation] = useState<BenchmarkInstantiationRecord | null>(null);
   const [result, setResult] = useState<BenchmarkResultRecord | null>(null);
   const [planId, setPlanId] = useState<string | null>(null);
@@ -800,13 +777,22 @@ export function RunUnified({
   useEffect(() => {
     Promise.all([listInferenceServers(), listModels(), listBenchmarkDocuments<BenchmarkTestTemplateDocument>('test_template')])
       .then(([serverData, modelData, templateData]) => {
+        const chatTemplates = templateData.filter((entry) => entry.document.operation === 'chat_completion');
         setServers(serverData);
         setModels(modelData);
-        setTemplates(templateData.filter((entry) => entry.document.operation === 'chat_completion'));
+        setTemplates(chatTemplates);
+        setSelectedTemplateId((current) => current || chatTemplates[0]?.id || '');
         setCustomServerId((current) => current || serverData[0]?.inference_server.server_id || '');
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load run configuration.'));
   }, []);
+
+  useEffect(() => {
+    if (selectedTemplateId || templates.length === 0) {
+      return;
+    }
+    setSelectedTemplateId(templates[0].id);
+  }, [selectedTemplateId, templates]);
 
   useEffect(() => {
     setSelectedTargets(parseRunTargets(searchParams).slice(0, 8));
@@ -845,7 +831,7 @@ export function RunUnified({
   const showTemplateRibbon =
     onboarding?.status.active === true &&
     selectedTargets.length > 0 &&
-    onboarding.status.step === 'template' &&
+    onboarding.status.step === 'first_run' &&
     !isRibbonDismissed(onboarding.uiState, 'model-selected');
   const subtitle = selectedTarget
     ? `${selectedTarget.model_id} · ${datasetMode === 'manifest_only' ? 'dataset run' : 'benchmark smoke'}`
@@ -875,36 +861,6 @@ export function RunUnified({
   function removeTarget(target: RunTarget) {
     clearRunState();
     setSelectedTargets((current) => current.filter((entry) => targetKey(entry) !== targetKey(target)));
-  }
-
-  async function ensureStarterTemplate() {
-    setStarterBusy(true);
-    setError(null);
-    try {
-      const existing = await listBenchmarkDocuments<BenchmarkTestTemplateDocument>('test_template')
-        .then((documents) => documents.find((record) => record.id === STARTER_BENCHMARK_TEMPLATE_ID || record.document.template_id === STARTER_BENCHMARK_TEMPLATE_ID))
-        .catch(() => null);
-      const document = existing?.document ?? starterBenchmarkTemplateDocument();
-      let savedTemplate = existing ?? null;
-      if (!existing) {
-        savedTemplate = await saveBenchmarkDocument(document);
-        window.dispatchEvent(new CustomEvent('templates:changed'));
-      }
-      setStarterTemplate(document);
-      const readyTemplate = savedTemplate;
-      if (readyTemplate) {
-        setTemplates((current) => current.some((record) => record.id === readyTemplate.id) ? current : [readyTemplate, ...current]);
-        setSelectedTemplateId(readyTemplate.id);
-      }
-      setDatasetMode('inline');
-      setPrompt('Explain what this function does, identify one edge case, and describe the time complexity:\n\nfunction clamp(value, min, max) {\n  return Math.min(Math.max(value, min), max);\n}');
-      setSystemPrompt('You are a careful code reviewer. Be concise and specific.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to prepare starter template.');
-      throw err;
-    } finally {
-      setStarterBusy(false);
-    }
   }
 
   async function handleRun() {
@@ -961,7 +917,7 @@ export function RunUnified({
           });
 
       const selectedTemplate = templates.find((entry) => entry.id === selectedTemplateId);
-      let templateRef = selectedTemplate?.id ?? starterTemplate?.template_id ?? '';
+      let templateRef = selectedTemplate?.id ?? '';
       if (!templateRef) {
         const smokeTemplate = {
           ...smokePayload.template,
@@ -1033,10 +989,10 @@ export function RunUnified({
         <ProgressRibbon
           id="model-selected"
           step={2}
-          doneLabel="model selected · run target pre-filled"
+          doneLabel="model selected · built-in templates ready"
           fact={selectedOption?.display_name ?? selectedTarget?.model_id}
-          nextLabel="Create starter template"
-          onNext={() => void ensureStarterTemplate()}
+          nextLabel="Run benchmark"
+          onNext={() => void handleRun()}
           onDismiss={onboarding.dismissRibbon}
         />
       ) : null}
@@ -1061,9 +1017,6 @@ export function RunUnified({
             templates={templates}
             selectedTemplateId={selectedTemplateId}
             inferenceParams={inferenceParams}
-            onboardingActive={onboarding?.status.active}
-            starterTemplateReady={Boolean(starterTemplate)}
-            starterBusy={starterBusy}
             onAddTarget={addTarget}
             onRemoveTarget={removeTarget}
             onCustomServerChange={setCustomServerId}
@@ -1078,7 +1031,6 @@ export function RunUnified({
             onDatasetPathChange={setDatasetPath}
             onTemplateChange={setSelectedTemplateId}
             onRun={handleRun}
-            onUseStarterTemplate={ensureStarterTemplate}
           />
           <main className="run-workspace">
             <header className="run-page-header">

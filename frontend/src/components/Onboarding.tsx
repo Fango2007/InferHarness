@@ -33,6 +33,7 @@ export function SetupPill({
 export function ProgressRibbon({
   id,
   step,
+  totalSteps,
   doneLabel,
   fact,
   nextLabel,
@@ -41,20 +42,22 @@ export function ProgressRibbon({
 }: {
   id: string;
   step: number;
+  totalSteps?: number;
   doneLabel: string;
   fact?: string;
   nextLabel: string;
   onNext: () => void;
   onDismiss: (id: string) => void;
 }) {
+  const stepTotal = totalSteps ?? 3;
   return (
     <div className="onboarding-ribbon" role="status">
       <span className="onboarding-ribbon__check" aria-hidden="true">✓</span>
-      <strong>Step {step} of 4 done</strong>
+      <strong>Step {step} of {stepTotal} done</strong>
       <span>{doneLabel}</span>
       {fact ? <code>{fact}</code> : null}
       <span className="onboarding-ribbon__rail" aria-hidden="true">
-        {Array.from({ length: 4 }).map((_, index) => <i key={index} className={index < step ? 'is-filled' : ''} />)}
+        {Array.from({ length: stepTotal }).map((_, index) => <i key={index} className={index < step ? 'is-filled' : ''} />)}
       </span>
       <span className="onboarding-ribbon__next">next:</span>
       <button type="button" onClick={onNext}>{nextLabel} →</button>
@@ -132,7 +135,7 @@ export function WelcomeCanvas() {
         <h1>Let&apos;s run your first benchmark.</h1>
         <p>
           InferHarness compares LLM inference servers, models, and benchmark templates side by side.
-          Four short steps and your first real run is on the board.
+          Built-in templates are ready on first start; three short steps put your first real run on the board.
         </p>
       </div>
 
@@ -152,15 +155,9 @@ export function WelcomeCanvas() {
         />
         <WelcomeStepCard
           n={3}
-          title="Create a template"
-          body="Start from a production-ready starter benchmark, then tune it for your own evaluation loop."
-          meta="reusable test_template"
-        />
-        <WelcomeStepCard
-          n={4}
           title="Run your first test"
-          body="Capture latency, tokens, and result quality from a real benchmark run."
-          meta="success completes setup"
+          body="Use a built-in benchmark template to capture latency, tokens, and result quality from a real run."
+          meta="built-in templates ready"
         />
       </div>
 
@@ -172,7 +169,7 @@ export function WelcomeCanvas() {
         <button type="button" onClick={() => navigate('/catalog?tab=servers&startOnboarding=1')}>Start step 1 →</button>
       </div>
       <footer>
-        <span>Nothing fake is seeded. Onboarding creates production-ready local materials.</span>
+        <span>Nothing fake is seeded. Onboarding connects real infrastructure and uses shipped benchmark templates.</span>
         <span>first run setup</span>
       </footer>
     </section>
@@ -186,7 +183,7 @@ export function FirstRunCompleteHero({ onRunAnother }: { onRunAnother: () => voi
       <div>
         <p className="eyebrow">Setup complete</p>
         <h2>First run complete · welcome to InferHarness</h2>
-        <p>Your first benchmark finished successfully. The setup guide is complete, and future runs will build from the server, model, and starter template you created.</p>
+        <p>Your first benchmark finished successfully. The setup guide is complete, and future runs can build from the server, model, and built-in templates now available in your library.</p>
       </div>
       <button type="button" onClick={onRunAnother}>Run another test →</button>
     </section>

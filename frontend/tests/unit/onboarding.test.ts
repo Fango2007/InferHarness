@@ -13,7 +13,6 @@ function status(input: { servers: number; models: number; templates: number; com
   return deriveOnboardingStatus({
     serverCount: input.servers,
     modelCount: input.models,
-    templateCount: input.templates,
     uiState: {
       completedAt: input.completedAt,
       dismissedAt: input.dismissedAt,
@@ -23,39 +22,37 @@ function status(input: { servers: number; models: number; templates: number; com
 }
 
 test('derives onboarding steps from real app counts', () => {
-  expect(status({ servers: 0, models: 0, templates: 0 }).step).toBe('welcome');
+  expect(status({ servers: 0, models: 0, templates: 3 }).step).toBe('welcome');
   expect(status({ servers: 0, models: 2, templates: 1 }).step).toBe('server');
   expect(status({ servers: 1, models: 0, templates: 0 }).step).toBe('model');
-  expect(status({ servers: 1, models: 2, templates: 0 }).step).toBe('template');
-  expect(status({ servers: 1, models: 2, templates: 1 }).step).toBe('first_run');
-  expect(status({ servers: 1, models: 2, templates: 1, completedAt: '2026-01-01T00:00:00.000Z' }).step).toBe('complete');
+  expect(status({ servers: 1, models: 2, templates: 0 }).step).toBe('first_run');
+  expect(status({ servers: 1, models: 2, templates: 3 }).step).toBe('first_run');
+  expect(status({ servers: 1, models: 2, templates: 3, completedAt: '2026-01-01T00:00:00.000Z' }).step).toBe('complete');
 });
 
 test('separates current step from completed progress', () => {
-  const empty = status({ servers: 0, models: 0, templates: 0 });
+  const empty = status({ servers: 0, models: 0, templates: 3 });
   expect(empty.currentStepNumber).toBe(1);
   expect(empty.completedSteps).toBe(0);
 
   const readyToRun = status({ servers: 1, models: 2, templates: 1 });
   expect(readyToRun.step).toBe('first_run');
-  expect(readyToRun.currentStepNumber).toBe(4);
-  expect(readyToRun.completedSteps).toBe(3);
+  expect(readyToRun.currentStepNumber).toBe(3);
+  expect(readyToRun.completedSteps).toBe(2);
 
   const complete = status({ servers: 1, models: 2, templates: 1, completedAt: '2026-01-01T00:00:00.000Z' });
-  expect(complete.currentStepNumber).toBe(4);
-  expect(complete.completedSteps).toBe(4);
+  expect(complete.currentStepNumber).toBe(3);
+  expect(complete.completedSteps).toBe(3);
 });
 
-test('reset baselines make existing setup count as unchecked', () => {
+test('reset baselines make existing servers and models count as unchecked', () => {
   const reset = deriveOnboardingStatus({
     serverCount: 1,
     modelCount: 25,
-    templateCount: 1,
     uiState: {
       resetBaseline: {
         serverCount: 1,
-        modelCount: 25,
-        templateCount: 1
+        modelCount: 25
       }
     }
   });
@@ -65,12 +62,10 @@ test('reset baselines make existing setup count as unchecked', () => {
   const afterNewServer = deriveOnboardingStatus({
     serverCount: 2,
     modelCount: 25,
-    templateCount: 1,
     uiState: {
       resetBaseline: {
         serverCount: 1,
-        modelCount: 25,
-        templateCount: 1
+        modelCount: 25
       }
     }
   });
@@ -89,7 +84,6 @@ test('maps onboarding steps to reset destinations', () => {
   expect(onboardingRouteForStep('welcome')).toBe('/welcome');
   expect(onboardingRouteForStep('server')).toBe('/catalog?tab=servers&startOnboarding=1');
   expect(onboardingRouteForStep('model')).toBe('/catalog?tab=models');
-  expect(onboardingRouteForStep('template')).toBe('/run');
   expect(onboardingRouteForStep('first_run')).toBe('/run');
   expect(onboardingRouteForStep('complete')).toBe('/results?tab=dashboard');
 });

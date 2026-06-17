@@ -81,7 +81,7 @@ This means a result is more than a screenshot or a manually copied answer. It is
 Register local or remote inference servers, discover available models, and maintain a model catalog with provider, format, quantization, capabilities, and base-model metadata.
 
 **Reusable test definitions**
-Create tests for one prompt, a dataset loop, tool-calling behavior, structured output, or multi-model comparisons.
+Start with built-in benchmark templates, then create tests for one prompt, a dataset loop, tool-calling behavior, structured output, or multi-model comparisons.
 
 Benchmark documents are persisted as JSON in a file-backed library and indexed into SQLite for runtime use. Built-in documents ship with the app, while user-created templates, datasets, runtime profiles, and plans are written to a local library directory so they can be restored if the database is rebuilt.
 
