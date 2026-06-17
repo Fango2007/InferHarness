@@ -58,6 +58,9 @@ Thumbs.db
 # Architecture cache
 backend/data/model/
 
+# Local benchmark document library
+backend/data/benchmark-library/
+
 # Others files
 /specs
 /.cli

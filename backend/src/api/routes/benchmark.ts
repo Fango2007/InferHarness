@@ -16,13 +16,16 @@ import { runBenchmarkPlan } from '../../services/benchmark-plan-runner.js';
 import { runBenchmarkTemplateAgent } from '../../services/benchmark-template-agent.js';
 import {
   BenchmarkDocumentKind,
-  deleteBenchmarkDocument,
   getBenchmarkDocument,
-  listBenchmarkDocuments,
-  putBenchmarkDocument,
-  putBenchmarkPlan
+  listBenchmarkDocuments
 } from '../../services/benchmark-document-store.js';
 import { resolveBenchmarkPlan } from '../../services/benchmark-plan-registry.js';
+import {
+  benchmarkLibraryStatus,
+  deleteBenchmarkDocumentWithLibrary,
+  installBenchmarkLibraryDocuments,
+  putBenchmarkDocumentWithLibrary
+} from '../../services/benchmark-library.js';
 
 function sendBenchmarkError(reply: FastifyReply, error: unknown): boolean {
   if (error instanceof BenchmarkValidationError) {
@@ -51,7 +54,7 @@ function parseDocumentKind(kind: string): BenchmarkDocumentKind {
 export function registerBenchmarkRoutes(app: FastifyInstance): void {
   app.post('/benchmark/documents', async (request, reply) => {
     try {
-      const record = putBenchmarkDocument(request.body as Record<string, unknown>);
+      const record = putBenchmarkDocumentWithLibrary(request.body as Record<string, unknown>);
       reply.code(201).send(record);
     } catch (error) {
       if (!sendBenchmarkError(reply, error)) {
@@ -85,8 +88,28 @@ export function registerBenchmarkRoutes(app: FastifyInstance): void {
   app.delete('/benchmark/documents/:kind/:id', async (request, reply) => {
     const { kind, id } = request.params as { kind: string; id: string };
     try {
-      const removed = deleteBenchmarkDocument(parseDocumentKind(kind), id);
+      const removed = deleteBenchmarkDocumentWithLibrary(parseDocumentKind(kind), id);
       reply.code(removed ? 204 : 404).send();
+    } catch (error) {
+      if (!sendBenchmarkError(reply, error)) {
+        throw error;
+      }
+    }
+  });
+
+  app.get('/benchmark/library', async (_request, reply) => {
+    try {
+      reply.send(benchmarkLibraryStatus());
+    } catch (error) {
+      if (!sendBenchmarkError(reply, error)) {
+        throw error;
+      }
+    }
+  });
+
+  app.post('/benchmark/library/reload', async (_request, reply) => {
+    try {
+      reply.send(installBenchmarkLibraryDocuments());
     } catch (error) {
       if (!sendBenchmarkError(reply, error)) {
         throw error;
@@ -187,7 +210,11 @@ export function registerBenchmarkRoutes(app: FastifyInstance): void {
 
   app.post('/benchmark/plans', async (request, reply) => {
     try {
-      const record = putBenchmarkPlan(request.body as Record<string, unknown>);
+      const document = request.body as Record<string, unknown>;
+      if (document.kind !== 'benchmark_plan') {
+        throw new BenchmarkValidationError('Expected benchmark_plan document.');
+      }
+      const record = putBenchmarkDocumentWithLibrary(document);
       reply.code(201).send(record);
     } catch (error) {
       if (!sendBenchmarkError(reply, error)) {

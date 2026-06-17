@@ -1,0 +1,146 @@
+{
+  "kind": "dataset_manifest",
+  "schema_version": "benchmark_dataset_manifest_v1",
+  "dataset_id": "dataset-server-tool-choice-required-v1",
+  "source": {
+    "source_type": "inline",
+    "format": "json"
+  },
+  "canonicalization_version": "dataset_canonical_v1",
+  "snapshot_policy": "embedded",
+  "dataset_hash": "sha256:754c47b3bb40cff4049a0729788c3b68ba53a4343d6ea4d1510837ee1140f3b6",
+  "item_count": 2,
+  "items": [
+    {
+      "id": "required-submit-ticket",
+      "system_prompt": "When a tool is required, call the matching tool and do not answer in prose.",
+      "prompt": "Create a support ticket for account acct-42 with priority high and title Billing sync failed.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "submit_ticket",
+            "description": "Create a support ticket.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "account_id": {
+                  "type": "string",
+                  "description": "Account id."
+                },
+                "priority": {
+                  "type": "string",
+                  "description": "Ticket priority.",
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high"
+                  ]
+                },
+                "title": {
+                  "type": "string",
+                  "description": "Ticket title."
+                }
+              },
+              "required": [
+                "account_id",
+                "priority",
+                "title"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": "required",
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "submit_ticket",
+            "arguments": {
+              "account_id": "acct-42",
+              "priority": "high",
+              "title": "Billing sync failed"
+            }
+          }
+        }
+      ],
+      "tags": [
+        "server",
+        "tool_choice",
+        "required"
+      ]
+    },
+    {
+      "id": "required-schedule-job",
+      "system_prompt": "When a tool is required, call the matching tool and do not answer in prose.",
+      "prompt": "Schedule job nightly-rollup to run at 02:30 UTC with retries enabled.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "schedule_job",
+            "description": "Schedule a named job.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "job_name": {
+                  "type": "string",
+                  "description": "Job name."
+                },
+                "run_at_utc": {
+                  "type": "string",
+                  "description": "HH:MM UTC time."
+                },
+                "retries_enabled": {
+                  "type": "boolean",
+                  "description": "Whether retries are enabled."
+                }
+              },
+              "required": [
+                "job_name",
+                "run_at_utc",
+                "retries_enabled"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": "required",
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "schedule_job",
+            "arguments": {
+              "job_name": "nightly-rollup",
+              "run_at_utc": "02:30",
+              "retries_enabled": true
+            }
+          }
+        }
+      ],
+      "tags": [
+        "server",
+        "tool_choice",
+        "required"
+      ]
+    }
+  ],
+  "item_hashes": [
+    {
+      "item_id": "required-submit-ticket",
+      "hash": "sha256:bd42ebe6742f2574e5aaf4d34ee859ac6efd13d4a5906b04df6c32a96d334111"
+    },
+    {
+      "item_id": "required-schedule-job",
+      "hash": "sha256:e74734893ebe76d65f17eb7b93c26c9e0427e1d29e77021c074bf091642231d3"
+    }
+  ],
+  "metadata": {
+    "source": "built-in-agent-tool-call-library",
+    "template_id": "server-tool-choice-required-v1"
+  }
+}

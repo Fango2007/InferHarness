@@ -1,0 +1,100 @@
+{
+  "kind": "dataset_manifest",
+  "schema_version": "benchmark_dataset_manifest_v1",
+  "dataset_id": "dataset-server-tool-choice-none-v1",
+  "source": {
+    "source_type": "inline",
+    "format": "json"
+  },
+  "canonicalization_version": "dataset_canonical_v1",
+  "snapshot_policy": "embedded",
+  "dataset_hash": "sha256:ca1b9fb93be55544404ccded4c9c24343c7b1d79e5cb0fc61dece86b5621a4e0",
+  "item_count": 2,
+  "items": [
+    {
+      "id": "none-answer-text",
+      "system_prompt": "Tool use is disabled. Answer normally.",
+      "prompt": "Say exactly: tools disabled",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "log_event",
+            "description": "Log an event.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "event_name": {
+                  "type": "string",
+                  "description": "Event name."
+                }
+              },
+              "required": [
+                "event_name"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": "none",
+      "expected_tool_calls": [],
+      "expected_answer": "tools disabled",
+      "tags": [
+        "server",
+        "tool_choice",
+        "none"
+      ]
+    },
+    {
+      "id": "none-no-action",
+      "system_prompt": "Tool use is disabled. Answer normally.",
+      "prompt": "Explain in one sentence why no tool should be called.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "delete_record",
+            "description": "Delete a record.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "record_id": {
+                  "type": "string",
+                  "description": "Record id."
+                }
+              },
+              "required": [
+                "record_id"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": "none",
+      "expected_tool_calls": [],
+      "tags": [
+        "server",
+        "tool_choice",
+        "none"
+      ]
+    }
+  ],
+  "item_hashes": [
+    {
+      "item_id": "none-answer-text",
+      "hash": "sha256:c4ee44d8d83ae8a87d1fb010b5d2dfdd3086ce3fa86cd135d61d6fe5e736cdfe"
+    },
+    {
+      "item_id": "none-no-action",
+      "hash": "sha256:d9442e51ebd7416b27821f8b8f9afb7980a200962721c0934370ef7ec28171f8"
+    }
+  ],
+  "metadata": {
+    "source": "built-in-agent-tool-call-library",
+    "template_id": "server-tool-choice-none-v1"
+  }
+}

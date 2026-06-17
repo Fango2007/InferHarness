@@ -39,6 +39,32 @@ export interface BenchmarkDocumentRecord<TDocument extends Record<string, unknow
   updated_at: string;
 }
 
+export type BenchmarkLibraryStatus = 'built_in' | 'user' | 'customized' | 'deleted' | 'invalid' | 'conflict';
+
+export interface BenchmarkLibraryEntry {
+  kind: BenchmarkDocumentKind;
+  id: string;
+  status: BenchmarkLibraryStatus;
+  source: 'built_in' | 'user' | 'tombstone';
+  path: string;
+  hash?: string;
+  db_hash?: string | null;
+  message?: string;
+}
+
+export interface BenchmarkLibraryStatusReport {
+  built_in_root: string;
+  user_root: string;
+  entries: BenchmarkLibraryEntry[];
+}
+
+export interface BenchmarkLibraryInstallReport {
+  installed: BenchmarkLibraryEntry[];
+  skipped: BenchmarkLibraryEntry[];
+  invalid: BenchmarkLibraryEntry[];
+  deleted: BenchmarkLibraryEntry[];
+}
+
 export type BenchmarkOperation = 'chat_completion' | 'completion' | 'embedding' | 'list_models' | 'healthcheck';
 
 export interface BenchmarkTestTemplateDocument extends Record<string, unknown> {
@@ -310,6 +336,14 @@ export async function runTemplateAgent(payload: TemplateAgentRequest): Promise<T
 
 export async function deleteBenchmarkDocument(kind: BenchmarkDocumentKind, id: string): Promise<void> {
   await apiDelete(`/benchmark/documents/${kind}/${id}`);
+}
+
+export async function getBenchmarkLibraryStatus(): Promise<BenchmarkLibraryStatusReport> {
+  return apiGet<BenchmarkLibraryStatusReport>('/benchmark/library');
+}
+
+export async function reloadBenchmarkLibrary(): Promise<BenchmarkLibraryInstallReport> {
+  return apiPost<BenchmarkLibraryInstallReport>('/benchmark/library/reload', {});
 }
 
 export interface BenchmarkPlanRunResult {
