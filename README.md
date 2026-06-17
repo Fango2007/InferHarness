@@ -81,7 +81,7 @@ This means a result is more than a screenshot or a manually copied answer. It is
 Register local or remote inference servers, discover available models, and maintain a model catalog with provider, format, quantization, capabilities, and base-model metadata.
 
 **Reusable test definitions**
-Create tests for one prompt, a dataset loop, tool-calling behavior, structured output, or multi-model comparisons.
+Start with built-in benchmark templates, then create tests for one prompt, a dataset loop, tool-calling behavior, structured output, or multi-model comparisons.
 
 **Benchmark template agent**
 Use the Templates page agent to challenge underspecified benchmark ideas, draft runnable `chat_completion` benchmark templates, validate them against the benchmark schema, and review them in the editor before saving.
