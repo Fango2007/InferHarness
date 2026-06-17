@@ -27,6 +27,7 @@ import { listBenchmarkDocuments, type BenchmarkTestTemplateDocument } from './se
 import { InferenceServerHealth, getConnectivityConfig, getInferenceServerHealth } from './services/connectivity-api.js';
 import { InferenceServerRecord, listInferenceServers } from './services/inference-servers-api.js';
 import { listModels, type ModelRecord } from './services/models-api.js';
+import { queryResultsView } from './services/results-view-api.js';
 import {
   clearDatabase,
   EnvEntry,
@@ -296,14 +297,14 @@ export function App() {
       const [templatesResult, modelsResult, runsResult] = await Promise.allSettled([
         listBenchmarkDocuments<BenchmarkTestTemplateDocument>('test_template'),
         listModels(),
-        apiGet<Record<string, unknown>[]>('/runs')
+        queryResultsView({ page: 1, page_size: 1 })
       ]);
       if (!isActive) {
         return;
       }
       setTemplateCount(templatesResult.status === 'fulfilled' ? templatesResult.value.length : null);
       setModelCount(modelsResult.status === 'fulfilled' ? modelsResult.value.length : null);
-      setRunCount(runsResult.status === 'fulfilled' ? runsResult.value.length : null);
+      setRunCount(runsResult.status === 'fulfilled' ? runsResult.value.history.total : null);
     };
 
     refreshCounts();
@@ -508,6 +509,7 @@ export function App() {
         <Sidebar
           version={packageInfo.version}
           health={sidebarHealth}
+          modelCount={modelCount}
           templateCount={templateCount}
           runCount={runCount}
           onboarding={onboardingStatus.active ? onboardingStatus : undefined}

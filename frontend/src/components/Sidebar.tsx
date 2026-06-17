@@ -16,6 +16,7 @@ interface SidebarHealth {
 interface SidebarProps {
   version: string;
   health: SidebarHealth;
+  modelCount: number | null;
   templateCount: number | null;
   runCount: number | null;
   onboarding?: OnboardingStatus;
@@ -23,7 +24,7 @@ interface SidebarProps {
 }
 
 const navItems = [
-  { id: 'catalog', to: '/catalog?tab=servers', section: '/catalog', label: 'Catalog', sub: 'Servers · Models' },
+  { id: 'catalog', to: '/catalog?tab=servers', section: '/catalog', label: 'Catalog', sub: 'Servers · Models', badge: 'models' },
   { id: 'templates', to: '/templates', section: '/templates', label: 'Templates', sub: '', badge: 'templates' },
   { id: 'run', to: '/run', section: '/run', label: 'Run', sub: '1-8 models' },
   { id: 'results', to: '/results?tab=dashboard', section: '/results', label: 'Results', sub: 'Dash · Board · History', badge: 'runs' },
@@ -70,7 +71,7 @@ function RegLightRow({
   );
 }
 
-export function Sidebar({ version, health, templateCount, runCount, onboarding, onSettings }: SidebarProps) {
+export function Sidebar({ version, health, modelCount, templateCount, runCount, onboarding, onSettings }: SidebarProps) {
   const onboardingActive = onboarding?.active === true;
   const unlockedIndex = onboardingActive ? navOrder.indexOf(onboarding.unlockedThrough) : navOrder.length - 1;
   return (
@@ -102,6 +103,7 @@ export function Sidebar({ version, health, templateCount, runCount, onboarding, 
           >
             <span className="sidebar-item__main">
               <span>{item.label}</span>
+              {'badge' in item && item.badge === 'models' && modelCount !== null ? <b>{modelCount}</b> : null}
               {'badge' in item && item.badge === 'templates' && templateCount !== null ? <b>{templateCount}</b> : null}
               {'badge' in item && item.badge === 'runs' && runCount !== null ? <b>{runCount}</b> : null}
               {locked ? <em aria-hidden="true">lock</em> : null}

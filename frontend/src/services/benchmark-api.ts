@@ -236,33 +236,12 @@ export function buildBenchmarkSmokePayload(input: BuildBenchmarkSmokeInput): Cre
         ]
       };
 
+  if (!input.template) {
+    throw new Error('A benchmark template is required to build a run payload.');
+  }
+
   return {
-    template: input.template ?? {
-      kind: 'test_template',
-      schema_version: 'benchmark_test_template_v1',
-      template_id: 'run-smoke-chat',
-      template_version: '1.0.0',
-      name: 'Run smoke chat',
-      description: 'One prompt smoke test from the Run page.',
-      operation: 'chat_completion',
-      required_capabilities: {
-        chat_completion: true,
-        streaming: stream,
-        tool_calling: false,
-        structured_output: false
-      },
-      stages: [
-        {
-          id: 'chat',
-          type: 'dataset_loop',
-          iterations_per_item: 1,
-          record_metrics: true,
-          stop_on_error: false
-        }
-      ],
-      metrics: ['input_tokens', 'output_tokens', 'total_tokens', 'elapsed_ms', 'first_token_ms', 'tokens_per_second', 'decode_tokens_per_second', 'prefill_tokens_per_second'],
-      aggregations: ['mean', 'p95', 'count']
-    },
+    template: input.template,
     server_id: input.target.inference_server_id,
     model_id: input.target.model_id,
     runtime_profile: {

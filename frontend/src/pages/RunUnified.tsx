@@ -28,12 +28,12 @@ import { DEFAULT_INFERENCE_PARAMS, type InferenceParams } from '../services/infe
 import { InferenceServerRecord, listInferenceServers } from '../services/inference-servers-api.js';
 import { listModels, ModelRecord } from '../services/models-api.js';
 import {
-  RUN_ACCENTS,
   assignRunAccents,
   mergeRunModelOptions,
   parseRunTargets,
   serializeRunTargets,
   targetKey,
+  type AccentedRunTarget,
   type RunModelOption,
   type RunTarget
 } from '../services/run-unified-utils.js';
@@ -285,11 +285,7 @@ function ConfigRail({
     option.inference_server_id === selectedServerId && !selectedKeys.has(targetKey(option))
   );
   const selectedOptions = new Map(options.map((option) => [targetKey(option), option]));
-  const target = selectedTargets[0] ?? null;
-  const serverLabel = target
-    ? servers.find((server) => server.inference_server.server_id === target.inference_server_id)?.inference_server.display_name ?? target.inference_server_id
-    : selectedServer?.inference_server.display_name ?? 'No server selected';
-  const canRun = selectedTargets.length >= 1 && !busy && (
+  const canRun = selectedTargets.length >= 1 && selectedTemplateId.length > 0 && !busy && (
     datasetMode === 'inline'
       ? prompt.trim().length > 0
       : datasetId.trim().length > 0 && datasetPath.trim().length > 0
@@ -299,10 +295,6 @@ function ConfigRail({
     <aside className="run-config-rail" aria-label="Run configuration">
       <div className="run-config-step">
         <div className="run-step-label">Step 1 · server</div>
-        <div className="run-server-field">
-          <span>{serverLabel}</span>
-          <button type="button" disabled>edit</button>
-        </div>
         <label className="run-server-select">
           Inference server
           <select value={customServerId} onChange={(event) => onCustomServerChange(event.target.value)}>
@@ -351,7 +343,6 @@ function ConfigRail({
           </label>
         </div>
         <div className="run-count-line">{selectedTargets.length || 0} of 8 models selected · {selectedTargets.length > 1 ? `run executes all ${selectedTargets.length} selected models` : 'run executes the selected model'}</div>
-        <p className="run-hint">Run one or more models through a smoke prompt or server-side dataset. Multiple models produce a side-by-side comparison.</p>
       </div>
 
       <div className="run-config-step">
@@ -359,7 +350,6 @@ function ConfigRail({
         <label className="run-template-picker">
           Benchmark template
           <select value={selectedTemplateId} onChange={(event) => onTemplateChange(event.target.value)}>
-            <option value="">Run smoke chat</option>
             {templates.map((template) => (
               <option key={template.id} value={template.id}>
                 {template.document.name || template.document.template_id}
@@ -576,7 +566,7 @@ function BenchmarkDetail({
   planId,
   busy
 }: {
-  target: RunTarget;
+  target: AccentedRunTarget;
   option: RunModelOption | undefined;
   instantiation: BenchmarkInstantiationRecord | null;
   result: BenchmarkResultRecord | null;
@@ -604,73 +594,13 @@ function BenchmarkDetail({
     <div className="run-detail">
       <main className="run-transcript">
         <header className="run-response-header">
-          <span className="run-avatar is-large" style={{ background: RUN_ACCENTS[0] }}>A</span>
+          <span className="run-avatar is-large" style={{ background: target.accent }}>{target.stable_letter}</span>
           <div>
             <strong>{option?.display_name ?? target.model_id}</strong>
             <span>{option?.server_name ?? target.inference_server_id}{option?.quantisation ? ` · ${option.quantisation}` : ''}</span>
           </div>
           <b className={`run-status-pill status-${status}`}>{status}</b>
         </header>
-        {result?.document.errors.length ? (
-          <div className="run-failure-banner">
-            <strong>Benchmark completed with errors.</strong>
-            <span>{result.document.errors.map((error) => String(error.message ?? error.code ?? 'Unknown error')).join('; ')}</span>
-          </div>
-        ) : null}
-        {!result && planResult && planResult.status !== 'completed' ? (
-          <div className="run-failure-banner">
-            <strong>Benchmark target did not produce a result.</strong>
-            <span>{planResult.status}</span>
-          </div>
-        ) : null}
-        <div className="run-message-list">
-          {busy || responses.length === 0 ? (
-            <section className={busy ? 'run-message-card is-streaming' : 'run-message-card'}>
-              <span>assistant · final</span>
-              {busy ? <small>Executing synchronous benchmark request</small> : null}
-              <pre>{busy ? 'Running...' : answerText(result)}{busy ? <i className="stream-cursor" /> : null}</pre>
-            </section>
-          ) : responses.map((item) => (
-            <section className="run-message-card" key={`${item.label}:${String(item.response.attempt ?? '')}`}>
-              <span>assistant · final · {item.label}</span>
-              <pre>{responseAnswerText(item.response)}</pre>
-            </section>
-          ))}
-        </div>
-        <section className="run-asserts">
-          <h3>Benchmark audit</h3>
-          <div className={result?.document.status === 'completed_with_errors' ? 'run-assert-row is-fail' : 'run-assert-row'}>
-            <span>{result?.document.status === 'completed_with_errors' ? 'x' : 'ok'}</span>
-            <code>{result?.document.status ?? 'not-run'}</code>
-          </div>
-          <div className="run-assert-row">
-            <span>id</span>
-            <code>{instantiation?.id ?? 'no-instantiation'}</code>
-          </div>
-          <div className="run-assert-row">
-            <span>plan</span>
-            <code>{planId ?? 'no-plan'}</code>
-          </div>
-          <div className="run-assert-row">
-            <span>run</span>
-            <code>{result?.run_id ?? 'no-result'}</code>
-          </div>
-          <div className="run-assert-row">
-            <span>items</span>
-            <code>{formatNumber(manifest?.item_count)}</code>
-          </div>
-          <div className="run-assert-row">
-            <span>dataset</span>
-            <code>{String(manifest?.dataset_id ?? 'no-dataset')}</code>
-          </div>
-          <div className="run-assert-row">
-            <span>hash</span>
-            <code>{String(manifest?.dataset_hash ?? 'no-hash')}</code>
-          </div>
-        </section>
-      </main>
-      <aside className="run-side-metrics">
-        <h3>Metrics</h3>
         <div className="run-metric-grid">
           <span><b>duration</b>{formatMetric(metrics.elapsed_ms)}</span>
           {serverTotalTimeMs !== null && (
@@ -710,30 +640,78 @@ function BenchmarkDetail({
           )}
         </div>
         {correctness.length > 0 && (
-          <>
-            <h3 style={{ marginTop: '16px' }}>Correctness</h3>
-            <div className="run-metric-grid">
-              {correctness.map(({ label, successRate, count }) => (
-                <span key={label}>
-                  <b>{label}</b>
-                  {`${(successRate * 100).toFixed(0)}%`}
-                  <span style={{ display: 'block', color: 'var(--ink-3)', fontSize: '9px' }}>
-                    {`${Math.round(successRate * count)} / ${count}`}
-                  </span>
-                </span>
-              ))}
-            </div>
-          </>
+          <div className="run-metric-grid run-correctness-grid" aria-label="Correctness metrics">
+            {correctness.map(({ label, successRate, count }) => (
+              <span key={label}>
+                <b>{label}</b>
+                {`${(successRate * 100).toFixed(0)}%`}
+                <small>{`${Math.round(successRate * count)} / ${count}`}</small>
+              </span>
+            ))}
+          </div>
         )}
-        <details>
-          <summary>Raw benchmark result</summary>
-          <pre>{JSON.stringify(result ?? instantiation ?? {}, null, 2)}</pre>
-        </details>
-        <div className="run-side-actions">
-          <button type="button" disabled>Open in Evaluate</button>
-          <button type="button" disabled>Copy as cURL</button>
+        {result?.document.errors.length ? (
+          <div className="run-failure-banner">
+            <strong>Benchmark completed with errors.</strong>
+            <span>{result.document.errors.map((error) => String(error.message ?? error.code ?? 'Unknown error')).join('; ')}</span>
+          </div>
+        ) : null}
+        {!result && planResult && planResult.status !== 'completed' ? (
+          <div className="run-failure-banner">
+            <strong>Benchmark target did not produce a result.</strong>
+            <span>{planResult.status}</span>
+          </div>
+        ) : null}
+        <div className="run-message-list">
+          {busy || responses.length === 0 ? (
+            <section className={busy ? 'run-message-card is-streaming' : 'run-message-card'}>
+              <span>assistant · final</span>
+              {busy ? <small>Executing synchronous benchmark request</small> : null}
+              <pre>{busy ? 'Running...' : answerText(result)}{busy ? <i className="stream-cursor" /> : null}</pre>
+            </section>
+          ) : responses.map((item) => (
+            <section className="run-message-card" key={`${item.label}:${String(item.response.attempt ?? '')}`}>
+              <span>assistant · final · {item.label}</span>
+              <pre>{responseAnswerText(item.response)}</pre>
+            </section>
+          ))}
         </div>
-      </aside>
+        <section className="run-asserts">
+          <h3>Benchmark audit</h3>
+          <div className={result?.document.status === 'completed_with_errors' ? 'run-assert-row is-fail' : 'run-assert-row'}>
+            <span aria-hidden="true" />
+            <code>{`status ${result?.document.status ?? 'not-run'}`}</code>
+          </div>
+          <div className={instantiation?.id ? 'run-assert-row' : 'run-assert-row is-pending'}>
+            <span aria-hidden="true" />
+            <code>{instantiation?.id ? `instantiation ${instantiation.id}` : 'instantiation pending'}</code>
+          </div>
+          <div className={planId ? 'run-assert-row' : 'run-assert-row is-pending'}>
+            <span aria-hidden="true" />
+            <code>{planId ? `plan ${planId}` : 'plan pending'}</code>
+          </div>
+          <div className={result?.run_id ? 'run-assert-row' : 'run-assert-row is-pending'}>
+            <span aria-hidden="true" />
+            <code>{result?.run_id ? `run ${result.run_id}` : 'run pending'}</code>
+          </div>
+          <div className={manifest?.item_count ? 'run-assert-row' : 'run-assert-row is-pending'}>
+            <span aria-hidden="true" />
+            <code>{`items ${formatNumber(manifest?.item_count)}`}</code>
+          </div>
+          <div className={manifest?.dataset_id ? 'run-assert-row' : 'run-assert-row is-pending'}>
+            <span aria-hidden="true" />
+            <code>{manifest?.dataset_id ? `dataset ${String(manifest.dataset_id)}` : 'dataset pending'}</code>
+          </div>
+          <div className={manifest?.dataset_hash ? 'run-assert-row' : 'run-assert-row is-pending'}>
+            <span aria-hidden="true" />
+            <code>{manifest?.dataset_hash ? `hash ${String(manifest.dataset_hash)}` : 'hash pending'}</code>
+          </div>
+          <details className="run-raw-result">
+            <summary>Raw benchmark result</summary>
+            <pre>{JSON.stringify(result ?? instantiation ?? {}, null, 2)}</pre>
+          </details>
+        </section>
+      </main>
     </div>
   );
 }
@@ -781,7 +759,8 @@ export function RunUnified({
         setServers(serverData);
         setModels(modelData);
         setTemplates(chatTemplates);
-        setSelectedTemplateId((current) => current || chatTemplates[0]?.id || '');
+        const smokeTemplate = chatTemplates.find((entry) => entry.document.template_id === 'run-smoke-chat-v1');
+        setSelectedTemplateId((current) => current || smokeTemplate?.id || chatTemplates[0]?.id || '');
         setCustomServerId((current) => current || serverData[0]?.inference_server.server_id || '');
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Unable to load run configuration.'));
@@ -873,6 +852,11 @@ export function RunUnified({
     if (datasetMode === 'manifest_only' && (!datasetId.trim() || !datasetPath.trim())) {
       return;
     }
+    const selectedTemplate = templates.find((entry) => entry.id === selectedTemplateId);
+    if (!selectedTemplate) {
+      setError('Select a benchmark template before running.');
+      return;
+    }
     setBusy(true);
     setError(null);
     clearRunState();
@@ -884,7 +868,8 @@ export function RunUnified({
         systemPrompt,
         inferenceParams,
         timeoutSec,
-        seed
+        seed,
+        template: selectedTemplate.document
       });
       const preparedDataset = datasetMode === 'manifest_only'
         ? await prepareBenchmarkDatasetManifest({
@@ -916,19 +901,7 @@ export function RunUnified({
             metadata: { source: 'run-page-inline' }
           });
 
-      const selectedTemplate = templates.find((entry) => entry.id === selectedTemplateId);
-      let templateRef = selectedTemplate?.id ?? '';
-      if (!templateRef) {
-        const smokeTemplate = {
-          ...smokePayload.template,
-          template_id: `run-template-${runSuffix}`,
-          metadata: {
-            source: 'run-page-smoke'
-          }
-        };
-        const savedTemplate = await saveBenchmarkDocument(smokeTemplate);
-        templateRef = savedTemplate.id;
-      }
+      const templateRef = selectedTemplate.id;
 
       const runtimeProfile = {
         ...smokePayload.runtime_profile,
@@ -1052,9 +1025,9 @@ export function RunUnified({
             {!selectedTarget ? (
               <RunUnifiedEmpty />
             ) : selectedTargets.length > 1 ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap' }}>
-                {selectedTargets.map((target, index) => (
-                  <div key={targetKey(target)} style={{ flex: '1 1 50%', minWidth: 0, borderRight: '1px solid var(--paper-7)', borderBottom: '1px solid var(--paper-7)', boxSizing: 'border-box' }}>
+              <div className="run-detail-grid">
+                {assignRunAccents(selectedTargets).map((target, index) => (
+                  <div className="run-detail-grid-cell" key={targetKey(target)}>
                     <BenchmarkDetail
                       target={target}
                       option={optionMap.get(targetKey(target))}
@@ -1069,7 +1042,7 @@ export function RunUnified({
               </div>
             ) : (
               <BenchmarkDetail
-                target={selectedTarget}
+                target={assignRunAccents([selectedTarget])[0]}
                 option={selectedOption}
                 instantiation={instantiation}
                 result={result}
