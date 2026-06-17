@@ -6,6 +6,8 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-17
+
 ### Added
 
 - **File-backed benchmark document library** — benchmark templates, datasets, runtime profiles, and plans now load from built-in JSON documents plus a writable local library, with API saves persisted to files so documents can be reconstructed after SQLite loss.
