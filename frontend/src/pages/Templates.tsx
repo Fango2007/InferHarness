@@ -19,6 +19,7 @@ import { getAppSettings, type AppSettings } from '../services/system-api.js';
 type TemplateMode = { kind: 'preview' } | { kind: 'create' } | { kind: 'modify' };
 type TemplateOperationFilter = 'all' | BenchmarkOperation;
 type AuthorTab = 'live' | 'advanced' | 'raw';
+type DraftSource = 'none' | 'seed' | 'agent' | 'advanced' | 'raw';
 
 interface JsonLine {
   text: string;
@@ -33,6 +34,7 @@ interface ChatEntry {
 }
 
 const OPERATION_FILTERS: TemplateOperationFilter[] = ['all', 'chat_completion', 'completion', 'embedding', 'list_models', 'healthcheck'];
+const ENABLED_OPERATION_FILTERS = new Set<TemplateOperationFilter>(['all', 'chat_completion']);
 
 const DEFAULT_TEMPLATE_DRAFT: BenchmarkTestTemplateDocument = {
   kind: 'test_template',
@@ -123,13 +125,14 @@ function jsonLines(value: unknown, baseline?: unknown): JsonLine[] {
   });
 }
 
-function skeletonFromMessage(message: string): Record<string, unknown> {
+function skeletonFromMessage(message: string): BenchmarkTestTemplateDocument {
   const slug = message
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 48) || 'new-template';
   return {
+    ...DEFAULT_TEMPLATE_DRAFT,
     kind: 'test_template',
     schema_version: 'benchmark_test_template_v1',
     template_id: `${slug}-v1`,
@@ -220,7 +223,13 @@ function TemplatesRail({
         </div>
         <div className="templates-operation-filter" aria-label="Template operation">
           {OPERATION_FILTERS.map((value) => (
-            <button key={value} type="button" className={operationFilter === value ? 'is-active' : ''} onClick={() => onFilter(value)}>
+            <button
+              key={value}
+              type="button"
+              className={operationFilter === value ? 'is-active' : ''}
+              onClick={() => onFilter(value)}
+              disabled={!ENABLED_OPERATION_FILTERS.has(value)}
+            >
               {value}
             </button>
           ))}
@@ -332,22 +341,18 @@ function TemplateAgentPanel({
   mode,
   selectedTemplate,
   currentDraft,
-  canSave,
   busy,
   onDraft,
   onSkeleton,
-  onSave,
   onBusy,
   onError
 }: {
   mode: 'create' | 'modify';
   selectedTemplate: BenchmarkTestTemplateRecord | null;
   currentDraft: BenchmarkTestTemplateDocument | null;
-  canSave: boolean;
   busy: boolean;
   onDraft: (document: BenchmarkTestTemplateDocument) => void;
-  onSkeleton: (document: Record<string, unknown>) => void;
-  onSave: () => void;
+  onSkeleton: (document: BenchmarkTestTemplateDocument) => void;
   onBusy: (value: boolean) => void;
   onError: (value: string | null) => void;
 }) {
@@ -476,23 +481,7 @@ function TemplateAgentPanel({
         ) : null}
       </div>
 
-      {currentDraft && canSave ? (
-        <div className="template-agent-draft-card">
-          <div className="template-agent-draft-card__status">
-            <span>ok</span>
-            <strong>Validated draft / passes benchmark_test_template_v1</strong>
-          </div>
-          <p>{currentDraft.name ?? currentDraft.template_id} / {currentDraft.operation} / {currentDraft.metrics.length} metrics</p>
-          <button type="button" onClick={onSave} disabled={busy}>Save template</button>
-        </div>
-      ) : null}
-
       <footer className="template-agent-composer">
-        {mode === 'create' && entries.length === 1 ? (
-          <button type="button" className="template-suggestion-chip" onClick={() => sendMessage('Create a chat_completion benchmark for tool-call correctness.')} disabled={!settings.template_agent_model || busy}>
-            Tool-call correctness benchmark
-          </button>
-        ) : null}
         <div className="template-agent-input-row">
           <textarea
             value={message}
@@ -503,11 +492,17 @@ function TemplateAgentPanel({
                 sendMessage();
               }
             }}
-            rows={2}
-            placeholder={canSave ? 'Draft ready - save it, or keep refining...' : mode === 'modify' ? 'Describe how this template should change.' : 'Describe what you want...'}
+            rows={4}
+            placeholder={currentDraft ? 'Draft ready - save it, or keep refining...' : mode === 'modify' ? 'Describe how this template should change.' : 'Describe what you want...'}
           />
           <button type="button" className="template-agent-send" onClick={() => sendMessage()} disabled={!canSend}>Send</button>
         </div>
+        {currentDraft ? (
+          <div className="template-agent-draft-card">
+            <strong>Validated draft / passes benchmark_test_template_v1</strong>
+            <p>{currentDraft.name ?? currentDraft.template_id} / {currentDraft.operation} / {currentDraft.metrics.length} metrics</p>
+          </div>
+        ) : null}
       </footer>
     </section>
   );
@@ -535,7 +530,8 @@ function TemplateAuthor({
   const seedDocument = mode === 'modify' ? selectedTemplate?.document ?? DEFAULT_TEMPLATE_DRAFT : DEFAULT_TEMPLATE_DRAFT;
   const [tab, setTab] = useState<AuthorTab>('live');
   const [currentDraft, setCurrentDraft] = useState<BenchmarkTestTemplateDocument | null>(mode === 'modify' ? seedDocument : null);
-  const [skeleton, setSkeleton] = useState<Record<string, unknown> | null>(null);
+  const [draftSource, setDraftSource] = useState<DraftSource>(mode === 'modify' ? 'seed' : 'none');
+  const [skeleton, setSkeleton] = useState<BenchmarkTestTemplateDocument | null>(null);
   const [rawJson, setRawJson] = useState(() => stringifyJson(seedDocument));
   const [rawDirty, setRawDirty] = useState(false);
   const [showNotes, setShowNotes] = useState(true);
@@ -545,6 +541,7 @@ function TemplateAuthor({
     const nextSeed = mode === 'modify' ? selectedTemplate?.document ?? DEFAULT_TEMPLATE_DRAFT : DEFAULT_TEMPLATE_DRAFT;
     setTab('live');
     setCurrentDraft(mode === 'modify' ? nextSeed : null);
+    setDraftSource(mode === 'modify' ? 'seed' : 'none');
     draftJsonRef.current = mode === 'modify' ? stringifyJson(nextSeed) : '';
     setSkeleton(null);
     setRawJson(stringifyJson(nextSeed));
@@ -552,11 +549,13 @@ function TemplateAuthor({
     setShowNotes(true);
   }, [mode, selectedTemplate?.id]);
 
+  const authorDocument = currentDraft ?? skeleton ?? seedDocument;
+
   useEffect(() => {
-    if (!rawDirty && currentDraft) {
-      setRawJson(stringifyJson(currentDraft));
+    if (!rawDirty) {
+      setRawJson(stringifyJson(authorDocument));
     }
-  }, [currentDraft, rawDirty]);
+  }, [authorDocument, rawDirty]);
 
   const baseline = mode === 'modify' ? seedDocument : undefined;
   const liveLines = useMemo(() => {
@@ -571,15 +570,32 @@ function TemplateAuthor({
   }, [baseline, currentDraft, skeleton]);
 
   const canSave = Boolean(currentDraft?.template_id?.trim() && currentDraft.metrics?.length && currentDraft.aggregations?.length);
+  const saveEnabled = canSave && (mode === 'modify' || draftSource !== 'none');
   const title = mode === 'modify' ? 'Modify template' : 'Create template';
   const filename = `${currentDraft?.template_id || selectedTemplate?.document.template_id || 'template'}.json`;
 
+  function openTab(nextTab: AuthorTab) {
+    if (nextTab === 'raw' && !rawDirty) {
+      setRawJson(stringifyJson(authorDocument));
+    }
+    setTab(nextTab);
+  }
+
   const handleDraftChange = useCallback((document: BenchmarkTestTemplateDocument) => {
+    if (
+      mode === 'create'
+      && draftSource === 'none'
+      && document.template_id === DEFAULT_TEMPLATE_DRAFT.template_id
+      && document.name === DEFAULT_TEMPLATE_DRAFT.name
+    ) {
+      return;
+    }
     const nextJson = stringifyJson(document);
     if (nextJson === draftJsonRef.current) return;
     draftJsonRef.current = nextJson;
     setCurrentDraft(document);
-  }, []);
+    setDraftSource('advanced');
+  }, [draftSource, mode]);
 
   function applyRawJson() {
     onError(null);
@@ -592,6 +608,7 @@ function TemplateAuthor({
       } satisfies BenchmarkTestTemplateDocument;
       draftJsonRef.current = stringifyJson(normalized);
       setCurrentDraft(normalized);
+      setDraftSource('raw');
       setRawDirty(false);
       setTab('live');
     } catch (err) {
@@ -610,9 +627,10 @@ function TemplateAuthor({
         <div className="template-author__header">
           <h2>{title}</h2>
           <div className="template-author-tabs">
-            <button type="button" className={tab === 'live' ? 'is-active' : ''} onClick={() => setTab('live')}>Live JSON</button>
-            <button type="button" className={tab === 'advanced' ? 'is-active' : ''} onClick={() => setTab('advanced')}>Advanced form</button>
-            <button type="button" className={tab === 'raw' ? 'is-active' : ''} onClick={() => setTab('raw')}>Raw JSON</button>
+            <button type="button" className={tab === 'live' ? 'is-active' : ''} onClick={() => openTab('live')}>Live JSON</button>
+            <button type="button" className={tab === 'advanced' ? 'is-active' : ''} onClick={() => openTab('advanced')}>Advanced form</button>
+            <button type="button" className={tab === 'raw' ? 'is-active' : ''} onClick={() => openTab('raw')}>Raw JSON</button>
+            {saveEnabled ? <button type="button" className="template-author-save" onClick={saveDraft} disabled={busy}>Save template</button> : null}
             <button type="button" onClick={onCancel}>x Close</button>
           </div>
         </div>
@@ -622,7 +640,7 @@ function TemplateAuthor({
             <div className="template-advanced-note">Advanced editing - every field the assistant set is here, fully editable. Changes stay in sync with the JSON before save.</div>
             <TemplateEditor
               template={mode === 'modify' ? selectedTemplate : null}
-              initialDocument={currentDraft ?? seedDocument}
+              initialDocument={authorDocument}
               onSave={onSave}
               onDraftChange={handleDraftChange}
               error={null}
@@ -642,9 +660,9 @@ function TemplateAuthor({
               spellCheck={false}
             />
             <div className="template-raw-actions">
-              <button type="button" onClick={applyRawJson}>Apply JSON</button>
+              <button type="button" onClick={applyRawJson}>Update draft</button>
               <button type="button" className="btn btn--ghost" onClick={() => {
-                setRawJson(stringifyJson(currentDraft ?? seedDocument));
+                setRawJson(stringifyJson(authorDocument));
                 setRawDirty(false);
               }}>Reset</button>
             </div>
@@ -657,11 +675,11 @@ function TemplateAuthor({
         mode={mode}
         selectedTemplate={selectedTemplate}
         currentDraft={currentDraft}
-        canSave={canSave}
         busy={busy}
         onDraft={(document) => {
           draftJsonRef.current = stringifyJson(document);
           setCurrentDraft(document);
+          setDraftSource('agent');
           setSkeleton(null);
           setTab('live');
           setRawDirty(false);
@@ -670,7 +688,6 @@ function TemplateAuthor({
           if (!currentDraft) setSkeleton(document);
           setTab('live');
         }}
-        onSave={saveDraft}
         onBusy={onBusy}
         onError={onError}
       />
@@ -686,6 +703,11 @@ export function Templates() {
   const [operationFilter, setOperationFilter] = useState<TemplateOperationFilter>('all');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (ENABLED_OPERATION_FILTERS.has(operationFilter)) return;
+    setOperationFilter('all');
+  }, [operationFilter]);
 
   const selectedTemplate = useMemo(
     () => templates.find((template) => template.id === selectedId) ?? null,
@@ -705,6 +727,15 @@ export function Templates() {
       ].some((value) => value.toLowerCase().includes(lower));
     });
   }, [operationFilter, query, templates]);
+
+  useEffect(() => {
+    if (mode.kind !== 'preview') return;
+    setSelectedId((current) => (
+      current && filteredTemplates.some((template) => template.id === current)
+        ? current
+        : filteredTemplates[0]?.id ?? null
+    ));
+  }, [filteredTemplates, mode.kind]);
 
   const loadTemplates = useCallback(async () => {
     const data = await listBenchmarkDocuments<BenchmarkTestTemplateDocument>('test_template');

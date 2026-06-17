@@ -234,6 +234,55 @@ function buildDerivedMetrics(metrics: DerivedMetricEditor[]): Array<Record<strin
     }));
 }
 
+function normalizeForEditor(document: BenchmarkTestTemplateDocument): BenchmarkTestTemplateDocument {
+  const stage = objectOrEmpty(document.stages?.[0]);
+  const contract = objectOrEmpty(document.input_contract);
+  const stageType = STAGE_TYPES.includes(stage.type as StageType) ? stage.type as StageType : 'dataset_loop';
+  const observability = objectOrEmpty(stage.observability);
+  const pairedStageFields = stageType === 'paired_request_loop'
+    ? {
+        pre_iteration_delay_ms: numberOrDefault(stage.pre_iteration_delay_ms, 0),
+        intra_pair_delay_ms: numberOrDefault(stage.intra_pair_delay_ms, 0),
+        pair: buildPairMembers(pairMembersFromStage(stage)),
+        derived_metrics: buildDerivedMetrics(derivedMetricsFromStage(stage)),
+        ...(Object.keys(observability).length > 0 ? { observability } : {})
+      }
+    : {};
+
+  return {
+    kind: 'test_template',
+    schema_version: 'benchmark_test_template_v1',
+    template_id: document.template_id.trim(),
+    template_version: document.template_version.trim(),
+    name: (document.name ?? document.template_id).trim(),
+    description: (document.description ?? '').trim(),
+    operation: document.operation,
+    required_capabilities: normalizeCapabilities(document.operation, objectOrEmpty(document.required_capabilities)),
+    input_contract: {
+      required_fields: Array.isArray(contract.required_fields) ? contract.required_fields.filter((entry): entry is string => typeof entry === 'string') : [],
+      optional_fields: Array.isArray(contract.optional_fields) ? contract.optional_fields.filter((entry): entry is string => typeof entry === 'string') : [],
+      min_items: numberOrDefault(contract.min_items, 1)
+    },
+    stages: [
+      {
+        ...unmodeledStageFields(stage),
+        id: typeof stage.id === 'string' ? stage.id.trim() : 'chat',
+        type: stageType,
+        iterations_per_item: numberOrDefault(stage.iterations_per_item, 1),
+        record_metrics: booleanOrDefault(stage.record_metrics, true),
+        order: STAGE_ORDERS.includes(stage.order as StageOrder) ? stage.order as StageOrder : 'sequential',
+        cooldown_ms: numberOrDefault(stage.cooldown_ms, 0),
+        ...pairedStageFields,
+        stop_on_error: booleanOrDefault(stage.stop_on_error, false)
+      }
+    ],
+    metrics: [...new Set([...builtInMetricSelection(document), ...splitCsv(customMetricSelection(document))])],
+    aggregations: aggregationSelection(document),
+    metadata: objectOrEmpty(document.metadata),
+    extensions: objectOrEmpty(document.extensions)
+  };
+}
+
 function normalizeCapabilities(operation: BenchmarkOperation, value: Record<string, unknown>): Record<string, boolean> {
   const capabilities: Record<string, boolean> = {};
   for (const capability of OPERATIONS) {
@@ -278,11 +327,13 @@ export function TemplateEditor({ template, initialDocument, onSave, onDraftChang
   const [localError, setLocalError] = useState<string | null>(null);
   const lastEmittedDraft = useRef('');
   const lastLoadedDocument = useRef('');
+  const skipNextDraftEmission = useRef(false);
 
   function loadDocument(document: BenchmarkTestTemplateDocument): void {
-    const documentJson = stringifyDocument(document);
+    const documentJson = stringifyDocument(normalizeForEditor(document));
     if (documentJson === lastLoadedDocument.current) return;
     lastLoadedDocument.current = documentJson;
+    skipNextDraftEmission.current = true;
     const stage = objectOrEmpty(document.stages?.[0]);
     const contract = objectOrEmpty(document.input_contract);
     setId(document.template_id);
@@ -417,6 +468,15 @@ export function TemplateEditor({ template, initialDocument, onSave, onDraftChang
   useEffect(() => {
     if (!onDraftChange) return;
     const nextDraft = stringifyDocument(structuredDocument);
+    if (nextDraft === lastLoadedDocument.current) {
+      skipNextDraftEmission.current = false;
+      lastEmittedDraft.current = nextDraft;
+      return;
+    }
+    if (skipNextDraftEmission.current) {
+      skipNextDraftEmission.current = false;
+      return;
+    }
     if (nextDraft === lastEmittedDraft.current) return;
     lastEmittedDraft.current = nextDraft;
     lastLoadedDocument.current = nextDraft;

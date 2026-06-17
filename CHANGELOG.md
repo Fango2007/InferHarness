@@ -19,9 +19,11 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ### Changed
 
 - **Human-readable agent workflow guidance** — `AGENTS.md` now groups workflow rules into clearer sections, documents parallel worktree expectations including `origin/main` checks before commit/push requests and resync timing before validation or merge, directs agents to create a focused branch without pausing for confirmation, and asks agents to explicitly request commit approval with a suggested message and details.
+- **Templates agent composer** — The Templates authoring panel now gives the freeform request field more space and removes the preset suggestion chip.
 
 ### Fixed
 
+- **Templates authoring draft preservation** — Switching between Live JSON, Advanced form, and Raw JSON now preserves the agent-inferred benchmark draft instead of reverting to the starter document.
 - **Benchmark-only Results history** — Results dashboard, history, detail drawers, and deletion now read benchmark test run records instead of legacy run/result tables, so benchmark smoke runs appear after completion.
 - **Template agent starter drafting** — The benchmark-template agent now drafts conservative starter templates for recognizable benchmark families such as tool-call compliance instead of blocking on follow-up questions when reasonable assumptions are available.
 - **Built-in template onboarding** — first-run onboarding now tracks only server connection, model selection, and first successful run, auto-selects installed chat templates on Run, and no longer asks users to create a starter template.

@@ -84,7 +84,7 @@ test('creates, updates, and deletes templates from the redesigned Templates page
     await expect(page.locator('.template-raw-json')).toHaveValue(/"pair": \[/);
     await expect(page.locator('.template-raw-json')).toHaveValue(/"cold_penalty_ms"/);
     await page.getByRole('button', { name: 'Live JSON' }).click();
-    await page.locator('.template-agent-draft-card').getByRole('button', { name: 'Save template' }).click();
+    await page.getByRole('button', { name: 'Save template' }).click();
 
     const createdRow = page.locator('.template-row').filter({ hasText: templateName });
     await expect(createdRow).toBeVisible();
@@ -100,8 +100,8 @@ test('creates, updates, and deletes templates from the redesigned Templates page
     await editForm.getByLabel('Version', { exact: true }).fill(updatedVersion);
     await page.getByRole('button', { name: 'Raw JSON' }).click();
     await page.locator('.template-raw-json').fill(updatedContent);
-    await page.getByRole('button', { name: 'Apply JSON' }).click();
-    await page.locator('.template-agent-draft-card').getByRole('button', { name: 'Save template' }).click();
+    await page.getByRole('button', { name: 'Update draft' }).click();
+    await page.getByRole('button', { name: 'Save template' }).click();
 
     const updatedRow = page.locator('.template-row').filter({ hasText: updatedName });
     await expect(updatedRow).toBeVisible();
@@ -201,12 +201,25 @@ test('authors a template through the in-page benchmark agent', async ({ page }) 
     await page.getByRole('button', { name: 'Send' }).click();
     await expect(page.getByText('Which success signal should this benchmark score?')).toBeVisible();
     await expect(page.locator('.template-json-code')).toContainText('template_id');
+    await expect(page.locator('.template-json-code')).toContainText('create-a-tool-call-benchmark-v1');
+    await page.getByRole('button', { name: 'Raw JSON' }).click();
+    await expect(page.locator('.template-raw-json')).toHaveValue(/"template_id": "create-a-tool-call-benchmark-v1"/);
+    await page.getByRole('button', { name: 'Advanced form' }).click();
+    await expect(page.locator('.template-advanced-panel').getByLabel('Template ID')).toHaveValue('create-a-tool-call-benchmark-v1');
+    await expect(page.getByRole('button', { name: 'Save template' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Live JSON' }).click();
 
     await page.getByPlaceholder('Describe what you want...').fill('Score whether the correct tool was selected.');
     await page.getByRole('button', { name: 'Send' }).click();
     await expect(page.locator('.template-agent-draft-card')).toContainText('Validated draft');
     await expect(page.locator('.template-json-code')).toContainText(templateId);
-    await page.locator('.template-agent-draft-card').getByRole('button', { name: 'Save template' }).click();
+    await page.getByRole('button', { name: 'Raw JSON' }).click();
+    await expect(page.locator('.template-raw-json')).toHaveValue(new RegExp(`"template_id": "${templateId}"`));
+    await page.getByRole('button', { name: 'Advanced form' }).click();
+    await expect(page.locator('.template-advanced-panel').getByLabel('Name', { exact: true })).toHaveValue(templateName);
+    await page.getByRole('button', { name: 'Live JSON' }).click();
+    await expect(page.locator('.template-json-code')).toContainText(templateId);
+    await page.getByRole('button', { name: 'Save template' }).click();
 
     const row = page.locator('.template-row').filter({ hasText: templateName });
     await expect(row).toBeVisible();
