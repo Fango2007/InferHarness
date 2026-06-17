@@ -20,6 +20,31 @@ beforeEach(() => {
   vi.unstubAllGlobals();
 });
 
+const smokeTemplate = {
+  kind: 'test_template',
+  schema_version: 'benchmark_test_template_v1',
+  template_id: 'run-smoke-chat-v1',
+  template_version: '1.0.0',
+  name: 'Run smoke chat',
+  operation: 'chat_completion',
+  required_capabilities: {
+    chat_completion: true,
+    streaming: false,
+    tool_calling: false,
+    structured_output: false
+  },
+  stages: [
+    {
+      id: 'chat',
+      type: 'dataset_loop',
+      iterations_per_item: 1,
+      record_metrics: true
+    }
+  ],
+  metrics: ['input_tokens', 'output_tokens', 'total_tokens', 'elapsed_ms'],
+  aggregations: ['mean', 'count']
+} as const;
+
 describe('benchmark API helpers', () => {
   it('builds a benchmark smoke payload from Run page inputs', () => {
     const payload = buildBenchmarkSmokePayload({
@@ -34,17 +59,13 @@ describe('benchmark API helpers', () => {
         stream: true
       },
       timeoutSec: '12.5',
-      seed: '42'
+      seed: '42',
+      template: smokeTemplate
     });
 
     expect(payload.server_id).toBe('srv-1');
     expect(payload.model_id).toBe('model-a');
-    expect(payload.template).toMatchObject({
-      kind: 'test_template',
-      schema_version: 'benchmark_test_template_v1',
-      operation: 'chat_completion',
-      required_capabilities: { streaming: true }
-    });
+    expect(payload.template).toBe(smokeTemplate);
     expect(payload.runtime_profile.runtime_parameters).toMatchObject({
       temperature: 0.1,
       top_p: 0.9,
@@ -71,10 +92,11 @@ describe('benchmark API helpers', () => {
         stream: false
       },
       timeoutSec: '',
-      seed: ''
+      seed: '',
+      template: smokeTemplate
     });
 
-    expect(payload.template.required_capabilities).toMatchObject({ streaming: false });
+    expect(payload.template).toBe(smokeTemplate);
     expect(payload.runtime_profile.runtime_parameters).toEqual({
       temperature: null,
       top_p: null,
@@ -98,6 +120,7 @@ describe('benchmark API helpers', () => {
       },
       timeoutSec: '30',
       seed: '',
+      template: smokeTemplate,
       dataset: {
         mode: 'manifest_only',
         manifest: {

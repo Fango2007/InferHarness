@@ -14,15 +14,26 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - **Project workflow guardrails** — `AGENTS.md` now combines the main branch workflow, Node 25 rules, challenge-and-skill behavior instructions, and a static-data rule that keeps prompts, schemas, fixtures, and examples out of application code.
 - **Benchmark template agent** — Templates now includes a review-first benchmark-template agent that uses a database-persisted Settings model, challenges underspecified requests, loads its prompt from Markdown with the full `test_template` schema and example injected, validates generated drafts server-side, and applies drafts to the existing editor without auto-saving.
 - **Run-page persisted benchmark plan checkpoint** — Run can now select saved chat benchmark templates, prepare inline or server-side dataset manifests, persist unique runtime/dataset/plan artifacts per click, execute `/benchmark/plans/:id/run`, and render per-target results including failed targets without result documents.
+- **Run smoke chat benchmark template** — the built-in benchmark document library now includes a real "Run smoke chat" `test_template` for first-run prompt checks.
 - **Templates LLM-first layout** — Templates now uses an AI-first authoring split with live JSON, Advanced form, and Raw JSON tabs, plus a redesigned preview/list layout for JSON-only `test_template` documents.
 
 ### Changed
 
 - **Human-readable agent workflow guidance** — `AGENTS.md` now groups workflow rules into clearer sections, documents parallel worktree expectations including `origin/main` checks before commit/push requests and resync timing before validation or merge, directs agents to create a focused branch without pausing for confirmation, and asks agents to explicitly request commit approval with a suggested message and details.
 - **Templates agent composer** — The Templates authoring panel now gives the freeform request field more space and removes the preset suggestion chip.
+- **Run selection rail polish** — the Run page model chips, benchmark template selector, and response header now use clearer selected-state borders/backgrounds and denser mono text, with redundant server summary and model helper copy removed.
 
 ### Fixed
 
+- **Results sidebar count** — the Results navigation badge now reads the benchmark-native results total instead of the legacy runs endpoint.
+- **Catalog sidebar count** — the Catalog navigation item now shows the available model count in the sidebar badge.
+- **Run smoke template selection** — the Run page now selects the built-in "Run smoke chat" template by default and requires a real template document before starting a benchmark.
+- **Run multi-model response labels** — multi-model Run detail headers now reuse the same letter and accent color assigned in the selected model chips.
+- **Run multi-model layout** — multi-model benchmark details now use an auto-fitting grid that shows more cards per row on wide screens while keeping each card readable.
+- **Run metrics placement** — per-model metrics now sit directly under the model header in compact fields, with raw benchmark JSON moved beneath the benchmark audit.
+- **Run metric emphasis** — metric values in Run result cards now use bold mono text for faster scanning.
+- **Run benchmark audit presentation** — audit metadata now renders as compact 11px status lines with check, pending, and failure markers.
+- **Run placeholder actions** — disabled "Open in Evaluate" and "Copy as cURL" buttons were removed from the Run metrics panel.
 - **Templates authoring draft preservation** — Switching between Live JSON, Advanced form, and Raw JSON now preserves the agent-inferred benchmark draft instead of reverting to the starter document.
 - **Benchmark-only Results history** — Results dashboard, history, detail drawers, and deletion now read benchmark test run records instead of legacy run/result tables, so benchmark smoke runs appear after completion.
 - **Template agent starter drafting** — The benchmark-template agent now drafts conservative starter templates for recognizable benchmark families such as tool-call compliance instead of blocking on follow-up questions when reasonable assumptions are available.
