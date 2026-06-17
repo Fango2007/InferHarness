@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   BenchmarkOperation,
@@ -10,8 +10,10 @@ interface TemplateEditorProps {
   template: BenchmarkTestTemplateRecord | null;
   initialDocument?: BenchmarkTestTemplateDocument | null;
   onSave: (input: BenchmarkTestTemplateDocument, isUpdate: boolean) => Promise<void>;
+  onDraftChange?: (input: BenchmarkTestTemplateDocument) => void;
   error?: string | null;
   busy?: boolean;
+  embedded?: boolean;
 }
 
 type StageType = 'dataset_loop' | 'single_request' | 'paired_request_loop';
@@ -243,7 +245,7 @@ function normalizeCapabilities(operation: BenchmarkOperation, value: Record<stri
   return capabilities;
 }
 
-export function TemplateEditor({ template, initialDocument, onSave, error, busy }: TemplateEditorProps) {
+export function TemplateEditor({ template, initialDocument, onSave, onDraftChange, error, busy, embedded = false }: TemplateEditorProps) {
   const [id, setId] = useState('');
   const [name, setName] = useState('');
   const [version, setVersion] = useState('1.0.0');
@@ -274,8 +276,13 @@ export function TemplateEditor({ template, initialDocument, onSave, error, busy 
   const [rawJson, setRawJson] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const lastEmittedDraft = useRef('');
+  const lastLoadedDocument = useRef('');
 
   function loadDocument(document: BenchmarkTestTemplateDocument): void {
+    const documentJson = stringifyDocument(document);
+    if (documentJson === lastLoadedDocument.current) return;
+    lastLoadedDocument.current = documentJson;
     const stage = objectOrEmpty(document.stages?.[0]);
     const contract = objectOrEmpty(document.input_contract);
     setId(document.template_id);
@@ -407,6 +414,15 @@ export function TemplateEditor({ template, initialDocument, onSave, error, busy 
     version
   ]);
 
+  useEffect(() => {
+    if (!onDraftChange) return;
+    const nextDraft = stringifyDocument(structuredDocument);
+    if (nextDraft === lastEmittedDraft.current) return;
+    lastEmittedDraft.current = nextDraft;
+    lastLoadedDocument.current = nextDraft;
+    onDraftChange(structuredDocument);
+  }, [onDraftChange, structuredDocument]);
+
   function toggleCapability(key: string): void {
     setCapabilities((current) => ({ ...current, [key]: !current[key] }));
   }
@@ -510,13 +526,15 @@ export function TemplateEditor({ template, initialDocument, onSave, error, busy 
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="template-editor-card">
-        <div className="template-editor-header">
-          <h2>{isUpdate ? 'Edit benchmark template' : 'Create benchmark template'}</h2>
-          <button type="button" className="btn btn--ghost" onClick={openRawDrawer} disabled={busy}>
-            Raw JSON
-          </button>
-        </div>
+      <form onSubmit={handleSubmit} className={embedded ? 'template-editor-card template-editor-card--embedded' : 'template-editor-card'}>
+        {!embedded ? (
+          <div className="template-editor-header">
+            <h2>{isUpdate ? 'Edit benchmark template' : 'Create benchmark template'}</h2>
+            <button type="button" className="btn btn--ghost" onClick={openRawDrawer} disabled={busy}>
+              Raw JSON
+            </button>
+          </div>
+        ) : null}
         {error || localError ? <div className="error">{error ?? localError}</div> : null}
 
         <div className="template-editor-grid">
@@ -734,9 +752,11 @@ export function TemplateEditor({ template, initialDocument, onSave, error, busy 
           </div>
         </section>
 
-        <button type="submit" disabled={busy}>
-          {busy ? 'Saving...' : 'Save'}
-        </button>
+        {!embedded ? (
+          <button type="submit" disabled={busy}>
+            {busy ? 'Saving...' : 'Save'}
+          </button>
+        ) : null}
       </form>
 
       {drawerOpen ? (
