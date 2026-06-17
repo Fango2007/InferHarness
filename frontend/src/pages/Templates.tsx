@@ -155,7 +155,7 @@ function highlightJsonLine(line: string): Array<{ className: string; text: strin
     rest = rest.slice(keyMatch[0].length);
   }
 
-  const tokenPattern = /"(?:[^"\\]|\\.)*"|true|false|null|-?\d+(?:\.\d+)?|[{}\[\],]|\s+/g;
+  const tokenPattern = /"(?:[^"\\]|\\.)*"|true|false|null|-?\d+(?:\.\d+)?|[{}[\],]|\s+/g;
   let last = 0;
   let match: RegExpExecArray | null;
   while ((match = tokenPattern.exec(rest)) !== null) {
