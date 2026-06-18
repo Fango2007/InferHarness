@@ -4,14 +4,18 @@ import {
   buildPersistedBenchmarkPlanDocument,
   buildBenchmarkSmokePayload,
   createBenchmarkInstantiation,
+  deleteBenchmarkDatasetFile,
   deleteBenchmarkDocument,
   getBenchmarkLibraryStatus,
   getBenchmarkInstantiation,
+  listBenchmarkDatasetFiles,
   listBenchmarkDocuments,
   prepareBenchmarkDatasetManifest,
+  readBenchmarkDatasetFile,
   reloadBenchmarkLibrary,
   runPersistedBenchmarkPlan,
   runBenchmarkInstantiation,
+  saveBenchmarkDatasetFile,
   saveBenchmarkPlan,
   saveBenchmarkDocument
 } from '../../src/services/benchmark-api.js';
@@ -197,6 +201,49 @@ describe('benchmark API helpers', () => {
       items: [{ id: 'item-1', prompt: 'Say OK' }]
     }));
     expect(manifest).toEqual({ dataset_id: 'run-dataset-1', snapshot_policy: 'embedded', item_count: 1 });
+  });
+
+  it('manages dataset item files through the benchmark API', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ([{ path: 'sample.jsonl', dataset_id: 'sample', item_count: 1, format: 'jsonl' }])
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ path: 'sample.jsonl', dataset_id: 'sample', item_count: 1, items: [{ id: 'item-1', prompt: 'Say OK' }] })
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ path: 'sample.jsonl', dataset_id: 'sample', item_count: 1, items: [{ id: 'item-1', prompt: 'Say OK' }] })
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        json: async () => ({})
+      } as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await listBenchmarkDatasetFiles();
+    await readBenchmarkDatasetFile('sample.jsonl');
+    await saveBenchmarkDatasetFile({
+      path: 'sample.jsonl',
+      dataset_id: 'sample',
+      items: [{ id: 'item-1', prompt: 'Say OK' }]
+    });
+    await deleteBenchmarkDatasetFile('sample.jsonl');
+
+    expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:8080/benchmark/datasets/files');
+    expect(fetchMock.mock.calls[1][0]).toBe('http://localhost:8080/benchmark/datasets/files/read');
+    expect((fetchMock.mock.calls[1][1] as RequestInit).body).toBe(JSON.stringify({ path: 'sample.jsonl' }));
+    expect(fetchMock.mock.calls[2][0]).toBe('http://localhost:8080/benchmark/datasets/files');
+    expect((fetchMock.mock.calls[2][1] as RequestInit).method).toBe('PUT');
+    expect(fetchMock.mock.calls[3][0]).toBe('http://localhost:8080/benchmark/datasets/files?path=sample.jsonl');
+    expect((fetchMock.mock.calls[3][1] as RequestInit).method).toBe('DELETE');
   });
 
   it('posts benchmark instantiation and run requests to the existing backend routes', async () => {

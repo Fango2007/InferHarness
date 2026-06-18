@@ -122,6 +122,7 @@ Pass condition: required decision is present and no forbidden claim appears
 
 **Dataset benchmark**
 Run the same task across a file of examples and aggregate the results.
+Use the Datasets page to create and edit JSONL benchmark item files under the configured dataset root; saved files are paired with `dataset_manifest` documents for benchmark runs.
 
 ```text
 Question: Can the model classify 1,000 support tickets accurately?
@@ -238,11 +239,11 @@ Model formats supported in the catalog include `GGUF`, `MLX`, `GPTQ`, `AWQ`, and
   </tr>
   <tr>
     <td align="center">
-      <img src=".github/assets/3-Templates-page.png" width="100%" alt="Templates" /><br>
+      <img src=".github/assets/3-Templates-page-17062026.png" width="100%" alt="Templates" /><br>
       <b>Templates</b> · Author reusable benchmark templates, with an agent-assisted draft flow
     </td>
     <td align="center">
-      <img src=".github/assets/4-Run-page-06082026.png" width="100%" alt="Run" /><br>
+      <img src=".github/assets/4-Run-page-17062026.png" width="100%" alt="Run" /><br>
       <b>Run</b> · Execute templates against one or more models
     </td>
   </tr>

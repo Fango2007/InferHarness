@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPost } from './api.js';
+import { apiDelete, apiGet, apiPost, apiPut } from './api.js';
 import type { InferenceParams } from './inference-param-presets-api.js';
 import type { RunTarget } from './run-unified-utils.js';
 
@@ -195,6 +195,29 @@ export interface PrepareBenchmarkDatasetManifestInput {
   metadata?: Record<string, unknown>;
 }
 
+export interface BenchmarkDatasetFileRecord {
+  path: string;
+  format: 'jsonl';
+  dataset_id: string;
+  item_count: number | null;
+  updated_at: string | null;
+  error?: string;
+}
+
+export interface BenchmarkDatasetFileDocument extends BenchmarkDatasetFileRecord {
+  item_count: number;
+  dataset_hash: string;
+  manifest: Record<string, unknown>;
+  items: Array<Record<string, unknown>>;
+}
+
+export interface SaveBenchmarkDatasetFileInput {
+  path: string;
+  dataset_id: string;
+  items: Array<Record<string, unknown>>;
+  metadata?: Record<string, unknown>;
+}
+
 function optionalNumber(value: number | null): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
@@ -265,6 +288,22 @@ export async function prepareBenchmarkDatasetManifest(
 ): Promise<Record<string, unknown>> {
   const response = await apiPost<{ manifest: Record<string, unknown> }>('/benchmark/datasets/manifest', input);
   return response.manifest;
+}
+
+export async function listBenchmarkDatasetFiles(): Promise<BenchmarkDatasetFileRecord[]> {
+  return apiGet<BenchmarkDatasetFileRecord[]>('/benchmark/datasets/files');
+}
+
+export async function readBenchmarkDatasetFile(path: string): Promise<BenchmarkDatasetFileDocument> {
+  return apiPost<BenchmarkDatasetFileDocument>('/benchmark/datasets/files/read', { path });
+}
+
+export async function saveBenchmarkDatasetFile(input: SaveBenchmarkDatasetFileInput): Promise<BenchmarkDatasetFileDocument> {
+  return apiPut<BenchmarkDatasetFileDocument>('/benchmark/datasets/files', input);
+}
+
+export async function deleteBenchmarkDatasetFile(path: string): Promise<void> {
+  await apiDelete(`/benchmark/datasets/files?path=${encodeURIComponent(path)}`);
 }
 
 export async function createBenchmarkInstantiation(
