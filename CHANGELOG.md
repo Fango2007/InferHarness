@@ -10,6 +10,10 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - **Benchmark plan cleanup** — removed the transitional inline `/benchmark/plans/run` execution API and stale `INFERHARNESS_TEST_TEMPLATES_DIR` example so plan execution goes through persisted `benchmark_plan` documents.
 - **Tool-call assertion metric** — benchmark tool-call templates now include `tool_call_assertion_pass`, a single-turn pass/fail metric requiring exact expected tool selection and structurally matching arguments while keeping assertion failures as quality metrics rather than execution failures.
 - **Tool-call assertion UI** — Run now promotes tool-call assertion pass/fail as the primary correctness verdict, and Templates groups metrics with readable labels while auto-adding the assertion metric when tool calling is enabled.
+- **Onboarding prompt scope** — the Run page completion handoff now appears only for the onboarding first-run step, canceling the onboarding-launched server drawer stops setup with an explicit normal-mode notice, and the three-step welcome layout is centered.
+- **Built-in template reload after DB clear** — clearing the database from Settings now reloads the built-in benchmark library immediately, keeping shipped templates available without restarting the backend.
+- **Catalog empty server card** — the empty Servers catalog now presents a dashed first-server card with the add action instead of a centered empty-state panel.
+- **Run empty preview** — the empty Run workspace now shows a dummy benchmark result with sample model, prompt, metrics, and audit rows instead of a generic empty panel.
 
 ## [0.9.0] - 2026-06-17
 

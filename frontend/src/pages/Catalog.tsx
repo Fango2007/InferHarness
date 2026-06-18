@@ -601,6 +601,7 @@ export function Catalog({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<DrawerMode | null>(null);
+  const [onboardingCancelNotice, setOnboardingCancelNotice] = useState<string | null>(null);
   const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null);
   const [serverFiltersOpen, setServerFiltersOpen] = useState(false);
   const [showArchivedOnly, setShowArchivedOnly] = useState(false);
@@ -767,6 +768,23 @@ export function Catalog({
     window.dispatchEvent(new CustomEvent('inference-servers:updated'));
   }
 
+  function closeDrawer() {
+    const cancellingOnboardingServer =
+      drawer?.kind === 'create' &&
+      searchParams.get('startOnboarding') === '1' &&
+      onboarding?.status.active === true;
+    setDrawer(null);
+    if (!cancellingOnboardingServer) {
+      return;
+    }
+    onboarding.dismissSetup();
+    setOnboardingCancelNotice('Onboarding stopped. No server was created, and the app is back in normal mode.');
+    updateQuery((params) => {
+      params.delete('startOnboarding');
+      params.delete('onboarding');
+    }, true);
+  }
+
   function useFirstVisibleModel() {
     const model = visibleModels.find((entry) => entry.discoveryStatus !== 'absent');
     if (!model) {
@@ -802,6 +820,12 @@ export function Catalog({
         activeTab={activeTab}
         onTabChange={changeTab}
       />
+      {onboardingCancelNotice ? (
+        <div className="catalog-notice" role="status">
+          <span>{onboardingCancelNotice}</span>
+          <button type="button" className="btn btn--ghost btn--sm" onClick={() => setOnboardingCancelNotice(null)}>Dismiss</button>
+        </div>
+      ) : null}
       {showServerSavedHandoff ? (
         <ProgressRibbon
           id="server-saved"
@@ -923,8 +947,10 @@ export function Catalog({
         <ServerDrawer
           mode={drawer}
           onClose={() => setDrawer(null)}
+          onCancel={closeDrawer}
           onDelete={drawer.kind === 'edit' ? () => handleDelete(drawer.server) : undefined}
           onSaved={async (server, openModels) => {
+            setOnboardingCancelNotice(null);
             notifyServersUpdated();
             await refreshData();
             if (openModels || searchParams.get('startOnboarding') === '1') {
@@ -1416,12 +1442,35 @@ function ServersHealthPanel({ servers, connectivity }: { servers: InferenceServe
 function NoServersState({ onAdd }: { onAdd?: () => void }) {
   return (
     <section className="catalog-page catalog-servers">
-      <main className="catalog-main catalog-empty catalog-empty-large">
-        <EmptyState
-          title="No servers yet"
-          body="Add an inference server, probe its model endpoint, then use discovered models in tests and evaluations."
-          actions={onAdd ? <button type="button" onClick={onAdd}>+ Add server</button> : null}
-        />
+      <main className="catalog-main">
+        <div className="catalog-section-title">
+          <div>
+            <h2>Inference servers</h2>
+            <p>0 shown · 0 active · 0 archived</p>
+          </div>
+          {onAdd ? (
+            <div className="catalog-section-actions">
+              <button type="button" className="btn btn--sm" onClick={onAdd}>+ Add server</button>
+            </div>
+          ) : null}
+        </div>
+        <div className="catalog-server-grid">
+          <button type="button" className="catalog-server-card catalog-server-card--empty" onClick={onAdd}>
+            <span className="catalog-card-top">
+              <strong>Add your first server</strong>
+              <span className="catalog-empty-status">offline</span>
+            </span>
+            <span className="catalog-url">https://api.example.com/v1</span>
+            <span className="catalog-card-meta">
+              <span>OpenAI-compatible, Ollama, Anthropic, Gemini, or custom</span>
+              <span className="catalog-pill">GPU unknown</span>
+            </span>
+            <span className="catalog-card-footer">
+              <span>0 models discovered</span>
+              <span className="btn btn--sm">+ Add server</span>
+            </span>
+          </button>
+        </div>
       </main>
     </section>
   );
@@ -1503,9 +1552,10 @@ const OS_VERSIONS: Record<OsName, string[]> = {
   unknown: [],
 };
 
-function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
+function ServerDrawer({ mode, onClose, onCancel, onSaved, onDelete }: {
   mode: DrawerMode;
   onClose: () => void;
+  onCancel: () => void;
   onSaved: (server: InferenceServerRecord, openModels: boolean) => Promise<void>;
   onDelete?: () => Promise<void>;
 }) {
@@ -1745,7 +1795,7 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
             <span className="label--uppercase">{editing ? 'Edit' : 'Add'}</span>
             <h2>{editing ? `Edit · ${editing.inference_server.display_name}` : 'Add inference server'}</h2>
           </div>
-          <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>x</button>
+          <button type="button" className="icon-btn" aria-label="Close" onClick={onCancel}>x</button>
         </div>
         <form onSubmit={handleSubmit} className="drawer-body">
           <div className="drawer-columns">
@@ -1945,7 +1995,7 @@ function ServerDrawer({ mode, onClose, onSaved, onDelete }: {
               {deleteError ? <div className="error">{deleteError}</div> : null}
             </div>
             <div className="actions">
-              <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
+              <button type="button" className="btn btn--ghost" onClick={onCancel}>Cancel</button>
               {probeState === 'probe-ok' || probeState === 'probe-failed' ? (
                 <button type="button" className={probeState === 'probe-failed' ? 'btn btn--ghost' : undefined} onClick={handleSave} disabled={busy}>
                   {busy ? 'Saving...' : probeState === 'probe-ok' ? (editing ? 'Save changes' : 'Save to Catalog') : 'Save anyway'}

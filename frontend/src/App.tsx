@@ -24,7 +24,12 @@ import { RunUnified } from './pages/RunUnified.js';
 import { Templates } from './pages/Templates.js';
 import { normalizeResultsTab, resultsSearch } from './navigation.js';
 import { apiGet } from './services/api.js';
-import { listBenchmarkDatasetFiles, listBenchmarkDocuments, type BenchmarkTestTemplateDocument } from './services/benchmark-api.js';
+import {
+  listBenchmarkDatasetFiles,
+  listBenchmarkDocuments,
+  reloadBenchmarkLibrary,
+  type BenchmarkTestTemplateDocument
+} from './services/benchmark-api.js';
 import { InferenceServerHealth, getConnectivityConfig, getInferenceServerHealth } from './services/connectivity-api.js';
 import { InferenceServerRecord, listInferenceServers } from './services/inference-servers-api.js';
 import { listModels, type ModelRecord } from './services/models-api.js';
@@ -460,14 +465,18 @@ export function App() {
     setSettingsError(null);
     try {
       await clearDatabase();
+      const libraryReport = await reloadBenchmarkLibrary();
+      const restoredTemplates = libraryReport.installed.filter((entry) => entry.kind === 'test_template').length;
       persistOnboarding({ ribbonsDismissed: [] });
       setServers([]);
-      setTemplateCount(0);
-      setDatasetCount(0);
+      setTemplateCount(restoredTemplates);
       setModelCount(0);
       setRunCount(0);
       window.dispatchEvent(new CustomEvent('database:cleared'));
-      setSettingsMessage('Database cleared.');
+      window.dispatchEvent(new CustomEvent('templates:changed'));
+      setSettingsMessage(restoredTemplates > 0
+        ? `Database cleared. Built-in benchmark templates reloaded (${restoredTemplates}).`
+        : 'Database cleared. Built-in benchmark library checked.');
     } catch (err) {
       setSettingsError(err instanceof Error ? err.message : 'Unable to clear database');
       throw err;
