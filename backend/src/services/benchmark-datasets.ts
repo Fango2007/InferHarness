@@ -6,7 +6,7 @@ import { sha256Document } from './benchmark-schemas.js';
 
 export const BENCHMARK_DATASET_ROOT_ENV = 'INFERHARNESS_BENCHMARK_DATASET_ROOT';
 
-type DatasetItem = Record<string, unknown>;
+export type DatasetItem = Record<string, unknown>;
 
 export interface PrepareDatasetManifestInput {
   dataset_id: string;
@@ -102,7 +102,7 @@ function parseJsonDataset(raw: string): DatasetItem[] {
   return items as DatasetItem[];
 }
 
-function parseJsonlDataset(raw: string): DatasetItem[] {
+export function parseJsonlDataset(raw: string): DatasetItem[] {
   return raw
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -164,7 +164,7 @@ function parseCsvDataset(raw: string): DatasetItem[] {
   });
 }
 
-function normalizeItems(items: DatasetItem[]): DatasetItem[] {
+export function normalizeBenchmarkDatasetItems(items: DatasetItem[]): DatasetItem[] {
   if (items.length === 0) {
     throw new BenchmarkValidationError('Benchmark dataset must contain at least one item.');
   }
@@ -206,13 +206,13 @@ export function readBenchmarkDatasetFile(source: Record<string, unknown>): Datas
   const resolvedPath = resolveDatasetFilePath(sourcePath);
   const raw = fs.readFileSync(resolvedPath, 'utf8');
   if (format === 'json') {
-    return normalizeItems(parseJsonDataset(raw));
+  return normalizeBenchmarkDatasetItems(parseJsonDataset(raw));
   }
   if (format === 'jsonl') {
-    return normalizeItems(parseJsonlDataset(raw));
+    return normalizeBenchmarkDatasetItems(parseJsonlDataset(raw));
   }
   if (format === 'csv') {
-    return normalizeItems(parseCsvDataset(raw));
+    return normalizeBenchmarkDatasetItems(parseCsvDataset(raw));
   }
   throw new BenchmarkValidationError(`Unsupported benchmark dataset file format: ${String(format ?? 'unknown')}.`);
 }
@@ -226,7 +226,7 @@ export function prepareBenchmarkDatasetManifest(input: PrepareDatasetManifestInp
     if (input.snapshot_policy && input.snapshot_policy !== 'embedded') {
       throw new BenchmarkValidationError('Inline benchmark datasets must use snapshot_policy=embedded.');
     }
-    const items = normalizeItems(input.items ?? []);
+    const items = normalizeBenchmarkDatasetItems(input.items ?? []);
     return buildDatasetManifest({
       dataset_id: datasetId,
       source: {
@@ -304,7 +304,7 @@ export function resolveBenchmarkDatasetItems(instantiation: Record<string, unkno
     if (!Array.isArray(items)) {
       throw new BenchmarkValidationError('Embedded benchmark datasets require an items array.');
     }
-    return normalizeItems(items as DatasetItem[]);
+    return normalizeBenchmarkDatasetItems(items as DatasetItem[]);
   }
   if (policy === 'manifest_only') {
     const items = readBenchmarkDatasetFile(objectAt(dataset, 'source') ?? {});

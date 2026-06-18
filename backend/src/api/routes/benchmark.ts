@@ -10,6 +10,12 @@ import {
   validateAnyBenchmarkDocument
 } from '../../services/benchmark-foundation.js';
 import { prepareBenchmarkDatasetManifest } from '../../services/benchmark-datasets.js';
+import {
+  deleteBenchmarkDatasetFile,
+  listBenchmarkDatasetFiles,
+  readBenchmarkDatasetFile,
+  saveBenchmarkDatasetFile
+} from '../../services/benchmark-dataset-files.js';
 import { BenchmarkKind } from '../../services/benchmark-schemas.js';
 import { runBenchmarkInstantiation } from '../../services/benchmark-runner.js';
 import { runBenchmarkPlan } from '../../services/benchmark-plan-runner.js';
@@ -158,6 +164,55 @@ export function registerBenchmarkRoutes(app: FastifyInstance): void {
     try {
       const manifest = prepareBenchmarkDatasetManifest(request.body as Parameters<typeof prepareBenchmarkDatasetManifest>[0]);
       reply.send({ manifest });
+    } catch (error) {
+      if (!sendBenchmarkError(reply, error)) {
+        throw error;
+      }
+    }
+  });
+
+  app.get('/benchmark/datasets/files', async (_request, reply) => {
+    try {
+      reply.send(listBenchmarkDatasetFiles());
+    } catch (error) {
+      if (!sendBenchmarkError(reply, error)) {
+        throw error;
+      }
+    }
+  });
+
+  app.post('/benchmark/datasets/files/read', async (request, reply) => {
+    const body = request.body as { path?: unknown };
+    try {
+      if (typeof body.path !== 'string') {
+        throw new BenchmarkValidationError('Benchmark dataset file read requires path.');
+      }
+      reply.send(readBenchmarkDatasetFile(body.path));
+    } catch (error) {
+      if (!sendBenchmarkError(reply, error)) {
+        throw error;
+      }
+    }
+  });
+
+  app.put('/benchmark/datasets/files', async (request, reply) => {
+    try {
+      reply.send(saveBenchmarkDatasetFile(request.body as Parameters<typeof saveBenchmarkDatasetFile>[0]));
+    } catch (error) {
+      if (!sendBenchmarkError(reply, error)) {
+        throw error;
+      }
+    }
+  });
+
+  app.delete('/benchmark/datasets/files', async (request, reply) => {
+    const query = request.query as { path?: unknown };
+    try {
+      if (typeof query.path !== 'string') {
+        throw new BenchmarkValidationError('Benchmark dataset file delete requires path.');
+      }
+      const removed = deleteBenchmarkDatasetFile(query.path);
+      reply.code(removed ? 204 : 404).send();
     } catch (error) {
       if (!sendBenchmarkError(reply, error)) {
         throw error;

@@ -16,6 +16,7 @@ import {
   type OnboardingUiState
 } from './onboarding.js';
 import { Catalog } from './pages/Catalog.js';
+import { Datasets } from './pages/Datasets.js';
 import { Evaluate } from './pages/Evaluate.js';
 import { ModelDetails } from './pages/ModelDetails.js';
 import { ResultsUnified } from './pages/ResultsUnified.js';
@@ -23,7 +24,7 @@ import { RunUnified } from './pages/RunUnified.js';
 import { Templates } from './pages/Templates.js';
 import { normalizeResultsTab, resultsSearch } from './navigation.js';
 import { apiGet } from './services/api.js';
-import { listBenchmarkDocuments, type BenchmarkTestTemplateDocument } from './services/benchmark-api.js';
+import { listBenchmarkDatasetFiles, listBenchmarkDocuments, type BenchmarkTestTemplateDocument } from './services/benchmark-api.js';
 import { InferenceServerHealth, getConnectivityConfig, getInferenceServerHealth } from './services/connectivity-api.js';
 import { InferenceServerRecord, listInferenceServers } from './services/inference-servers-api.js';
 import { listModels, type ModelRecord } from './services/models-api.js';
@@ -170,6 +171,7 @@ export function App() {
   const [serversError, setServersError] = useState(false);
   const [connectivity, setConnectivity] = useState<Record<string, InferenceServerHealth>>({});
   const [templateCount, setTemplateCount] = useState<number | null>(null);
+  const [datasetCount, setDatasetCount] = useState<number | null>(null);
   const [modelCount, setModelCount] = useState<number | null>(null);
   const [runCount, setRunCount] = useState<number | null>(null);
   const [onboardingUiState, setOnboardingUiState] = useState<OnboardingUiState>(() => readOnboardingUiState());
@@ -294,8 +296,9 @@ export function App() {
   useEffect(() => {
     let isActive = true;
     const refreshCounts = async () => {
-      const [templatesResult, modelsResult, runsResult] = await Promise.allSettled([
+      const [templatesResult, datasetsResult, modelsResult, runsResult] = await Promise.allSettled([
         listBenchmarkDocuments<BenchmarkTestTemplateDocument>('test_template'),
+        listBenchmarkDatasetFiles(),
         listModels(),
         queryResultsView({ page: 1, page_size: 1 })
       ]);
@@ -303,6 +306,7 @@ export function App() {
         return;
       }
       setTemplateCount(templatesResult.status === 'fulfilled' ? templatesResult.value.length : null);
+      setDatasetCount(datasetsResult.status === 'fulfilled' ? datasetsResult.value.length : null);
       setModelCount(modelsResult.status === 'fulfilled' ? modelsResult.value.length : null);
       setRunCount(runsResult.status === 'fulfilled' ? runsResult.value.history.total : null);
     };
@@ -312,6 +316,7 @@ export function App() {
     window.addEventListener('database:cleared', refreshCounts);
     window.addEventListener('runs:changed', refreshCounts);
     window.addEventListener('templates:changed', refreshCounts);
+    window.addEventListener('datasets:changed', refreshCounts);
     window.addEventListener('inference-servers:updated', refreshCounts);
 
     return () => {
@@ -320,6 +325,7 @@ export function App() {
       window.removeEventListener('database:cleared', refreshCounts);
       window.removeEventListener('runs:changed', refreshCounts);
       window.removeEventListener('templates:changed', refreshCounts);
+      window.removeEventListener('datasets:changed', refreshCounts);
       window.removeEventListener('inference-servers:updated', refreshCounts);
     };
   }, []);
@@ -457,6 +463,7 @@ export function App() {
       persistOnboarding({ ribbonsDismissed: [] });
       setServers([]);
       setTemplateCount(0);
+      setDatasetCount(0);
       setModelCount(0);
       setRunCount(0);
       window.dispatchEvent(new CustomEvent('database:cleared'));
@@ -511,6 +518,7 @@ export function App() {
           health={sidebarHealth}
           modelCount={modelCount}
           templateCount={templateCount}
+          datasetCount={datasetCount}
           runCount={runCount}
           onboarding={onboardingStatus.active ? onboardingStatus : undefined}
           onSettings={() => setShowSettings(true)}
@@ -522,6 +530,7 @@ export function App() {
             <Route path="/catalog" element={<CatalogRoute servers={servers} connectivity={connectivity} showWelcome={onboardingStatus.showWelcome} />} />
             <Route path="/catalog/models/:id" element={<CatalogModelDetailsRoute servers={servers} connectivity={connectivity} />} />
             <Route path="/templates" element={<Templates />} />
+            <Route path="/datasets" element={<Datasets />} />
             <Route path="/run" element={<RunRoute connectivity={connectivity} onFirstRunSuccess={handleCompleteOnboarding} />} />
             <Route path="/results" element={<ResultsRoute runCount={runCount} />} />
             <Route path="/runs/:id" element={<Navigate to={{ pathname: '/results', search: resultsSearch('history') }} replace />} />
