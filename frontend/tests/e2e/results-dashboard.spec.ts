@@ -347,6 +347,12 @@ test('deletes a run from the run detail drawer after confirmation', async ({ pag
   });
 
   await page.route('**/results-view/runs/run-dashboard-1', async (route) => {
+    if (route.request().method() === 'DELETE') {
+      deleteRequests += 1;
+      deleted = true;
+      await route.fulfill({ status: 204 });
+      return;
+    }
     if (deleted) {
       await route.fulfill({
         status: 404,
@@ -373,16 +379,6 @@ test('deletes a run from the run detail drawer after confirmation', async ({ pag
         documents: [{ summary: { passed_steps: 1, failed_steps: 0 } }]
       })
     });
-  });
-
-  await page.route('**/runs/run-dashboard-1', async (route) => {
-    if (route.request().method() !== 'DELETE') {
-      await route.fallback();
-      return;
-    }
-    deleteRequests += 1;
-    deleted = true;
-    await route.fulfill({ status: 204 });
   });
 
   page.on('dialog', async (dialog) => {

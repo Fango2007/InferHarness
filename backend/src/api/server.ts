@@ -6,7 +6,6 @@ import { fileURLToPath } from 'url';
 import { getDb, resolvedDbPath, runSchema } from '../models/db.js';
 import { registerAuth } from './middleware/auth.js';
 import { registerResultsViewRoutes } from './routes/results-view.js';
-import { registerRunsRoutes } from './routes/runs.js';
 import { registerInferenceServersRoutes } from './routes/inference-servers.js';
 import { registerModelsRoutes } from './routes/models.js';
 import { registerSystemRoutes } from './routes/system.js';
@@ -99,7 +98,6 @@ export function createServer() {
 
   registerSystemRoutes(app);
   registerInferenceServersRoutes(app);
-  registerRunsRoutes(app);
   registerModelsRoutes(app);
   registerResultsViewRoutes(app);
   registerEvalInferenceRoutes(app);
