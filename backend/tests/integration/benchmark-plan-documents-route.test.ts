@@ -295,27 +295,4 @@ describe('benchmark plan document routes', () => {
     await app.close();
   });
 
-  it('keeps the transitional inline benchmark plan route working', async () => {
-    installMockInferenceFetch();
-    const app = createServer();
-    seedServerAndModels();
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/benchmark/plans/run',
-      headers: AUTH_HEADERS,
-      payload: {
-        plan_id: 'inline-plan',
-        template: templateDoc(),
-        runtime_profile: runtimeDoc(),
-        dataset: datasetDoc(),
-        targets: [{ server_id: 'srv-route', model_id: 'model-a' }]
-      }
-    });
-
-    expect(response.statusCode, JSON.stringify(response.json())).toBe(201);
-    expect(response.json().plan_id).toBe('inline-plan');
-    expect(response.json().run_results).toHaveLength(1);
-    await app.close();
-  });
 });
