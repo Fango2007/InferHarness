@@ -521,14 +521,56 @@ function PromptStrip({
 
 function RunUnifiedEmpty() {
   return (
-    <div className="run-empty-state">
-      <div className="run-empty-blocks" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </div>
-      <h2>Pick one model and prompt</h2>
-      <p>The Run page now creates a benchmark instantiation and executes it immediately. Start with one small prompt before using the pipeline for larger benchmark runs.</p>
+    <div className="run-detail run-empty-preview" aria-label="Benchmark run preview">
+      <main className="run-transcript">
+        <header className="run-response-header">
+          <span className="run-avatar is-large">A</span>
+          <div>
+            <strong>example-model-8b</strong>
+            <span>Example server · Q4_K_M</span>
+          </div>
+          <b className="run-status-pill status-completed">preview</b>
+        </header>
+        <div className="run-metric-grid">
+          <span><b>duration</b>512.0 ms</span>
+          <span><b>server time</b>486.0 ms</span>
+          <span><b>ttft</b>92.0 ms</span>
+          <span><b>tokens in</b>41</span>
+          <span><b>tokens out</b>1</span>
+          <span><b>total tokens</b>42</span>
+          <span><b>stream</b>ready</span>
+          <span className="is-estimated"><b>tok / s</b>38.0 tok/s</span>
+        </div>
+        <div className="run-message-list">
+          <section className="run-message-card">
+            <span>benchmark item · prompt</span>
+            <pre>Reply with exactly: OK</pre>
+          </section>
+          <section className="run-message-card">
+            <span>assistant · final · item 1</span>
+            <pre>OK</pre>
+          </section>
+        </div>
+        <section className="run-asserts">
+          <h3>Benchmark audit</h3>
+          <div className="run-assert-row">
+            <span aria-hidden="true" />
+            <code>status completed</code>
+          </div>
+          <div className="run-assert-row">
+            <span aria-hidden="true" />
+            <code>template Run smoke chat</code>
+          </div>
+          <div className="run-assert-row">
+            <span aria-hidden="true" />
+            <code>items 1</code>
+          </div>
+          <div className="run-assert-row is-pending">
+            <span aria-hidden="true" />
+            <code>select a real model to run</code>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }
@@ -788,6 +830,7 @@ export function RunUnified({
     selectedTargets.length > 0 &&
     onboarding.status.step === 'first_run' &&
     !isRibbonDismissed(onboarding.uiState, 'model-selected');
+  const shouldCompleteOnboardingAfterRun = onboarding?.status.active === true && onboarding.status.step === 'first_run';
   const subtitle = selectedTarget
     ? `${selectedTarget.model_id} · ${datasetMode === 'manifest_only' ? 'dataset run' : 'benchmark smoke'}`
     : `No model · ${datasetMode === 'manifest_only' ? 'dataset run' : 'benchmark smoke'}`;
@@ -919,7 +962,11 @@ export function RunUnified({
       setInstantiation(fetchedInstantiations[0] ?? null);
       setResult(fetchedResults[0] ?? null);
       const firstResult = fetchedResults[0] ?? null;
-      if (firstResult?.document.status === 'completed' && firstResult.document.errors.length === 0) {
+      if (
+        shouldCompleteOnboardingAfterRun &&
+        firstResult?.document.status === 'completed' &&
+        firstResult.document.errors.length === 0
+      ) {
         onFirstRunSuccess?.();
         setShowResultsHandoff(true);
       }
