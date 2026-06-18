@@ -381,19 +381,6 @@ export interface BenchmarkPlanResult {
   };
 }
 
-export interface BenchmarkPlanPayload {
-  plan_id?: string;
-  template: Record<string, unknown>;
-  dataset: Record<string, unknown>;
-  runtime_profile: Record<string, unknown>;
-  targets: { server_id: string; model_id: string }[];
-  continue_on_model_error?: boolean;
-}
-
-export async function runBenchmarkPlan(payload: BenchmarkPlanPayload): Promise<BenchmarkPlanResult> {
-  return apiPost<BenchmarkPlanResult>('/benchmark/plans/run', payload);
-}
-
 export async function saveBenchmarkPlan(document: BenchmarkPlanDocument): Promise<BenchmarkDocumentRecord<BenchmarkPlanDocument>> {
   return apiPost<BenchmarkDocumentRecord<BenchmarkPlanDocument>>('/benchmark/plans', document);
 }
@@ -429,24 +416,5 @@ export function buildPersistedBenchmarkPlanDocument(input: {
       concurrency: 1
     },
     metadata: input.metadata
-  };
-}
-
-export function buildBenchmarkPlanPayload(input: {
-  targets: RunTarget[];
-  prompt: string;
-  systemPrompt?: string | null;
-  inferenceParams: InferenceParams;
-  timeoutSec: string;
-  seed: string;
-  dataset?: BenchmarkDatasetInput;
-  template?: BenchmarkTestTemplateDocument;
-}): BenchmarkPlanPayload {
-  const first = buildBenchmarkSmokePayload({ ...input, target: input.targets[0] });
-  return {
-    template: first.template,
-    dataset: first.dataset as Record<string, unknown>,
-    runtime_profile: first.runtime_profile,
-    targets: input.targets.map((t) => ({ server_id: t.inference_server_id, model_id: t.model_id }))
   };
 }
