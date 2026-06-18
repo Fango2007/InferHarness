@@ -6,6 +6,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+- **Legacy Runs API cleanup** — removed the orphaned public `/runs` list/delete routes, their route-specific service, and route-only tests now that Results deletion uses `/results-view/runs/:runId`, while retaining the underlying run/result tables for active benchmark, evaluation, retention, and cleanup flows.
 - **Datasets editor checkpoint** — added a Datasets page and JSONL dataset-file API for creating, editing, saving, and deleting dataset item files under `INFERHARNESS_BENCHMARK_DATASET_ROOT`, with synced `dataset_manifest` documents, copy-down editing for repeated fields, and clamped long-prompt display.
 - **Benchmark plan cleanup** — removed the transitional inline `/benchmark/plans/run` execution API and stale `INFERHARNESS_TEST_TEMPLATES_DIR` example so plan execution goes through persisted `benchmark_plan` documents.
 - **Tool-call assertion metric** — benchmark tool-call templates now include `tool_call_assertion_pass`, a single-turn pass/fail metric requiring exact expected tool selection and structurally matching arguments while keeping assertion failures as quality metrics rather than execution failures.
