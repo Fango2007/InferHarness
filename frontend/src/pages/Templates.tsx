@@ -13,6 +13,7 @@ import {
   runTemplateAgent,
   saveBenchmarkDocument
 } from '../services/benchmark-api.js';
+import { TOOL_CALL_ASSERTION_METRIC } from '../services/benchmark-metric-metadata.js';
 import { listModels, type ModelRecord } from '../services/models-api.js';
 import { getAppSettings, type AppSettings } from '../services/system-api.js';
 
@@ -302,6 +303,8 @@ function TemplatePreview({
 }) {
   const stats = parseTemplateStats(template);
   const document = template.document;
+  const requiresToolCalling = document.required_capabilities?.tool_calling === true;
+  const includesToolCallAssertion = document.metrics.includes(TOOL_CALL_ASSERTION_METRIC);
   return (
     <article className="template-preview-panel">
       <header>
@@ -325,6 +328,12 @@ function TemplatePreview({
         <div className="kv"><span>Aggregations</span><strong>{stats.aggregationCount}</strong></div>
         <div className="kv"><span>Capabilities</span><strong>{stats.capabilityCount}</strong></div>
       </div>
+      {requiresToolCalling ? (
+        <div className={includesToolCallAssertion ? 'template-tool-status is-pass' : 'template-tool-status is-warning'}>
+          <strong>{includesToolCallAssertion ? 'Tool-call assertion included' : 'Tool-call assertion missing'}</strong>
+          <code>{TOOL_CALL_ASSERTION_METRIC}</code>
+        </div>
+      ) : null}
       <section>
         <h3>Benchmark document</h3>
         <TemplateJsonWindow filename={`${document.template_id}.json`} lines={jsonLines(document)} showNotes={false} readOnly />

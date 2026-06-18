@@ -30,6 +30,7 @@ const BUILT_IN_METRICS = [
   'tool_call_count',
   'tool_selected_correctly',
   'tool_arguments_valid',
+  'tool_call_assertion_pass',
   'missing_tool_call',
   'hallucinated_tool_call',
   'json_valid',

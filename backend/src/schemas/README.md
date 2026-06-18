@@ -52,8 +52,8 @@ Persistence/runtime usage: stored as per-model inspection settings and used to g
 Compatibility notes: `trust_remote_code` must remain explicit because it changes the execution risk of model inspection.
 
 **`benchmark/*.schema.json`**
-Role: runtime-promoted contract pack for the new benchmark pipeline foundations.
-Producer/consumer: produced by benchmark validation, offline instantiation, and synthetic result persistence; consumed by benchmark foundation APIs before the Python execution engine is wired in.
+Role: runtime-promoted contract pack for benchmark templates, datasets, plans, instantiations, and execution results.
+Producer/consumer: produced by benchmark document authoring, library import, instantiation, execution, and result persistence; consumed by benchmark foundation APIs, the runner, Results views, and Run-page template selection.
 Key objects: `model_profile`, `model_snapshot`, `runtime_profile`, `dataset_manifest`, `test_template`, `test_instantiation`, `test_run_result`, and `benchmark_plan`.
-Persistence/runtime usage: `benchmark_test_instantiations` and `benchmark_test_run_results` store validated immutable JSON documents plus stable document hashes.
+Persistence/runtime usage: `benchmark_test_instantiations` and `benchmark_test_run_results` store validated immutable JSON documents plus stable document hashes. `test_template.metrics` is the canonical allowlist for computed benchmark metrics, including tool-call assertion metrics such as `tool_call_assertion_pass`.
 Compatibility notes: these schemas stay standalone for the current AJV-by-file validator.

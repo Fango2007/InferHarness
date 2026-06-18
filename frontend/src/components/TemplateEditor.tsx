@@ -5,6 +5,13 @@ import {
   BenchmarkTestTemplateDocument,
   BenchmarkTestTemplateRecord
 } from '../services/benchmark-api.js';
+import {
+  BENCHMARK_METRICS,
+  METRIC_GROUP_LABELS,
+  benchmarkMetricLabel,
+  ensureToolCallAssertionMetric,
+  groupedBenchmarkMetrics
+} from '../services/benchmark-metric-metadata.js';
 
 interface TemplateEditorProps {
   template: BenchmarkTestTemplateRecord | null;
@@ -41,27 +48,6 @@ const ADDITIONAL_CAPABILITIES = [
 const STAGE_TYPES: StageType[] = ['dataset_loop', 'single_request', 'paired_request_loop'];
 const STAGE_ORDERS: StageOrder[] = ['sequential', 'random'];
 const PAIR_ROLES: PairRole[] = ['', 'baseline', 'comparison', 'control', 'variant', 'technical'];
-const METRICS = [
-  'input_tokens',
-  'output_tokens',
-  'total_tokens',
-  'elapsed_ms',
-  'first_token_ms',
-  'tokens_per_second',
-  'decode_tokens_per_second',
-  'prefill_tokens_per_second',
-  'output_input_token_ratio',
-  'tool_call_count',
-  'tool_selected_correctly',
-  'tool_arguments_valid',
-  'missing_tool_call',
-  'hallucinated_tool_call',
-  'json_valid',
-  'schema_valid',
-  'regex_match',
-  'exact_match',
-  'contains_required_terms'
-] as const;
 const AGGREGATIONS = ['mean', 'median', 'min', 'max', 'sum', 'count', 'p50', 'p90', 'p95', 'p99', 'stddev', 'variance'] as const;
 const DEFAULT_PAIR_MEMBERS: PairMemberEditor[] = [
   { id: 'cold', role: 'baseline' },
@@ -162,12 +148,12 @@ function aggregationSelection(document: BenchmarkTestTemplateDocument): string[]
 }
 
 function builtInMetricSelection(document: BenchmarkTestTemplateDocument): string[] {
-  return metricSelection(document).filter((metric) => (METRICS as readonly string[]).includes(metric));
+  return metricSelection(document).filter((metric) => BENCHMARK_METRICS.includes(metric));
 }
 
 function customMetricSelection(document: BenchmarkTestTemplateDocument): string {
   return metricSelection(document)
-    .filter((metric) => !(METRICS as readonly string[]).includes(metric))
+    .filter((metric) => !BENCHMARK_METRICS.includes(metric))
     .join(', ');
 }
 
@@ -484,7 +470,13 @@ export function TemplateEditor({ template, initialDocument, onSave, onDraftChang
   }, [onDraftChange, structuredDocument]);
 
   function toggleCapability(key: string): void {
-    setCapabilities((current) => ({ ...current, [key]: !current[key] }));
+    setCapabilities((current) => {
+      const nextValue = !current[key];
+      if (key === 'tool_calling' && nextValue) {
+        setMetrics((selected) => ensureToolCallAssertionMetric(selected, true));
+      }
+      return { ...current, [key]: nextValue };
+    });
   }
 
   function toggleMetric(metric: string): void {
@@ -772,12 +764,22 @@ export function TemplateEditor({ template, initialDocument, onSave, onDraftChang
 
         <section className="template-editor-section template-section--schema-required">
           <h3>Metrics</h3>
-          <div className="template-check-grid">
-            {METRICS.map((metric) => (
-              <label key={metric} className="checkbox-row">
-                <input type="checkbox" checked={metrics.includes(metric)} onChange={() => toggleMetric(metric)} disabled={busy} />
-                {metric}
-              </label>
+          <div className="template-metric-groups">
+            {groupedBenchmarkMetrics().map(({ group, metrics: groupMetrics }) => (
+              <section key={group} className="template-metric-group">
+                <h4>{METRIC_GROUP_LABELS[group]}</h4>
+                <div className="template-check-grid">
+                  {groupMetrics.map((metric) => (
+                    <label key={metric.id} className="checkbox-row template-metric-option">
+                      <input type="checkbox" checked={metrics.includes(metric.id)} onChange={() => toggleMetric(metric.id)} disabled={busy} />
+                      <span>
+                        <strong>{benchmarkMetricLabel(metric.id)}</strong>
+                        <code>{metric.id}</code>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
           <label>

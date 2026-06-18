@@ -27,6 +27,7 @@ import type { InferenceServerHealth } from '../services/connectivity-api.js';
 import { DEFAULT_INFERENCE_PARAMS, type InferenceParams } from '../services/inference-param-presets-api.js';
 import { InferenceServerRecord, listInferenceServers } from '../services/inference-servers-api.js';
 import { listModels, ModelRecord } from '../services/models-api.js';
+import { correctnessMetricTiles, type CorrectnessMetricTile } from '../services/benchmark-metric-metadata.js';
 import {
   assignRunAccents,
   mergeRunModelOptions,
@@ -136,34 +137,9 @@ function firstMetricValue(result: BenchmarkResultRecord | null, field: string): 
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
-interface CorrectnessMetric {
-  label: string;
-  successRate: number;
-  count: number;
-}
-
-const CORRECTNESS_METRIC_LABELS: Record<string, string> = {
-  exact_match: 'exact match',
-  json_valid: 'JSON valid',
-  schema_valid: 'schema valid',
-  regex_match: 'regex match',
-  contains_required_terms: 'terms found',
-  tool_selected_correctly: 'tool selected',
-  tool_arguments_valid: 'tool args valid',
-  missing_tool_call: 'missing tool',
-  hallucinated_tool_call: 'hallucinated tool'
-};
-
-function correctnessMetrics(result: BenchmarkResultRecord | null): CorrectnessMetric[] {
+function correctnessMetrics(result: BenchmarkResultRecord | null): CorrectnessMetricTile[] {
   const agg = result?.document.aggregated_metrics as Record<string, Record<string, unknown>> | undefined;
-  if (!agg) return [];
-  return Object.entries(agg)
-    .filter(([key, entry]) => key in CORRECTNESS_METRIC_LABELS && typeof entry?.success_rate === 'number')
-    .map(([key, entry]) => ({
-      label: CORRECTNESS_METRIC_LABELS[key] ?? key,
-      successRate: entry.success_rate as number,
-      count: typeof entry.count === 'number' ? entry.count : 0
-    }));
+  return correctnessMetricTiles(agg);
 }
 
 function streamSummary(result: BenchmarkResultRecord | null): string {
@@ -641,11 +617,11 @@ function BenchmarkDetail({
         </div>
         {correctness.length > 0 && (
           <div className="run-metric-grid run-correctness-grid" aria-label="Correctness metrics">
-            {correctness.map(({ label, successRate, count }) => (
-              <span key={label}>
-                <b>{label}</b>
-                {`${(successRate * 100).toFixed(0)}%`}
-                <small>{`${Math.round(successRate * count)} / ${count}`}</small>
+            {correctness.map((metric) => (
+              <span key={metric.id} className={metric.state === 'neutral' ? '' : `is-${metric.state}`}>
+                <b>{metric.displayLabel}</b>
+                {`${(metric.successRate * 100).toFixed(0)}%`}
+                <small>{`${Math.round(metric.successRate * metric.count)} / ${metric.count}`}</small>
               </span>
             ))}
           </div>

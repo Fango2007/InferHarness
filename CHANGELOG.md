@@ -8,6 +8,8 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 - **Datasets editor checkpoint** — added a Datasets page and JSONL dataset-file API for creating, editing, saving, and deleting dataset item files under `INFERHARNESS_BENCHMARK_DATASET_ROOT`, with synced `dataset_manifest` documents, copy-down editing for repeated fields, and clamped long-prompt display.
 - **Benchmark plan cleanup** — removed the transitional inline `/benchmark/plans/run` execution API and stale `INFERHARNESS_TEST_TEMPLATES_DIR` example so plan execution goes through persisted `benchmark_plan` documents.
+- **Tool-call assertion metric** — benchmark tool-call templates now include `tool_call_assertion_pass`, a single-turn pass/fail metric requiring exact expected tool selection and structurally matching arguments while keeping assertion failures as quality metrics rather than execution failures.
+- **Tool-call assertion UI** — Run now promotes tool-call assertion pass/fail as the primary correctness verdict, and Templates groups metrics with readable labels while auto-adding the assertion metric when tool calling is enabled.
 
 ## [0.9.0] - 2026-06-17
 

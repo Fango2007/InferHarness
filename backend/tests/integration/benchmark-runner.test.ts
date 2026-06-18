@@ -54,6 +54,7 @@ function toolBenchmarkTemplate(): Record<string, unknown> {
       'tool_call_count',
       'tool_selected_correctly',
       'tool_arguments_valid',
+      'tool_call_assertion_pass',
       'missing_tool_call',
       'hallucinated_tool_call',
       'input_tokens',
@@ -708,6 +709,7 @@ describe('benchmark runner API', () => {
     expect(result.document.metric_results[0].tool_call_count).toBe(1);
     expect(result.document.metric_results[0].tool_selected_correctly).toBe(true);
     expect(result.document.metric_results[0].tool_arguments_valid).toBe(true);
+    expect(result.document.metric_results[0].tool_call_assertion_pass).toBe(true);
     expect(result.document.metric_results[0].missing_tool_call).toBe(false);
     expect(result.document.metric_results[0].hallucinated_tool_call).toBe(false);
     expect(result.document.metric_results[0].input_tokens).toBe(21);
@@ -796,6 +798,7 @@ describe('benchmark runner API', () => {
     expect(result.document.metric_results[0].tool_call_count).toBe(1);
     expect(result.document.metric_results[0].tool_selected_correctly).toBe(true);
     expect(result.document.metric_results[0].tool_arguments_valid).toBe(true);
+    expect(result.document.metric_results[0].tool_call_assertion_pass).toBe(true);
     expect(result.document.metric_results[0].input_tokens).toBe(19);
     expect(result.document.metric_results[0].output_tokens).toBe(7);
     expect(result.document.metric_results[0].total_tokens).toBe(26);

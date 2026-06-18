@@ -75,6 +75,10 @@ test('creates, updates, and deletes templates from the redesigned Templates page
     await createForm.getByLabel('Left metric').fill('cold.elapsed_ms');
     await createForm.getByLabel('Right metric').fill('hot.elapsed_ms');
     await createForm.getByLabel('Unit').fill('ms');
+    const toolCallAssertionMetric = createForm.locator('.template-metric-option').filter({ hasText: 'Tool-call assertion pass' });
+    await expect(toolCallAssertionMetric).toContainText('tool_call_assertion_pass');
+    await createForm.getByLabel('tool_calling').check();
+    await expect(toolCallAssertionMetric.locator('input')).toBeChecked();
     await createForm.getByLabel('elapsed_ms').check();
     await createForm.getByLabel('Additional metric IDs').fill('pair.cold.elapsed_ms, pair.hot.elapsed_ms, cold_penalty_ms');
     await createForm.getByLabel('mean').check();
@@ -83,6 +87,7 @@ test('creates, updates, and deletes templates from the redesigned Templates page
     await expect(page.locator('.template-raw-json')).toHaveValue(/"embedding": true/);
     await expect(page.locator('.template-raw-json')).toHaveValue(/"pair": \[/);
     await expect(page.locator('.template-raw-json')).toHaveValue(/"cold_penalty_ms"/);
+    await expect(page.locator('.template-raw-json')).toHaveValue(/"tool_call_assertion_pass"/);
     await page.getByRole('button', { name: 'Live JSON' }).click();
     await page.getByRole('button', { name: 'Save template' }).click();
 
@@ -223,6 +228,8 @@ test('authors a template through the in-page benchmark agent', async ({ page }) 
 
     const row = page.locator('.template-row').filter({ hasText: templateName });
     await expect(row).toBeVisible();
+    await row.click();
+    await expect(page.locator('.template-preview-panel')).toContainText('Tool-call assertion missing');
   } finally {
     await cleanupTemplateIds(page.request, [templateId]);
   }

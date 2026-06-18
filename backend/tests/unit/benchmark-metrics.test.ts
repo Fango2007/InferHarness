@@ -461,6 +461,109 @@ describe('computeItemMetrics', () => {
       });
       expect(result.hallucinated_tool_call).toBe(false);
     });
+
+    it('tool_arguments_valid: compares nested expected function arguments structurally', () => {
+      const result = computeItemMetrics({
+        requestedMetrics: ['tool_arguments_valid'],
+        timing: BASE_TIMING,
+        answerText: '',
+        toolCalls: [
+          { function: { name: 'get_weather', arguments: '{"unit":"celsius","city":"Paris"}' } }
+        ],
+        item: {
+          expected_tool_calls: [
+            { function: { name: 'get_weather', arguments: { city: 'Paris', unit: 'celsius' } } }
+          ]
+        }
+      });
+      expect(result.tool_arguments_valid).toBe(true);
+    });
+
+    it('tool_call_assertion_pass: true when tool name and arguments match exactly', () => {
+      const result = computeItemMetrics({
+        requestedMetrics: ['tool_call_assertion_pass'],
+        timing: BASE_TIMING,
+        answerText: '',
+        toolCalls: [
+          { function: { name: 'get_weather', arguments: '{"unit":"celsius","city":"Paris"}' } }
+        ],
+        item: {
+          expected_tool_calls: [
+            { function: { name: 'get_weather', arguments: { city: 'Paris', unit: 'celsius' } } }
+          ]
+        }
+      });
+      expect(result.tool_call_assertion_pass).toBe(true);
+    });
+
+    it('tool_call_assertion_pass: false when the wrong tool is called', () => {
+      const result = computeItemMetrics({
+        requestedMetrics: ['tool_call_assertion_pass'],
+        timing: BASE_TIMING,
+        answerText: '',
+        toolCalls: [{ function: { name: 'lookup_timezone', arguments: '{"city":"Paris"}' } }],
+        item: { expected_tool_calls: expectedCalls }
+      });
+      expect(result.tool_call_assertion_pass).toBe(false);
+    });
+
+    it('tool_call_assertion_pass: false when an expected call is missing', () => {
+      const result = computeItemMetrics({
+        requestedMetrics: ['tool_call_assertion_pass'],
+        timing: BASE_TIMING,
+        answerText: '',
+        toolCalls: [],
+        item: { expected_tool_calls: expectedCalls }
+      });
+      expect(result.tool_call_assertion_pass).toBe(false);
+    });
+
+    it('tool_call_assertion_pass: false when an unexpected extra call is present', () => {
+      const result = computeItemMetrics({
+        requestedMetrics: ['tool_call_assertion_pass'],
+        timing: BASE_TIMING,
+        answerText: '',
+        toolCalls: [
+          ...toolCalls,
+          { function: { name: 'lookup_timezone', arguments: '{"city":"Paris"}' } }
+        ],
+        item: { expected_tool_calls: expectedCalls }
+      });
+      expect(result.tool_call_assertion_pass).toBe(false);
+    });
+
+    it('tool_call_assertion_pass: false when argument types differ', () => {
+      const result = computeItemMetrics({
+        requestedMetrics: ['tool_call_assertion_pass'],
+        timing: BASE_TIMING,
+        answerText: '',
+        toolCalls: [{ function: { name: 'set_retry_count', arguments: '{"count":"3"}' } }],
+        item: { expected_tool_calls: [{ name: 'set_retry_count', arguments: { count: 3 } }] }
+      });
+      expect(result.tool_call_assertion_pass).toBe(false);
+    });
+
+    it('tool_call_assertion_pass: true when no tool calls are expected and none are made', () => {
+      const result = computeItemMetrics({
+        requestedMetrics: ['tool_call_assertion_pass'],
+        timing: BASE_TIMING,
+        answerText: '',
+        toolCalls: null,
+        item: { expected_tool_calls: [] }
+      });
+      expect(result.tool_call_assertion_pass).toBe(true);
+    });
+
+    it('tool_call_assertion_pass: false when no tool calls are expected but one is made', () => {
+      const result = computeItemMetrics({
+        requestedMetrics: ['tool_call_assertion_pass'],
+        timing: BASE_TIMING,
+        answerText: '',
+        toolCalls,
+        item: { expected_tool_calls: [] }
+      });
+      expect(result.tool_call_assertion_pass).toBe(false);
+    });
   });
 });
 

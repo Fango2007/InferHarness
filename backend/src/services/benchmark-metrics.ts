@@ -157,6 +157,9 @@ export function computeItemMetrics(args: ItemMetricInputs): Record<string, numbe
       case 'tool_arguments_valid':
         result.tool_arguments_valid = computeToolArgumentsValid(toolCalls, item.expected_tool_calls);
         break;
+      case 'tool_call_assertion_pass':
+        result.tool_call_assertion_pass = computeToolCallAssertionPass(toolCalls, item.expected_tool_calls);
+        break;
       case 'missing_tool_call':
         result.missing_tool_call = computeMissingToolCall(toolCalls, item.expected_tool_calls);
         break;
@@ -332,6 +335,47 @@ function callName(call: unknown): string | null {
   return name;
 }
 
+function callArguments(call: unknown): unknown {
+  if (!call || typeof call !== 'object') return undefined;
+  const r = call as Record<string, unknown>;
+  const fn = r.function as Record<string, unknown> | undefined;
+  return fn?.arguments ?? r.arguments;
+}
+
+function normalizedArguments(args: unknown): unknown {
+  if (typeof args === 'string') {
+    try {
+      return JSON.parse(args);
+    } catch {
+      return args;
+    }
+  }
+  return args;
+}
+
+function structuralEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    return left.every((value, index) => structuralEqual(value, right[index]));
+  }
+  if (
+    left && right
+    && typeof left === 'object'
+    && typeof right === 'object'
+  ) {
+    const leftRecord = left as Record<string, unknown>;
+    const rightRecord = right as Record<string, unknown>;
+    const leftKeys = Object.keys(leftRecord).sort();
+    const rightKeys = Object.keys(rightRecord).sort();
+    if (leftKeys.length !== rightKeys.length) return false;
+    return leftKeys.every((key, index) => (
+      key === rightKeys[index] && structuralEqual(leftRecord[key], rightRecord[key])
+    ));
+  }
+  return false;
+}
+
 function expectedCallNames(expected: unknown): string[] {
   if (!Array.isArray(expected)) return [];
   return (expected as unknown[]).flatMap((e) => {
@@ -355,19 +399,32 @@ function computeToolArgumentsValid(actual: unknown[] | null, expected: unknown):
     if (!name) return false;
     const match = actual.find((a) => callName(a) === name);
     if (!match) return false;
-    if (e.arguments === undefined) return true;
-    const r = match as Record<string, unknown>;
-    const fn = r.function as Record<string, unknown> | undefined;
-    const actualArgs = fn?.arguments ?? r.arguments;
-    if (typeof actualArgs === 'string' && typeof e.arguments === 'object') {
-      try {
-        return JSON.stringify(JSON.parse(actualArgs)) === JSON.stringify(e.arguments);
-      } catch {
-        return false;
-      }
-    }
-    return JSON.stringify(actualArgs) === JSON.stringify(e.arguments);
+    const expectedArgs = callArguments(e);
+    if (expectedArgs === undefined) return true;
+    return structuralEqual(normalizedArguments(callArguments(match)), normalizedArguments(expectedArgs));
   });
+}
+
+function computeToolCallAssertionPass(actual: unknown[] | null, expected: unknown): boolean | null {
+  if (!Array.isArray(expected)) return null;
+  const actualCalls = actual ?? [];
+  if (expected.length === 0) return actualCalls.length === 0;
+  if (actualCalls.length !== expected.length) return false;
+
+  const unmatchedActual = [...actualCalls];
+  return (expected as unknown[]).every((exp) => {
+    const name = callName(exp);
+    if (!name) return false;
+    const expectedArgs = callArguments(exp);
+    const index = unmatchedActual.findIndex((candidate) => {
+      if (callName(candidate) !== name) return false;
+      if (expectedArgs === undefined) return true;
+      return structuralEqual(normalizedArguments(callArguments(candidate)), normalizedArguments(expectedArgs));
+    });
+    if (index < 0) return false;
+    unmatchedActual.splice(index, 1);
+    return true;
+  }) && unmatchedActual.length === 0;
 }
 
 function computeMissingToolCall(actual: unknown[] | null, expected: unknown): boolean | null {
