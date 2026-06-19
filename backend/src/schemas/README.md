@@ -57,3 +57,59 @@ Producer/consumer: produced by benchmark document authoring, library import, ins
 Key objects: `model_profile`, `model_snapshot`, `runtime_profile`, `dataset_manifest`, `test_template`, `test_instantiation`, `test_run_result`, and `benchmark_plan`.
 Persistence/runtime usage: `benchmark_test_instantiations` and `benchmark_test_run_results` store validated immutable JSON documents plus stable document hashes. `test_template.metrics` is the canonical allowlist for computed benchmark metrics, including tool-call assertion metrics such as `tool_call_assertion_pass`.
 Compatibility notes: these schemas stay standalone for the current AJV-by-file validator.
+
+## Benchmark Pipeline
+
+The benchmark pipeline is schema-first. Authoring documents are mutable and reusable, while execution documents are immutable snapshots that prove what was actually run.
+
+**Layer 1 - Reference documents**
+`test_template`, `dataset_manifest`, `runtime_profile`, and `benchmark_plan` are persisted benchmark documents. They can come from the built-in file-backed library, the writable local library, or API saves. These records are reusable inputs, not execution evidence.
+
+**Layer 2 - Plan resolution**
+`benchmark_plan` binds the reusable inputs for a run:
+
+```json
+{
+  "template_ref": "agent-tool-selection-structure-v1",
+  "dataset_ref": "dataset-agent-tool-selection-structure-v1",
+  "runtime_profile_ref": "run-runtime-...",
+  "model_profile_refs": ["server-id:model-id"]
+}
+```
+
+The resolver loads each referenced document from the benchmark document store. Missing refs fail before any model call.
+
+**Layer 3 - Instantiation**
+The foundation layer turns a plan target into a `test_instantiation`. This document snapshots the template, dataset manifest, runtime parameters, model profile, model snapshot, operation spec, and stable hashes. This is the exact reproducible benchmark contract.
+
+**Layer 4 - Execution**
+The runner executes the instantiation stage by stage. For dataset loops it resolves dataset items, verifies `dataset_hash` and `item_hashes`, builds provider-specific requests, normalizes responses, and records per-item metrics. Tool-calling datasets carry `tools`, `tool_choice`, and `expected_tool_calls` at item level.
+
+**Layer 5 - Results**
+`test_run_result` stores normalized responses, metric results, aggregated metrics, request/response traces, errors, and status. Results views and comparison tables consume these documents instead of recomputing from mutable templates or datasets.
+
+## Benchmark Schema Documents
+
+**`test_template.schema.json`**
+Reusable benchmark definition. It declares the logical operation, required capabilities, input contract, execution stages, metric ids, aggregations, and optional metadata/extensions. It should not embed concrete server endpoints or model ids.
+
+**`dataset_manifest.schema.json`**
+Persistable proof of benchmark data. It supports embedded inline items, manifest-only file references, and compressed blobs. Each item can include prompts, system prompts, expected answers, expected schemas, tool definitions, tool choice, expected tool calls, tags, and evaluation metadata.
+
+**`runtime_profile.schema.json`**
+Reusable runtime policy. It carries inference parameters and execution policy such as timeout, seed, temperature, token limits, and retry/stop behavior.
+
+**`benchmark_plan.schema.json`**
+Orchestration document. It references a template, dataset manifest, runtime profile, and one or more model profiles. The Run page creates these documents to bind selected UI inputs into an executable benchmark.
+
+**`test_instantiation.schema.json`**
+Immutable run-ready snapshot. It embeds the resolved template snapshot, model profile, model snapshot, operation spec, runtime parameters, execution policy, and dataset manifest. Persisted instantiations are the source of truth for what the runner executed.
+
+**`test_run_result.schema.json`**
+Append-only execution result. It records normalized outputs, tool calls, metrics, aggregations, errors, traces, timestamps, and status for one instantiation run.
+
+**`model_profile.schema.json`**
+Serializable model target profile. It captures stable model identity and declared capabilities needed to compare template requirements against the selected model/server.
+
+**`model_snapshot.schema.json`**
+Point-in-time capability snapshot. It freezes the server/model capabilities observed at instantiation time so later model catalog changes do not rewrite benchmark history.

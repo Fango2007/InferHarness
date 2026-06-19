@@ -2,9 +2,11 @@ import { expect, test } from 'vitest';
 
 import {
   assignRunAccents,
+  findLinkedDatasetManifest,
   mergeRunModelOptions,
   parseRunTargets,
-  serializeRunTargets
+  serializeRunTargets,
+  summarizeBenchmarkMetricFailures
 } from '../../src/services/run-unified-utils.js';
 
 test('run target query params parse legacy and repeated target params', () => {
@@ -93,4 +95,79 @@ test('model options merge discovery with persisted model metadata', () => {
     source: 'merged'
   });
   expect(options.find((option) => option.model_id === 'model-b')).toBeUndefined();
+});
+
+test('findLinkedDatasetManifest returns the unique dataset linked by template record id', () => {
+  const template = {
+    id: 'template-record-id',
+    document: { template_id: 'template-document-id' }
+  };
+  const datasets = [
+    { id: 'dataset-a', document: { metadata: { template_id: 'other-template' } } },
+    { id: 'dataset-b', document: { metadata: { template_id: 'template-record-id' } } }
+  ];
+
+  expect(findLinkedDatasetManifest(template, datasets)).toBe(datasets[1]);
+});
+
+test('findLinkedDatasetManifest also matches the template document id', () => {
+  const template = {
+    id: 'template-record-id',
+    document: { template_id: 'template-document-id' }
+  };
+  const datasets = [
+    { id: 'dataset-a', document: { metadata: { template_id: 'template-document-id' } } }
+  ];
+
+  expect(findLinkedDatasetManifest(template, datasets)).toBe(datasets[0]);
+});
+
+test('findLinkedDatasetManifest returns null without a unique linked dataset', () => {
+  const template = {
+    id: 'template-record-id',
+    document: { template_id: 'template-document-id' }
+  };
+
+  expect(findLinkedDatasetManifest(template, [])).toBeNull();
+  expect(findLinkedDatasetManifest(template, [
+    { id: 'dataset-a', document: { metadata: { template_id: 'template-document-id' } } },
+    { id: 'dataset-b', document: { metadata: { template_id: 'template-record-id' } } }
+  ])).toBeNull();
+});
+
+test('summarizeBenchmarkMetricFailures reports tool argument assertion failures by item count', () => {
+  expect(summarizeBenchmarkMetricFailures([
+    {
+      tool_call_count: 1,
+      tool_selected_correctly: true,
+      tool_arguments_valid: true,
+      tool_call_assertion_pass: true,
+      missing_tool_call: false,
+      hallucinated_tool_call: false
+    },
+    {
+      tool_call_count: 1,
+      tool_selected_correctly: true,
+      tool_arguments_valid: false,
+      tool_call_assertion_pass: false,
+      missing_tool_call: false,
+      hallucinated_tool_call: false
+    }
+  ])).toEqual({
+    failedCount: 1,
+    totalCount: 2,
+    categories: ['invalid tool arguments', 'tool-call assertion failed'],
+    message: 'functional check failed 1/2 items: invalid tool arguments; tool-call assertion failed'
+  });
+});
+
+test('summarizeBenchmarkMetricFailures returns null when no functional metric failed', () => {
+  expect(summarizeBenchmarkMetricFailures([
+    {
+      tool_selected_correctly: true,
+      tool_arguments_valid: true,
+      tool_call_assertion_pass: true,
+      schema_valid: true
+    }
+  ])).toBeNull();
 });

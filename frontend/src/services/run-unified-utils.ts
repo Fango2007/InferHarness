@@ -31,8 +31,90 @@ export interface AccentedRunTarget extends RunTarget {
   accent: string;
 }
 
+export interface BenchmarkFailureSummary {
+  failedCount: number;
+  totalCount: number;
+  categories: string[];
+  message: string;
+}
+
+interface BenchmarkDocumentLike<TDocument extends Record<string, unknown>> {
+  id: string;
+  document: TDocument;
+}
+
 export function targetKey(target: RunTarget): string {
   return `${target.inference_server_id}\u0000${target.model_id}`;
+}
+
+export function findLinkedDatasetManifest<TDataset extends BenchmarkDocumentLike<Record<string, unknown>>>(
+  selectedTemplate: BenchmarkDocumentLike<Record<string, unknown>> | null | undefined,
+  datasetManifests: TDataset[]
+): TDataset | null {
+  if (!selectedTemplate) {
+    return null;
+  }
+  const acceptedTemplateIds = new Set([selectedTemplate.id]);
+  const documentTemplateId = selectedTemplate.document.template_id;
+  if (typeof documentTemplateId === 'string' && documentTemplateId.trim()) {
+    acceptedTemplateIds.add(documentTemplateId);
+  }
+
+  const matches = datasetManifests.filter((dataset) => {
+    const metadata = dataset.document.metadata;
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+      return false;
+    }
+    const linkedTemplateId = (metadata as Record<string, unknown>).template_id;
+    return typeof linkedTemplateId === 'string' && acceptedTemplateIds.has(linkedTemplateId);
+  });
+  return matches.length === 1 ? matches[0] : null;
+}
+
+const FAILURE_METRIC_CATEGORIES: Array<[string, string, (value: unknown) => boolean]> = [
+  ['missing_tool_call', 'missing tool call', (value) => value === true],
+  ['hallucinated_tool_call', 'unexpected tool call', (value) => value === true],
+  ['tool_selected_correctly', 'wrong tool selected', (value) => value === false],
+  ['tool_arguments_valid', 'invalid tool arguments', (value) => value === false],
+  ['tool_call_assertion_pass', 'tool-call assertion failed', (value) => value === false],
+  ['schema_valid', 'schema validation failed', (value) => value === false],
+  ['json_valid', 'invalid JSON', (value) => value === false],
+  ['exact_match', 'exact match failed', (value) => value === false],
+  ['regex_match', 'regex match failed', (value) => value === false]
+];
+
+export function summarizeBenchmarkMetricFailures(
+  metricResults: Array<Record<string, unknown>> | null | undefined
+): BenchmarkFailureSummary | null {
+  if (!Array.isArray(metricResults) || metricResults.length === 0) {
+    return null;
+  }
+
+  const categories = new Set<string>();
+  let failedCount = 0;
+
+  for (const row of metricResults) {
+    const rowCategories = FAILURE_METRIC_CATEGORIES
+      .filter(([metric, , isFailure]) => isFailure(row[metric]))
+      .map(([, label]) => label);
+    if (rowCategories.length === 0) {
+      continue;
+    }
+    failedCount += 1;
+    rowCategories.forEach((category) => categories.add(category));
+  }
+
+  if (failedCount === 0) {
+    return null;
+  }
+
+  const categoryList = Array.from(categories);
+  return {
+    failedCount,
+    totalCount: metricResults.length,
+    categories: categoryList,
+    message: `functional check failed ${failedCount}/${metricResults.length} items: ${categoryList.join('; ')}`
+  };
 }
 
 export function parseRunTargets(search: URLSearchParams): RunTarget[] {

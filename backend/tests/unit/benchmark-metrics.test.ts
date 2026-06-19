@@ -479,6 +479,26 @@ describe('computeItemMetrics', () => {
       expect(result.tool_arguments_valid).toBe(true);
     });
 
+    it('tool_arguments_valid: consumes duplicate tool names with distinct arguments', () => {
+      const result = computeItemMetrics({
+        requestedMetrics: ['tool_arguments_valid', 'tool_call_assertion_pass'],
+        timing: BASE_TIMING,
+        answerText: '',
+        toolCalls: [
+          { function: { name: 'read_file', arguments: '{"path":"README.md"}' } },
+          { function: { name: 'read_file', arguments: '{"path":"package.json"}' } }
+        ],
+        item: {
+          expected_tool_calls: [
+            { function: { name: 'read_file', arguments: { path: 'README.md' } } },
+            { function: { name: 'read_file', arguments: { path: 'package.json' } } }
+          ]
+        }
+      });
+      expect(result.tool_arguments_valid).toBe(true);
+      expect(result.tool_call_assertion_pass).toBe(true);
+    });
+
     it('tool_call_assertion_pass: true when tool name and arguments match exactly', () => {
       const result = computeItemMetrics({
         requestedMetrics: ['tool_call_assertion_pass'],
