@@ -392,16 +392,21 @@ function computeToolSelectedCorrectly(actual: unknown[] | null, expected: unknow
 
 function computeToolArgumentsValid(actual: unknown[] | null, expected: unknown): boolean | null {
   if (!Array.isArray(expected) || expected.length === 0 || actual === null) return null;
+  const unmatchedActual = [...actual];
   return (expected as unknown[]).every((exp) => {
     if (!exp || typeof exp !== 'object') return false;
     const e = exp as Record<string, unknown>;
     const name = callName(e);
     if (!name) return false;
-    const match = actual.find((a) => callName(a) === name);
-    if (!match) return false;
     const expectedArgs = callArguments(e);
-    if (expectedArgs === undefined) return true;
-    return structuralEqual(normalizedArguments(callArguments(match)), normalizedArguments(expectedArgs));
+    const index = unmatchedActual.findIndex((candidate) => {
+      if (callName(candidate) !== name) return false;
+      if (expectedArgs === undefined) return true;
+      return structuralEqual(normalizedArguments(callArguments(candidate)), normalizedArguments(expectedArgs));
+    });
+    if (index < 0) return false;
+    unmatchedActual.splice(index, 1);
+    return true;
   });
 }
 

@@ -1,0 +1,482 @@
+{
+  "kind": "dataset_manifest",
+  "schema_version": "benchmark_dataset_manifest_v1",
+  "dataset_id": "dataset-agent-tool-selection-structure-v1",
+  "source": {
+    "source_type": "inline",
+    "format": "json"
+  },
+  "canonicalization_version": "dataset_canonical_v1",
+  "snapshot_policy": "embedded",
+  "dataset_hash": "sha256:ff446bebe7d54ae1f7270f5967f5da98bd7f4a3135dc6644c964c40a701a1e53",
+  "item_count": 4,
+  "items": [
+    {
+      "id": "copilot-workspace-search",
+      "system_prompt": "You are an agent runtime. Select exactly one tool when the user request requires an action. Do not answer in prose when a tool call is needed.",
+      "prompt": "Find every workspace reference to validateApiToken under backend/src. Do not read a specific file and do not modify anything.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "search_workspace",
+            "description": "Search files in the workspace for a literal or regex query.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "query": {
+                  "type": "string",
+                  "description": "Search query."
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Directory or file scope."
+                },
+                "regex": {
+                  "type": "boolean",
+                  "description": "Whether query is a regex."
+                }
+              },
+              "required": [
+                "query",
+                "path",
+                "regex"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "read_file",
+            "description": "Read a known file from the workspace.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "apply_patch",
+            "description": "Apply a patch to workspace files.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "patch": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "patch"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto",
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "search_workspace",
+            "arguments": {
+              "query": "validateApiToken",
+              "path": "backend/src",
+              "regex": false
+            }
+          }
+        }
+      ],
+      "tags": [
+        "agent",
+        "copilot",
+        "tool-selection",
+        "workspace"
+      ],
+      "metadata": {
+        "agent_profile": "copilot"
+      }
+    },
+    {
+      "id": "codex-apply-targeted-patch",
+      "system_prompt": "You are an agent runtime. Select exactly one tool when the user request requires an action. Do not answer in prose when a tool call is needed.",
+      "prompt": "Update backend/src/api/auth.ts by replacing timeout_ms: 1000 with timeout_ms: 1500. Do not run tests yet.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "search_workspace",
+            "description": "Search files in the workspace for a literal or regex query.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "query": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "regex": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "query",
+                "path",
+                "regex"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "apply_patch",
+            "description": "Apply a simple exact replacement to one workspace file.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "file_path": {
+                  "type": "string"
+                },
+                "find": {
+                  "type": "string"
+                },
+                "replace": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "file_path",
+                "find",
+                "replace"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "run_tests",
+            "description": "Run a test command.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "command": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "command"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto",
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "apply_patch",
+            "arguments": {
+              "file_path": "backend/src/api/auth.ts",
+              "find": "timeout_ms: 1000",
+              "replace": "timeout_ms: 1500"
+            }
+          }
+        }
+      ],
+      "tags": [
+        "agent",
+        "codex",
+        "tool-selection",
+        "patch"
+      ],
+      "metadata": {
+        "agent_profile": "codex"
+      }
+    },
+    {
+      "id": "vibe-ui-property-edit",
+      "system_prompt": "You are an agent runtime. Select exactly one tool when the user request requires an action. Do not answer in prose when a tool call is needed.",
+      "prompt": "For selected component hero-cta, set opacity to 0.45. Keep color and layout unchanged.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "create_component",
+            "description": "Create a new UI component.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "component_type": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "component_type",
+                "name"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "set_component_property",
+            "description": "Set one property on an existing UI component.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "component_id": {
+                  "type": "string"
+                },
+                "property": {
+                  "type": "string",
+                  "enum": [
+                    "opacity",
+                    "color",
+                    "x",
+                    "y",
+                    "width",
+                    "height"
+                  ]
+                },
+                "value": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                }
+              },
+              "required": [
+                "component_id",
+                "property",
+                "value"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "export_design",
+            "description": "Export the current design.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "format": {
+                  "type": "string",
+                  "enum": [
+                    "png",
+                    "svg",
+                    "json"
+                  ]
+                }
+              },
+              "required": [
+                "format"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto",
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "set_component_property",
+            "arguments": {
+              "component_id": "hero-cta",
+              "property": "opacity",
+              "value": 0.45
+            }
+          }
+        }
+      ],
+      "tags": [
+        "agent",
+        "vibe",
+        "tool-selection",
+        "ui"
+      ],
+      "metadata": {
+        "agent_profile": "vibe"
+      }
+    },
+    {
+      "id": "business-reminder-routing",
+      "system_prompt": "You are an agent runtime. Select exactly one tool when the user request requires an action. Do not answer in prose when a tool call is needed.",
+      "prompt": "Schedule an invoice reminder for account acct_918 on 2026-07-01 at 09:00 Europe/Paris. Do not send the email now.",
+      "interaction_mode": "tool_calling",
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "send_email",
+            "description": "Send an email immediately.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "account_id": {
+                  "type": "string"
+                },
+                "subject": {
+                  "type": "string"
+                },
+                "body": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "account_id",
+                "subject",
+                "body"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "schedule_reminder",
+            "description": "Schedule a reminder to be delivered later.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "account_id": {
+                  "type": "string"
+                },
+                "reminder_type": {
+                  "type": "string",
+                  "enum": [
+                    "invoice",
+                    "contract",
+                    "renewal"
+                  ]
+                },
+                "scheduled_for": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "date": {
+                      "type": "string"
+                    },
+                    "time": {
+                      "type": "string"
+                    },
+                    "timezone": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "date",
+                    "time",
+                    "timezone"
+                  ]
+                }
+              },
+              "required": [
+                "account_id",
+                "reminder_type",
+                "scheduled_for"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "lookup_account",
+            "description": "Look up account information.",
+            "parameters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "account_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "account_id"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto",
+      "expected_tool_calls": [
+        {
+          "function": {
+            "name": "schedule_reminder",
+            "arguments": {
+              "account_id": "acct_918",
+              "reminder_type": "invoice",
+              "scheduled_for": {
+                "date": "2026-07-01",
+                "time": "09:00",
+                "timezone": "Europe/Paris"
+              }
+            }
+          }
+        }
+      ],
+      "tags": [
+        "agent",
+        "tool-selection",
+        "business-workflow"
+      ],
+      "metadata": {
+        "agent_profile": "generic"
+      }
+    }
+  ],
+  "item_hashes": [
+    {
+      "item_id": "copilot-workspace-search",
+      "hash": "sha256:de02d90090a11fda35b4c3ff4aa61f0f764bfdb73306b4441a9a8f8b058bf3c2"
+    },
+    {
+      "item_id": "codex-apply-targeted-patch",
+      "hash": "sha256:f9fd2a911cb56ffb3efbcd4c27f95479fcc321af27f3add57884c8f52367d77e"
+    },
+    {
+      "item_id": "vibe-ui-property-edit",
+      "hash": "sha256:544a17ead7a4d174210925651482771e2862aedafcda8bb938df7f928e897561"
+    },
+    {
+      "item_id": "business-reminder-routing",
+      "hash": "sha256:d7c64ca4f947b6cea77574c3922a0d26261d4bafe0a1fcbb053e4e7d4450e24d"
+    }
+  ],
+  "metadata": {
+    "source": "built-in-agent-tool-call-library",
+    "template_id": "agent-tool-selection-structure-v1"
+  }
+}

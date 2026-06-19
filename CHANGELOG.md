@@ -6,6 +6,8 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+- **Run functional failure clue** — Run now surfaces a benchmark assertion failure line when quality metrics fail despite a technically completed run, with categories such as invalid tool arguments or missing tool calls.
+- **Duplicate tool-call argument scoring** — `tool_arguments_valid` now consumes matched tool calls so repeated calls to the same function with different arguments are scored consistently with `tool_call_assertion_pass`.
 - **Legacy Runs API cleanup** — removed the orphaned public `/runs` list/delete routes, their route-specific service, and route-only tests now that Results deletion uses `/results-view/runs/:runId`, while retaining the underlying run/result tables for active benchmark, evaluation, retention, and cleanup flows.
 - **Datasets editor checkpoint** — added a Datasets page and JSONL dataset-file API for creating, editing, saving, and deleting dataset item files under `INFERHARNESS_BENCHMARK_DATASET_ROOT`, with synced `dataset_manifest` documents, copy-down editing for repeated fields, and clamped long-prompt display.
 - **Benchmark plan cleanup** — removed the transitional inline `/benchmark/plans/run` execution API and stale `INFERHARNESS_TEST_TEMPLATES_DIR` example so plan execution goes through persisted `benchmark_plan` documents.
@@ -20,6 +22,9 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Added
 
+- **Agent tool-selection benchmark template** — added a built-in tool-calling template and inline dataset that checks whether models choose the right tool from a structured tool list and emit schema-compliant arguments for Copilot, Codex, Vibe, and generic agent workflows.
+- **Run linked dataset manifests** — Run now auto-uses a unique `dataset_manifest` linked to the selected template through `metadata.template_id`, locking manual dataset inputs and preserving the linked manifest as the plan `dataset_ref`.
+- **Benchmark schema documentation** — expanded backend schema docs with the benchmark pipeline layers, workflow, and per-document schema roles.
 - **File-backed benchmark document library** — benchmark templates, datasets, runtime profiles, and plans now load from built-in JSON documents plus a writable local library, with API saves persisted to files so documents can be reconstructed after SQLite loss.
 - **Native Anthropic and Gemini benchmark tool calls** — benchmark execution now resolves Anthropic Messages and Gemini GenerateContent operations, maps dataset tools and `tool_choice` into provider-native payloads, and normalizes returned tool calls and usage metrics.
 - **Adaptive Results performance views** — the Results dashboard now has an Auto performance view with manual modes for cold-start comparison, latency trend, pass-rate trend, latency histogram, and model-summary table comparisons backed by filtered model aggregates.

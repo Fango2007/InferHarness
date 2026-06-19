@@ -16,7 +16,9 @@ import {
   runPersistedBenchmarkPlan,
   saveBenchmarkDocument,
   saveBenchmarkPlan,
+  type BenchmarkDatasetManifestDocument,
   type BenchmarkDatasetFormat,
+  type BenchmarkDocumentRecord,
   type BenchmarkInstantiationRecord,
   type BenchmarkPlanRunResult,
   type BenchmarkResultRecord,
@@ -30,9 +32,11 @@ import { listModels, ModelRecord } from '../services/models-api.js';
 import { correctnessMetricTiles, type CorrectnessMetricTile } from '../services/benchmark-metric-metadata.js';
 import {
   assignRunAccents,
+  findLinkedDatasetManifest,
   mergeRunModelOptions,
   parseRunTargets,
   serializeRunTargets,
+  summarizeBenchmarkMetricFailures,
   targetKey,
   type AccentedRunTarget,
   type RunModelOption,
@@ -201,6 +205,7 @@ function ConfigRail({
   datasetId,
   datasetFormat,
   datasetPath,
+  linkedDatasetManifest,
   templates,
   selectedTemplateId,
   inferenceParams,
@@ -233,6 +238,7 @@ function ConfigRail({
   datasetId: string;
   datasetFormat: BenchmarkDatasetFormat;
   datasetPath: string;
+  linkedDatasetManifest: BenchmarkDocumentRecord<BenchmarkDatasetManifestDocument> | null;
   templates: BenchmarkTestTemplateRecord[];
   selectedTemplateId: string;
   inferenceParams: InferenceParams;
@@ -261,10 +267,13 @@ function ConfigRail({
     option.inference_server_id === selectedServerId && !selectedKeys.has(targetKey(option))
   );
   const selectedOptions = new Map(options.map((option) => [targetKey(option), option]));
-  const canRun = selectedTargets.length >= 1 && selectedTemplateId.length > 0 && !busy && (
-    datasetMode === 'inline'
+  const hasLinkedDatasetManifest = linkedDatasetManifest !== null;
+  const datasetInputReady = hasLinkedDatasetManifest
+    || (datasetMode === 'inline'
       ? prompt.trim().length > 0
-      : datasetId.trim().length > 0 && datasetPath.trim().length > 0
+      : datasetId.trim().length > 0 && datasetPath.trim().length > 0);
+  const canRun = selectedTargets.length >= 1 && selectedTemplateId.length > 0 && !busy && (
+    datasetInputReady
   );
 
   return (
@@ -338,11 +347,24 @@ function ConfigRail({
 
       <div className="run-config-step">
         <div className="run-step-label">Step 4 · dataset</div>
+        {linkedDatasetManifest ? (
+          <p className="run-hint">Using linked dataset manifest: <code>{linkedDatasetManifest.id}</code></p>
+        ) : null}
         <div className="segmented-control run-dataset-mode" aria-label="Dataset mode">
-          <button type="button" className={datasetMode === 'inline' ? 'is-active' : ''} onClick={() => onDatasetModeChange('inline')}>
+          <button
+            type="button"
+            className={datasetMode === 'inline' ? 'is-active' : ''}
+            onClick={() => onDatasetModeChange('inline')}
+            disabled={hasLinkedDatasetManifest}
+          >
             Prompt
           </button>
-          <button type="button" className={datasetMode === 'manifest_only' ? 'is-active' : ''} onClick={() => onDatasetModeChange('manifest_only')}>
+          <button
+            type="button"
+            className={datasetMode === 'manifest_only' ? 'is-active' : ''}
+            onClick={() => onDatasetModeChange('manifest_only')}
+            disabled={hasLinkedDatasetManifest}
+          >
             Server dataset
           </button>
         </div>
@@ -355,6 +377,7 @@ function ConfigRail({
             onChange={(event) => onPromptChange(event.target.value)}
             rows={5}
             placeholder="Ask the selected model something small."
+            disabled={hasLinkedDatasetManifest}
           />
         </label>
         <label className="run-prompt-field">
@@ -364,6 +387,7 @@ function ConfigRail({
             onChange={(event) => onSystemPromptChange(event.target.value)}
             rows={3}
             placeholder="Optional"
+            disabled={hasLinkedDatasetManifest}
           />
         </label>
           </>
@@ -375,6 +399,7 @@ function ConfigRail({
                 value={datasetId}
                 onChange={(event) => onDatasetIdChange(event.target.value)}
                 placeholder="codegen-small"
+                disabled={hasLinkedDatasetManifest}
               />
             </label>
             <div className="run-dataset-grid">
@@ -383,6 +408,7 @@ function ConfigRail({
                 <select
                   value={datasetFormat}
                   onChange={(event) => onDatasetFormatChange(event.target.value as BenchmarkDatasetFormat)}
+                  disabled={hasLinkedDatasetManifest}
                 >
                   <option value="jsonl">JSONL</option>
                   <option value="json">JSON</option>
@@ -395,6 +421,7 @@ function ConfigRail({
                   value={datasetPath}
                   onChange={(event) => onDatasetPathChange(event.target.value)}
                   placeholder="codegen-small.jsonl"
+                  disabled={hasLinkedDatasetManifest}
                 />
               </label>
             </div>
@@ -491,27 +518,36 @@ function PromptStrip({
   systemPrompt,
   datasetMode,
   datasetId,
-  datasetPath
+  datasetPath,
+  linkedDatasetManifest
 }: {
   prompt: string;
   systemPrompt: string;
   datasetMode: RunDatasetMode;
   datasetId: string;
   datasetPath: string;
+  linkedDatasetManifest: BenchmarkDocumentRecord<BenchmarkDatasetManifestDocument> | null;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const preview = datasetMode === 'manifest_only'
+  const preview = linkedDatasetManifest
+    ? linkedDatasetManifest.id
+    : datasetMode === 'manifest_only'
     ? `${datasetId.trim() || 'dataset'} · ${datasetPath.trim() || 'server path'}`
     : prompt.trim() || 'Enter a prompt in the rail.';
+  const label = linkedDatasetManifest
+    ? 'Linked dataset manifest'
+    : datasetMode === 'manifest_only' ? 'Benchmark dataset' : 'Benchmark item';
   return (
     <div className="run-prompt-strip">
-      <span>{datasetMode === 'manifest_only' ? 'Benchmark dataset' : 'Benchmark item'}</span>
+      <span>{label}</span>
       <code>{preview}</code>
       <button type="button" onClick={() => setExpanded((value) => !value)}>
         {expanded ? 'collapse' : 'expand'}
       </button>
       {expanded ? (
-        <pre>{datasetMode === 'manifest_only'
+        <pre>{linkedDatasetManifest
+          ? `dataset_manifest\n${preview}`
+          : datasetMode === 'manifest_only'
           ? `manifest_only\n${preview}`
           : [systemPrompt.trim() ? `system: ${systemPrompt.trim()}` : null, `user: ${preview}`].filter(Boolean).join('\n\n')}</pre>
       ) : null}
@@ -608,6 +644,7 @@ function BenchmarkDetail({
   const loadEstimate = result?.document.load_estimate as { estimated_load_ms: number; model_load_detected: boolean } | null | undefined;
   const estimatedLoadMs = loadEstimate?.model_load_detected ? loadEstimate.estimated_load_ms : null;
   const correctness = correctnessMetrics(result);
+  const failureSummary = summarizeBenchmarkMetricFailures(result?.document.metric_results);
   return (
     <div className="run-detail">
       <main className="run-transcript">
@@ -674,6 +711,12 @@ function BenchmarkDetail({
             <span>{result.document.errors.map((error) => String(error.message ?? error.code ?? 'Unknown error')).join('; ')}</span>
           </div>
         ) : null}
+        {!result?.document.errors.length && failureSummary ? (
+          <div className="run-failure-banner">
+            <strong>Benchmark assertions failed.</strong>
+            <span>{failureSummary.message}</span>
+          </div>
+        ) : null}
         {!result && planResult && planResult.status !== 'completed' ? (
           <div className="run-failure-banner">
             <strong>Benchmark target did not produce a result.</strong>
@@ -699,6 +742,10 @@ function BenchmarkDetail({
           <div className={result?.document.status === 'completed_with_errors' ? 'run-assert-row is-fail' : 'run-assert-row'}>
             <span aria-hidden="true" />
             <code>{`status ${result?.document.status ?? 'not-run'}`}</code>
+          </div>
+          <div className={failureSummary ? 'run-assert-row is-fail' : result ? 'run-assert-row' : 'run-assert-row is-pending'}>
+            <span aria-hidden="true" />
+            <code>{failureSummary?.message ?? (result ? 'functional checks passed' : 'functional checks pending')}</code>
           </div>
           <div className={instantiation?.id ? 'run-assert-row' : 'run-assert-row is-pending'}>
             <span aria-hidden="true" />
@@ -758,6 +805,7 @@ export function RunUnified({
   const [datasetFormat, setDatasetFormat] = useState<BenchmarkDatasetFormat>('jsonl');
   const [datasetPath, setDatasetPath] = useState('codegen-small.jsonl');
   const [templates, setTemplates] = useState<BenchmarkTestTemplateRecord[]>([]);
+  const [datasetManifests, setDatasetManifests] = useState<Array<BenchmarkDocumentRecord<BenchmarkDatasetManifestDocument>>>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [inferenceParams, setInferenceParams] = useState<InferenceParams>(DEFAULT_INFERENCE_PARAMS);
   const [instantiation, setInstantiation] = useState<BenchmarkInstantiationRecord | null>(null);
@@ -771,12 +819,18 @@ export function RunUnified({
   const [showResultsHandoff, setShowResultsHandoff] = useState(false);
 
   useEffect(() => {
-    Promise.all([listInferenceServers(), listModels(), listBenchmarkDocuments<BenchmarkTestTemplateDocument>('test_template')])
-      .then(([serverData, modelData, templateData]) => {
+    Promise.all([
+      listInferenceServers(),
+      listModels(),
+      listBenchmarkDocuments<BenchmarkTestTemplateDocument>('test_template'),
+      listBenchmarkDocuments<BenchmarkDatasetManifestDocument>('dataset_manifest')
+    ])
+      .then(([serverData, modelData, templateData, datasetManifestData]) => {
         const chatTemplates = templateData.filter((entry) => entry.document.operation === 'chat_completion');
         setServers(serverData);
         setModels(modelData);
         setTemplates(chatTemplates);
+        setDatasetManifests(datasetManifestData);
         const smokeTemplate = chatTemplates.find((entry) => entry.document.template_id === 'run-smoke-chat-v1');
         setSelectedTemplateId((current) => current || smokeTemplate?.id || chatTemplates[0]?.id || '');
         setCustomServerId((current) => current || serverData[0]?.inference_server.server_id || '');
@@ -825,6 +879,14 @@ export function RunUnified({
   const optionMap = useMemo(() => new Map(options.map((option) => [targetKey(option), option])), [options]);
   const selectedTarget = selectedTargets[0] ?? null;
   const selectedOption = selectedTarget ? optionMap.get(targetKey(selectedTarget)) : undefined;
+  const selectedTemplate = useMemo(
+    () => templates.find((entry) => entry.id === selectedTemplateId) ?? null,
+    [selectedTemplateId, templates]
+  );
+  const linkedDatasetManifest = useMemo(
+    () => findLinkedDatasetManifest(selectedTemplate, datasetManifests),
+    [datasetManifests, selectedTemplate]
+  );
   const showTemplateRibbon =
     onboarding?.status.active === true &&
     selectedTargets.length > 0 &&
@@ -865,13 +927,12 @@ export function RunUnified({
     if (!selectedTarget) {
       return;
     }
-    if (datasetMode === 'inline' && prompt.trim().length === 0) {
+    if (!linkedDatasetManifest && datasetMode === 'inline' && prompt.trim().length === 0) {
       return;
     }
-    if (datasetMode === 'manifest_only' && (!datasetId.trim() || !datasetPath.trim())) {
+    if (!linkedDatasetManifest && datasetMode === 'manifest_only' && (!datasetId.trim() || !datasetPath.trim())) {
       return;
     }
-    const selectedTemplate = templates.find((entry) => entry.id === selectedTemplateId);
     if (!selectedTemplate) {
       setError('Select a benchmark template before running.');
       return;
@@ -890,37 +951,41 @@ export function RunUnified({
         seed,
         template: selectedTemplate.document
       });
-      const preparedDataset = datasetMode === 'manifest_only'
-        ? await prepareBenchmarkDatasetManifest({
-            dataset_id: `run-dataset-${runSuffix}`,
-            source: {
-              source_type: 'file',
-              format: datasetFormat,
-              path: datasetPath.trim()
-            },
-            metadata: {
-              source: 'run-page-dataset-path',
-              requested_dataset_id: datasetId.trim()
-            }
-          })
-        : await prepareBenchmarkDatasetManifest({
-            dataset_id: `run-dataset-${runSuffix}`,
-            source: {
-              source_type: 'inline',
-              format: 'json'
-            },
-            snapshot_policy: 'embedded',
-            items: [
-              {
-                id: 'item-1',
-                prompt: prompt.trim(),
-                ...(systemPrompt.trim() ? { system_prompt: systemPrompt.trim() } : {})
-              }
-            ],
-            metadata: { source: 'run-page-inline' }
-          });
-
       const templateRef = selectedTemplate.id;
+      let datasetRef = linkedDatasetManifest?.id ?? '';
+      if (!linkedDatasetManifest) {
+        const preparedDataset = datasetMode === 'manifest_only'
+          ? await prepareBenchmarkDatasetManifest({
+              dataset_id: `run-dataset-${runSuffix}`,
+              source: {
+                source_type: 'file',
+                format: datasetFormat,
+                path: datasetPath.trim()
+              },
+              metadata: {
+                source: 'run-page-dataset-path',
+                requested_dataset_id: datasetId.trim()
+              }
+            })
+          : await prepareBenchmarkDatasetManifest({
+              dataset_id: `run-dataset-${runSuffix}`,
+              source: {
+                source_type: 'inline',
+                format: 'json'
+              },
+              snapshot_policy: 'embedded',
+              items: [
+                {
+                  id: 'item-1',
+                  prompt: prompt.trim(),
+                  ...(systemPrompt.trim() ? { system_prompt: systemPrompt.trim() } : {})
+                }
+              ],
+              metadata: { source: 'run-page-inline' }
+            });
+        const savedDataset = await saveBenchmarkDocument(preparedDataset);
+        datasetRef = savedDataset.id;
+      }
 
       const runtimeProfile = {
         ...smokePayload.runtime_profile,
@@ -929,17 +994,17 @@ export function RunUnified({
           source: 'run-page'
         }
       };
-      const savedDataset = await saveBenchmarkDocument(preparedDataset);
       const savedRuntime = await saveBenchmarkDocument(runtimeProfile);
       const planDocument = buildPersistedBenchmarkPlanDocument({
         planId: `run-plan-${runSuffix}`,
         templateRef,
-        datasetRef: savedDataset.id,
+        datasetRef,
         runtimeProfileRef: savedRuntime.id,
         targets: selectedTargets,
         metadata: {
           source: 'run-page',
-          selected_template_id: selectedTemplate?.id ?? null
+          selected_template_id: selectedTemplate?.id ?? null,
+          linked_dataset_manifest_id: linkedDatasetManifest?.id ?? null
         }
       });
       const savedPlan = await saveBenchmarkPlan(planDocument);
@@ -1010,6 +1075,7 @@ export function RunUnified({
             datasetId={datasetId}
             datasetFormat={datasetFormat}
             datasetPath={datasetPath}
+            linkedDatasetManifest={linkedDatasetManifest}
             templates={templates}
             selectedTemplateId={selectedTemplateId}
             inferenceParams={inferenceParams}
@@ -1044,6 +1110,7 @@ export function RunUnified({
               datasetMode={datasetMode}
               datasetId={datasetId}
               datasetPath={datasetPath}
+              linkedDatasetManifest={linkedDatasetManifest}
             />
             {!selectedTarget ? (
               <RunUnifiedEmpty />

@@ -90,6 +90,7 @@ Use the Templates page agent as the primary authoring flow to challenge underspe
 
 **Benchmark runs**
 Run the same test against one model, many models, or the same model served by different inference servers.
+When a selected template has a unique linked `dataset_manifest`, Run uses that manifest automatically instead of creating a prompt or file-backed dataset manifest.
 
 **Automated metrics**
 Capture time to first token, total latency, prefill/decode timing, prompt tokens, completion tokens, and tokens per second.
