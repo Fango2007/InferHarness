@@ -6,6 +6,8 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-06-19
+
 - **Run functional failure clue** — Run now surfaces a benchmark assertion failure line when quality metrics fail despite a technically completed run, with categories such as invalid tool arguments or missing tool calls.
 - **Duplicate tool-call argument scoring** — `tool_arguments_valid` now consumes matched tool calls so repeated calls to the same function with different arguments are scored consistently with `tool_call_assertion_pass`.
 - **Legacy Runs API cleanup** — removed the orphaned public `/runs` list/delete routes, their route-specific service, and route-only tests now that Results deletion uses `/results-view/runs/:runId`, while retaining the underlying run/result tables for active benchmark, evaluation, retention, and cleanup flows.
