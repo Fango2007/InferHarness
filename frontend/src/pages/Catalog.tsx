@@ -613,6 +613,12 @@ export function Catalog({
   const selectedQuantizations = useMemo(() => new Set(parseCsv(searchParams.get('quantization'))), [searchParams]);
   const selectedFormats = useMemo(() => new Set(parseCsv(searchParams.get('format'))), [searchParams]);
   const selectedCapabilities = useMemo(() => new Set(parseCsv(searchParams.get('capabilities'))), [searchParams]);
+  const autoSelectedModelServer = useMemo(() => {
+    return servers.find((server) => server.inference_server.active && !server.inference_server.archived)
+      ?? servers.find((server) => !server.inference_server.archived)
+      ?? servers[0]
+      ?? null;
+  }, [servers]);
   const maxParamCount = useMemo(() => {
     const v = searchParams.get('maxParams');
     return v !== null ? Number(v) : null;
@@ -625,6 +631,16 @@ export function Catalog({
       search: `?serverId=${encodeURIComponent(inspectorServerId)}`
     }, { replace: true });
   }, [activeTab, inspectorModelId, inspectorServerId, navigate]);
+
+  useEffect(() => {
+    if (activeTab !== 'models' || inspectorServerId || inspectorModelId || searchParams.has('servers') || !autoSelectedModelServer) {
+      return;
+    }
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', 'models');
+    next.set('servers', autoSelectedModelServer.inference_server.server_id);
+    setSearchParams(next, { replace: true });
+  }, [activeTab, autoSelectedModelServer, inspectorModelId, inspectorServerId, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (searchParams.get('startOnboarding') !== '1') {
@@ -903,7 +919,7 @@ export function Catalog({
           setServerStageCollapsed={setServerStageCollapsed}
           onToggleServer={toggleServerSelection}
           onClearServers={() => updateQuery((params) => {
-            params.delete('servers');
+            params.set('servers', '');
             params.delete('family');
             params.delete('quantization');
             params.delete('format');
