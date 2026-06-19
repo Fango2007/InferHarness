@@ -16,6 +16,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - **Onboarding prompt scope** — the Run page completion handoff now appears only for the onboarding first-run step, canceling the onboarding-launched server drawer stops setup with an explicit normal-mode notice, and the three-step welcome layout is centered.
 - **Built-in template reload after DB clear** — clearing the database from Settings now reloads the built-in benchmark library immediately, keeping shipped templates available without restarting the backend.
 - **Catalog empty server card** — the empty Servers catalog now presents a dashed first-server card with the add action instead of a centered empty-state panel.
+- **Catalog model auto-selection** — opening the Models catalog without a server filter now selects the first available inference server so discovered models render immediately.
 - **Run empty preview** — the empty Run workspace now shows a dummy benchmark result with sample model, prompt, metrics, and audit rows instead of a generic empty panel.
 
 ## [0.9.0] - 2026-06-17

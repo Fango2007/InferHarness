@@ -64,8 +64,8 @@ async function seedModel(
   }
 }
 
-test('models tab requires a selected server before showing model cards', async ({ page, request }) => {
-  const server = await createInferenceServer(request);
+test('models tab auto-selects an available server before showing model cards', async ({ page, request }) => {
+  const server = await createInferenceServer(request, { display_name: `! Auto-select ${Date.now()}` });
   await seedModel(request, server.inference_server.server_id, {
     model_id: '/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-MLX-6bit',
     display_name: 'Qwen3 Coder',
@@ -73,10 +73,9 @@ test('models tab requires a selected server before showing model cards', async (
   });
 
   await page.goto('/catalog?tab=models');
-  await expect(page.getByRole('heading', { name: 'Select a server to see its models' })).toBeVisible();
-
-  await page.locator('.server-filter-row').filter({ hasText: server.inference_server.display_name }).click();
   await expect(page.locator('.catalog-model-card').filter({ hasText: 'Qwen3 Coder' })).toBeVisible();
+  await expect(page.locator('.server-filter-row.is-selected').filter({ hasText: server.inference_server.display_name })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`servers=${encodeURIComponent(server.inference_server.server_id)}`));
 
   await archiveInferenceServer(request, server.inference_server.server_id);
 });
