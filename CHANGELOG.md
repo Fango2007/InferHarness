@@ -6,20 +6,35 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+### Changed
+
+- **Changelog category workflow** — `AGENTS.md` now requires changelog updates to preserve Keep a Changelog category headings and place entries under the appropriate `Added`, `Changed`, `Fixed`, `Removed`, or `Security` section instead of flattening release notes.
+
 ## [0.10.0] - 2026-06-19
 
+### Added
+
 - **Run functional failure clue** — Run now surfaces a benchmark assertion failure line when quality metrics fail despite a technically completed run, with categories such as invalid tool arguments or missing tool calls.
-- **Duplicate tool-call argument scoring** — `tool_arguments_valid` now consumes matched tool calls so repeated calls to the same function with different arguments are scored consistently with `tool_call_assertion_pass`.
-- **Legacy Runs API cleanup** — removed the orphaned public `/runs` list/delete routes, their route-specific service, and route-only tests now that Results deletion uses `/results-view/runs/:runId`, while retaining the underlying run/result tables for active benchmark, evaluation, retention, and cleanup flows.
 - **Datasets editor checkpoint** — added a Datasets page and JSONL dataset-file API for creating, editing, saving, and deleting dataset item files under `INFERHARNESS_BENCHMARK_DATASET_ROOT`, with synced `dataset_manifest` documents, copy-down editing for repeated fields, and clamped long-prompt display.
-- **Benchmark plan cleanup** — removed the transitional inline `/benchmark/plans/run` execution API and stale `INFERHARNESS_TEST_TEMPLATES_DIR` example so plan execution goes through persisted `benchmark_plan` documents.
 - **Tool-call assertion metric** — benchmark tool-call templates now include `tool_call_assertion_pass`, a single-turn pass/fail metric requiring exact expected tool selection and structurally matching arguments while keeping assertion failures as quality metrics rather than execution failures.
 - **Tool-call assertion UI** — Run now promotes tool-call assertion pass/fail as the primary correctness verdict, and Templates groups metrics with readable labels while auto-adding the assertion metric when tool calling is enabled.
-- **Onboarding prompt scope** — the Run page completion handoff now appears only for the onboarding first-run step, canceling the onboarding-launched server drawer stops setup with an explicit normal-mode notice, and the three-step welcome layout is centered.
-- **Built-in template reload after DB clear** — clearing the database from Settings now reloads the built-in benchmark library immediately, keeping shipped templates available without restarting the backend.
-- **Catalog empty server card** — the empty Servers catalog now presents a dashed first-server card with the add action instead of a centered empty-state panel.
-- **Catalog model auto-selection** — opening the Models catalog without a server filter now selects the first available inference server so discovered models render immediately.
 - **Run empty preview** — the empty Run workspace now shows a dummy benchmark result with sample model, prompt, metrics, and audit rows instead of a generic empty panel.
+
+### Changed
+
+- **Onboarding prompt scope** — the Run page completion handoff now appears only for the onboarding first-run step, canceling the onboarding-launched server drawer stops setup with an explicit normal-mode notice, and the three-step welcome layout is centered.
+- **Catalog empty server card** — the empty Servers catalog now presents a dashed first-server card with the add action instead of a centered empty-state panel.
+
+### Fixed
+
+- **Duplicate tool-call argument scoring** — `tool_arguments_valid` now consumes matched tool calls so repeated calls to the same function with different arguments are scored consistently with `tool_call_assertion_pass`.
+- **Built-in template reload after DB clear** — clearing the database from Settings now reloads the built-in benchmark library immediately, keeping shipped templates available without restarting the backend.
+- **Catalog model auto-selection** — opening the Models catalog without a server filter now selects the first available inference server so discovered models render immediately.
+
+### Removed
+
+- **Legacy Runs API cleanup** — removed the orphaned public `/runs` list/delete routes, their route-specific service, and route-only tests now that Results deletion uses `/results-view/runs/:runId`, while retaining the underlying run/result tables for active benchmark, evaluation, retention, and cleanup flows.
+- **Benchmark plan cleanup** — removed the transitional inline `/benchmark/plans/run` execution API and stale `INFERHARNESS_TEST_TEMPLATES_DIR` example so plan execution goes through persisted `benchmark_plan` documents.
 
 ## [0.9.0] - 2026-06-17
 

@@ -12,6 +12,10 @@
 - Start every new change on a new git branch before editing files.
 - If a focused branch is not already checked out, create one before implementation unless the user explicitly says not to.
 - Update `CHANGELOG.md` in the same change whenever code, tests, docs, configuration, or user-facing behavior is modified.
+- Preserve the Keep a Changelog structure when updating `CHANGELOG.md`:
+  - Add entries under the correct category heading, such as `Added`, `Changed`, `Fixed`, `Removed`, or `Security`.
+  - Create a missing category heading when needed.
+  - Do not flatten, rename, or reorder existing release/category headings unless the task explicitly requires it.
 - Check whether the root `README.md` still matches the purpose and user-visible behavior of the change. Update it in the same change if it would otherwise become stale or misleading.
 - At the end of each completed change, explicitly ask whether to commit. Include:
   - a concise suggested commit message
