@@ -81,7 +81,7 @@ This means a result is more than a screenshot or a manually copied answer. It is
 Register local or remote inference servers, discover available models, and maintain a model catalog with provider, format, quantization, capabilities, and base-model metadata.
 
 **Reusable test definitions**
-Start with built-in benchmark templates, then create tests for one prompt, a dataset loop, tool-calling behavior, structured output, or multi-model comparisons.
+Start with built-in benchmark templates, then create tests for one prompt, a dataset loop, tool-calling behavior, long-context needle or function retrieval, structured output, or multi-model comparisons.
 
 Benchmark documents are persisted as JSON in a file-backed library and indexed into SQLite for runtime use. Built-in documents ship with the app, while user-created templates, datasets, runtime profiles, and plans are written to a local library directory so they can be restored if the database is rebuilt.
 
@@ -91,6 +91,8 @@ Use the Templates page agent as the primary authoring flow to challenge underspe
 **Benchmark runs**
 Run the same test against one model, many models, or the same model served by different inference servers.
 When a selected template has a unique linked `dataset_manifest`, Run uses that manifest automatically instead of creating a prompt or file-backed dataset manifest.
+Run disables templates that exceed a selected model's declared context window or require unsupported tool calling.
+Run separates execution health from functional checks so a technically completed pipeline can still show failed retrieval, schema, or tool-call assertions.
 
 **Automated metrics**
 Capture time to first token, total latency, prefill/decode timing, prompt tokens, completion tokens, and tokens per second.

@@ -273,7 +273,10 @@ export function buildBenchmarkSmokePayload(input: BuildBenchmarkSmokeInput): Cre
       profile_id: 'run-smoke-runtime',
       runtime_parameters: runtimeParameters,
       execution_policy: {
-        ...(runtimeParameters.timeout_ms ? { timeout_ms: runtimeParameters.timeout_ms } : {})
+        ...(runtimeParameters.timeout_ms ? { timeout_ms: runtimeParameters.timeout_ms } : {}),
+        cancellation_policy: {
+          cancel_on_first_fatal_error: true
+        }
       }
     },
     dataset,

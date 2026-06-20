@@ -1,0 +1,46 @@
+{
+  "kind": "dataset_manifest",
+  "schema_version": "benchmark_dataset_manifest_v1",
+  "dataset_id": "dataset-model-context-function-retrieval-8k-v1",
+  "source": {
+    "source_type": "file",
+    "format": "jsonl",
+    "path": "data/datasets/context-function-retrieval-8k.jsonl"
+  },
+  "canonicalization_version": "dataset_canonical_v1",
+  "snapshot_policy": "manifest_only",
+  "dataset_hash": "sha256:7630f14fcfae4de49e9bbd3fca5796c168d5bab42b602b83ee1c1646f16450ec",
+  "item_count": 5,
+  "item_hashes": [
+    {
+      "item_id": "function-front-8k",
+      "hash": "sha256:96854137cc3fcbb21fe6de14c7de0aa189360a8f0f099eb29febc9d2a041cc8d"
+    },
+    {
+      "item_id": "function-middle-8k",
+      "hash": "sha256:ad326f29edc6e1e941ea2729ffd69c684a9ddf99984b2e6c1e4810cd2bf7fbfc"
+    },
+    {
+      "item_id": "function-late-8k",
+      "hash": "sha256:782c77eeef23dddfb468b97d1ea292c31121923511ff8318be30b6d6b85ab58a"
+    },
+    {
+      "item_id": "function-two-blocks-8k",
+      "hash": "sha256:e48475a792a884755f4aa69f74adffecd1107501985e06943adc44f4e372ef86"
+    },
+    {
+      "item_id": "function-negative-control-8k",
+      "hash": "sha256:03ed19dd6d4f7151ca223a46a1880fd1f770d69abbb90f45c50a5705c5a10fe8"
+    }
+  ],
+  "item_manifest_ref": null,
+  "snapshot_blob_ref": null,
+  "metadata": {
+    "source": "built-in-context-library",
+    "template_id": "model-context-function-retrieval-8k-v1",
+    "source_file": "backend/data/datasets/frame.py",
+    "dataset_file": "backend/data/datasets/context-function-retrieval-8k.jsonl",
+    "dataset_family": "function_retrieval",
+    "context_window_tokens": 8000
+  }
+}

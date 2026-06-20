@@ -78,6 +78,12 @@ describe('benchmark API helpers', () => {
       timeout_ms: 12500,
       seed: 42
     });
+    expect(payload.runtime_profile.execution_policy).toMatchObject({
+      timeout_ms: 12500,
+      cancellation_policy: {
+        cancel_on_first_fatal_error: true
+      }
+    });
     expect(payload.dataset.items).toEqual([
       { id: 'item-1', prompt: 'Say OK', system_prompt: 'Be exact.' }
     ]);

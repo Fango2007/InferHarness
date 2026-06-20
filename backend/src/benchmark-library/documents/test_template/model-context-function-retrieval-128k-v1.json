@@ -1,0 +1,64 @@
+{
+  "kind": "test_template",
+  "schema_version": "benchmark_test_template_v1",
+  "template_id": "model-context-function-retrieval-128k-v1",
+  "template_version": "1.0.0",
+  "name": "Model - Context function retrieval 128k",
+  "description": "Checks whether a model can retrieve full Python function blocks from front, middle, late, two-function, and negative-control prompts at about 128k tokens.",
+  "operation": "chat_completion",
+  "required_capabilities": {
+    "chat_completion": true,
+    "streaming": false,
+    "tool_calling": false,
+    "structured_output": false
+  },
+  "input_contract": {
+    "required_fields": [
+      "prompt",
+      "expected_answer",
+      "expected_format"
+    ],
+    "optional_fields": [
+      "system_prompt",
+      "tags",
+      "metadata"
+    ],
+    "min_items": 5
+  },
+  "stages": [
+    {
+      "id": "context_function_retrieval_128k",
+      "type": "dataset_loop",
+      "iterations_per_item": 1,
+      "record_metrics": true,
+      "order": "sequential",
+      "cooldown_ms": 0,
+      "stop_on_error": true
+    }
+  ],
+  "metrics": [
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "elapsed_ms",
+    "first_token_ms",
+    "tokens_per_second",
+    "contains_required_terms"
+  ],
+  "aggregations": [
+    "mean",
+    "p50",
+    "p95",
+    "count"
+  ],
+  "metadata": {
+    "source": "built-in-context-library",
+    "benchmark_family": "context_window",
+    "benchmark_subfamily": "function_retrieval",
+    "target_behavior": "positional_context_function_retrieval",
+    "context_window_tokens": 128000,
+    "recommended_temperature": 0,
+    "dataset_id": "dataset-model-context-function-retrieval-128k-v1"
+  },
+  "extensions": {}
+}

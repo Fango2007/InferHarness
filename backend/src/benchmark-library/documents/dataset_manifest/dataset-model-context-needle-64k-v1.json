@@ -1,0 +1,46 @@
+{
+  "kind": "dataset_manifest",
+  "schema_version": "benchmark_dataset_manifest_v1",
+  "dataset_id": "dataset-model-context-needle-64k-v1",
+  "source": {
+    "source_type": "file",
+    "format": "jsonl",
+    "path": "data/datasets/context-needle-64k.jsonl"
+  },
+  "canonicalization_version": "dataset_canonical_v1",
+  "snapshot_policy": "manifest_only",
+  "dataset_hash": "sha256:d89252b7963d5c7767741507e36093d8ada92d2c9a9918bde8821485c6ad83f8",
+  "item_count": 5,
+  "item_hashes": [
+    {
+      "item_id": "needle-front-64k",
+      "hash": "sha256:15af63e00ad4f2d8363d6fd5cda71ff608906400ca6600d463e64bc916857323"
+    },
+    {
+      "item_id": "needle-middle-64k",
+      "hash": "sha256:8c04d165c0b80976ed3b96ac20dfb6ed551f01e4181ac1b4a3a988afb98eaaee"
+    },
+    {
+      "item_id": "needle-late-64k",
+      "hash": "sha256:8484f25be1660080932be799de82fc1f37f1488b2957ea6abd83d30818f94183"
+    },
+    {
+      "item_id": "needle-two-facts-64k",
+      "hash": "sha256:cfbba19d313e67532ba2961cf93855023bf7b62595f94011d77b414d78bc6286"
+    },
+    {
+      "item_id": "negative-control-64k",
+      "hash": "sha256:15a55abe1c068186ed298c280fafc68b0dc44f29ba5c0897b2eb4a27af2868b4"
+    }
+  ],
+  "item_manifest_ref": null,
+  "snapshot_blob_ref": null,
+  "metadata": {
+    "source": "built-in-context-library",
+    "template_id": "model-context-needle-64k-v1",
+    "source_file": "backend/data/datasets/frame.py",
+    "dataset_file": "backend/data/datasets/context-needle-64k.jsonl",
+    "dataset_family": "needle_position_retrieval",
+    "context_window_tokens": 64000
+  }
+}
