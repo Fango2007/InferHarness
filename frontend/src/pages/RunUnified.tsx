@@ -32,9 +32,11 @@ import { listModels, ModelRecord } from '../services/models-api.js';
 import { correctnessMetricTiles, type CorrectnessMetricTile } from '../services/benchmark-metric-metadata.js';
 import {
   assignRunAccents,
+  evaluateTemplateCompatibility,
   findLinkedDatasetManifest,
   mergeRunModelOptions,
   parseRunTargets,
+  selectCompatibleTemplateId,
   serializeRunTargets,
   summarizeBenchmarkMetricFailures,
   targetKey,
@@ -272,9 +274,16 @@ function ConfigRail({
     || (datasetMode === 'inline'
       ? prompt.trim().length > 0
       : datasetId.trim().length > 0 && datasetPath.trim().length > 0);
+  const templateCompatibility = new Map(templates.map((template) => [
+    template.id,
+    evaluateTemplateCompatibility(template, selectedTargets, options)
+  ]));
+  const selectedTemplateCompatibility = selectedTemplateId
+    ? templateCompatibility.get(selectedTemplateId)
+    : null;
   const canRun = selectedTargets.length >= 1 && selectedTemplateId.length > 0 && !busy && (
     datasetInputReady
-  );
+  ) && selectedTemplateCompatibility?.compatible !== false;
 
   return (
     <aside className="run-config-rail" aria-label="Run configuration">
@@ -335,13 +344,20 @@ function ConfigRail({
         <label className="run-template-picker">
           Benchmark template
           <select value={selectedTemplateId} onChange={(event) => onTemplateChange(event.target.value)}>
-            {templates.map((template) => (
-              <option key={template.id} value={template.id}>
-                {template.document.name || template.document.template_id}
-              </option>
-            ))}
+            {templates.map((template) => {
+              const compatibility = templateCompatibility.get(template.id);
+              const reason = compatibility && !compatibility.compatible ? ` (${compatibility.reasons.join('; ')})` : '';
+              return (
+                <option key={template.id} value={template.id} disabled={compatibility?.compatible === false}>
+                  {(template.document.name || template.document.template_id) + reason}
+                </option>
+              );
+            })}
           </select>
         </label>
+        {selectedTemplateCompatibility && !selectedTemplateCompatibility.compatible ? (
+          <p className="run-hint">Template unavailable for selected model: {selectedTemplateCompatibility.reasons.join('; ')}</p>
+        ) : null}
         <p className="run-hint">Built-in chat templates are selected automatically when available. The smoke template remains available for quick checks.</p>
       </div>
 
@@ -588,7 +604,7 @@ function RunUnifiedEmpty() {
           </section>
         </div>
         <section className="run-asserts">
-          <h3>Benchmark audit</h3>
+          <h3>Run audit</h3>
           <div className="run-assert-row">
             <span aria-hidden="true" />
             <code>status completed</code>
@@ -738,14 +754,10 @@ function BenchmarkDetail({
           ))}
         </div>
         <section className="run-asserts">
-          <h3>Benchmark audit</h3>
+          <h3>Run audit</h3>
           <div className={result?.document.status === 'completed_with_errors' ? 'run-assert-row is-fail' : 'run-assert-row'}>
             <span aria-hidden="true" />
             <code>{`status ${result?.document.status ?? 'not-run'}`}</code>
-          </div>
-          <div className={failureSummary ? 'run-assert-row is-fail' : result ? 'run-assert-row' : 'run-assert-row is-pending'}>
-            <span aria-hidden="true" />
-            <code>{failureSummary?.message ?? (result ? 'functional checks passed' : 'functional checks pending')}</code>
           </div>
           <div className={instantiation?.id ? 'run-assert-row' : 'run-assert-row is-pending'}>
             <span aria-hidden="true" />
@@ -770,6 +782,13 @@ function BenchmarkDetail({
           <div className={manifest?.dataset_hash ? 'run-assert-row' : 'run-assert-row is-pending'}>
             <span aria-hidden="true" />
             <code>{manifest?.dataset_hash ? `hash ${String(manifest.dataset_hash)}` : 'hash pending'}</code>
+          </div>
+        </section>
+        <section className="run-asserts">
+          <h3>Functional checks</h3>
+          <div className={failureSummary ? 'run-assert-row is-fail' : result ? 'run-assert-row' : 'run-assert-row is-pending'}>
+            <span aria-hidden="true" />
+            <code>{failureSummary?.message ?? (result ? 'functional checks passed' : 'functional checks pending')}</code>
           </div>
           <details className="run-raw-result">
             <summary>Raw benchmark result</summary>
@@ -883,10 +902,23 @@ export function RunUnified({
     () => templates.find((entry) => entry.id === selectedTemplateId) ?? null,
     [selectedTemplateId, templates]
   );
+  const selectedTemplateCompatibility = useMemo(
+    () => selectedTemplate ? evaluateTemplateCompatibility(selectedTemplate, selectedTargets, options) : null,
+    [options, selectedTargets, selectedTemplate]
+  );
   const linkedDatasetManifest = useMemo(
     () => findLinkedDatasetManifest(selectedTemplate, datasetManifests),
     [datasetManifests, selectedTemplate]
   );
+  useEffect(() => {
+    if (!selectedTemplateId || templates.length === 0) {
+      return;
+    }
+    const nextTemplateId = selectCompatibleTemplateId(selectedTemplateId, templates, selectedTargets, options);
+    if (nextTemplateId && nextTemplateId !== selectedTemplateId) {
+      setSelectedTemplateId(nextTemplateId);
+    }
+  }, [options, selectedTargets, selectedTemplateId, templates]);
   const showTemplateRibbon =
     onboarding?.status.active === true &&
     selectedTargets.length > 0 &&
@@ -935,6 +967,10 @@ export function RunUnified({
     }
     if (!selectedTemplate) {
       setError('Select a benchmark template before running.');
+      return;
+    }
+    if (selectedTemplateCompatibility && !selectedTemplateCompatibility.compatible) {
+      setError(`Selected benchmark template is not compatible with the selected model: ${selectedTemplateCompatibility.reasons.join('; ')}`);
       return;
     }
     setBusy(true);

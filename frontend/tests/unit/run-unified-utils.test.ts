@@ -2,9 +2,11 @@ import { expect, test } from 'vitest';
 
 import {
   assignRunAccents,
+  evaluateTemplateCompatibility,
   findLinkedDatasetManifest,
   mergeRunModelOptions,
   parseRunTargets,
+  selectCompatibleTemplateId,
   serializeRunTargets,
   summarizeBenchmarkMetricFailures
 } from '../../src/services/run-unified-utils.js';
@@ -92,9 +94,138 @@ test('model options merge discovery with persisted model metadata', () => {
     display_name: 'Persisted A',
     quantisation: 'mlx 8b',
     context_window_tokens: 8192,
+    tool_calling_supported: false,
     source: 'merged'
   });
   expect(options.find((option) => option.model_id === 'model-b')).toBeUndefined();
+});
+
+test('model options mark tool calling supported when only the server declares tools', () => {
+  const servers = [
+    {
+      inference_server: { server_id: 's1', display_name: 'Local', active: true, archived: false },
+      capabilities: { generation: { tools: true } },
+      discovery: { model_list: { normalised: [] } }
+    }
+  ] as any;
+  const models = [
+    {
+      model: {
+        server_id: 's1',
+        model_id: 'model-a',
+        display_name: 'Persisted A',
+        active: true,
+        archived: false
+      },
+      capabilities: { generation: { tools: false } },
+      architecture: { quantisation: { method: 'none', bits: null } },
+      limits: { context_window_tokens: null }
+    }
+  ] as any;
+
+  expect(mergeRunModelOptions(servers, models)[0]).toMatchObject({
+    model_id: 'model-a',
+    tool_calling_supported: true
+  });
+});
+
+function runOption(input: {
+  server?: string;
+  model?: string;
+  context?: number | null;
+  tools?: boolean;
+}) {
+  return {
+    inference_server_id: input.server ?? 's1',
+    model_id: input.model ?? 'model-a',
+    display_name: input.model ?? 'model-a',
+    server_name: input.server ?? 's1',
+    quantisation: null,
+    context_window_tokens: input.context ?? null,
+    tool_calling_supported: input.tools ?? false,
+    source: 'persisted' as const
+  };
+}
+
+function contextTemplate(size: string, tokens: number) {
+  return {
+    id: `model-context-needle-${size}-v1`,
+    document: {
+      template_id: `model-context-needle-${size}-v1`,
+      metadata: {
+        benchmark_family: 'context_window',
+        context_window_tokens: tokens
+      },
+      required_capabilities: { tool_calling: false }
+    }
+  };
+}
+
+function toolTemplate() {
+  return {
+    id: 'server-tool-choice-required-v1',
+    document: {
+      template_id: 'server-tool-choice-required-v1',
+      required_capabilities: { tool_calling: true }
+    }
+  };
+}
+
+test('template compatibility disables context templates above the selected model window', () => {
+  const result = evaluateTemplateCompatibility(
+    contextTemplate('64k', 64000),
+    [{ inference_server_id: 's1', model_id: 'model-a' }],
+    [runOption({ context: 32000 })]
+  );
+
+  expect(result).toEqual({
+    compatible: false,
+    reasons: ['requires 64k, model declares 32k']
+  });
+});
+
+test('template compatibility keeps context templates enabled when model window is unknown', () => {
+  expect(evaluateTemplateCompatibility(
+    contextTemplate('256k', 256000),
+    [{ inference_server_id: 's1', model_id: 'model-a' }],
+    [runOption({ context: null })]
+  ).compatible).toBe(true);
+});
+
+test('template compatibility disables tool-calling templates without model or server tool support', () => {
+  expect(evaluateTemplateCompatibility(
+    toolTemplate(),
+    [{ inference_server_id: 's1', model_id: 'model-a' }],
+    [runOption({ tools: false })]
+  )).toEqual({
+    compatible: false,
+    reasons: ['requires tool calling']
+  });
+});
+
+test('template compatibility keeps tool-calling templates enabled when tools are supported', () => {
+  expect(evaluateTemplateCompatibility(
+    toolTemplate(),
+    [{ inference_server_id: 's1', model_id: 'model-a' }],
+    [runOption({ tools: true })]
+  ).compatible).toBe(true);
+});
+
+test('selectCompatibleTemplateId moves a disabled context template to the largest compatible same-family template', () => {
+  const templates = [
+    contextTemplate('4k', 4000),
+    contextTemplate('8k', 8000),
+    contextTemplate('16k', 16000),
+    contextTemplate('32k', 32000),
+    contextTemplate('64k', 64000)
+  ];
+
+  expect(selectCompatibleTemplateId(
+    'model-context-needle-64k-v1',
+    templates,
+    [{ inference_server_id: 's1', model_id: 'model-a' }],
+    [runOption({ context: 32000 })]
+  )).toBe('model-context-needle-32k-v1');
 });
 
 test('findLinkedDatasetManifest returns the unique dataset linked by template record id', () => {
@@ -161,13 +292,30 @@ test('summarizeBenchmarkMetricFailures reports tool argument assertion failures 
   });
 });
 
+test('summarizeBenchmarkMetricFailures reports missing required terms when exact match is disabled', () => {
+  expect(summarizeBenchmarkMetricFailures([
+    {
+      contains_required_terms: true
+    },
+    {
+      contains_required_terms: false
+    }
+  ])).toEqual({
+    failedCount: 1,
+    totalCount: 2,
+    categories: ['required terms missing'],
+    message: 'functional check failed 1/2 items: required terms missing'
+  });
+});
+
 test('summarizeBenchmarkMetricFailures returns null when no functional metric failed', () => {
   expect(summarizeBenchmarkMetricFailures([
     {
       tool_selected_correctly: true,
       tool_arguments_valid: true,
       tool_call_assertion_pass: true,
-      schema_valid: true
+      schema_valid: true,
+      contains_required_terms: true
     }
   ])).toBeNull();
 });

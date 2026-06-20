@@ -13,9 +13,12 @@ import {
   installBenchmarkLibraryDocuments,
   putBenchmarkDocumentWithLibrary
 } from '../../src/services/benchmark-library.js';
+import { resolveBenchmarkDatasetItems } from '../../src/services/benchmark-datasets.js';
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const schemaPath = path.resolve(moduleDir, '../../src/models/schema.sql');
+const contextNeedleSizes = ['4k', '8k', '16k', '32k', '64k', '128k', '256k'] as const;
+const contextFunctionRetrievalSizes = contextNeedleSizes;
 
 function templateDoc(templateId = 'user-template'): Record<string, unknown> {
   return {
@@ -71,6 +74,85 @@ describe('benchmark library persistence', () => {
       .toBe('Agent - Codex apply_patch');
     expect(getBenchmarkDocumentOrNull('dataset_manifest', 'dataset-agent-codex-apply-patch-v1')?.document.item_count)
       .toBe(2);
+    expect(getBenchmarkDocumentOrNull('test_template', 'model-context-python-snippet-retrieval-v1')).toBeNull();
+    expect(getBenchmarkDocumentOrNull('dataset_manifest', 'dataset-model-context-python-snippet-retrieval-v1')).toBeNull();
+    for (const size of contextNeedleSizes) {
+      const templateId = `model-context-needle-${size}-v1`;
+      const datasetId = `dataset-model-context-needle-${size}-v1`;
+      expect(getBenchmarkDocumentOrNull('test_template', templateId)?.document.name)
+        .toBe(`Model - Context needle ${size}`);
+      expect(getBenchmarkDocumentOrNull('dataset_manifest', datasetId)?.document).toMatchObject({
+        item_count: 5,
+        metadata: { template_id: templateId }
+      });
+    }
+    for (const size of contextFunctionRetrievalSizes) {
+      const templateId = `model-context-function-retrieval-${size}-v1`;
+      const datasetId = `dataset-model-context-function-retrieval-${size}-v1`;
+      expect(getBenchmarkDocumentOrNull('test_template', templateId)?.document.name)
+        .toBe(`Model - Context function retrieval ${size}`);
+      expect(getBenchmarkDocumentOrNull('dataset_manifest', datasetId)?.document).toMatchObject({
+        item_count: 5,
+        metadata: { template_id: templateId }
+      });
+    }
+  });
+
+  it('loads every built-in Python context needle dataset from its file-backed manifest', () => {
+    installBenchmarkLibraryDocuments();
+    for (const size of contextNeedleSizes) {
+      const dataset = getBenchmarkDocumentOrNull('dataset_manifest', `dataset-model-context-needle-${size}-v1`)?.document;
+      expect(dataset).toBeTruthy();
+      const items = resolveBenchmarkDatasetItems({ dataset });
+      expect(items).toHaveLength(5);
+      expect(items.map((item) => item.id)).toEqual([
+        `needle-front-${size}`,
+        `needle-middle-${size}`,
+        `needle-late-${size}`,
+        `needle-two-facts-${size}`,
+        `negative-control-${size}`
+      ]);
+      expect(items[0]).toMatchObject({
+        expected_format: 'free_text',
+        metadata: { needle_position: 'front', needle_count: 1 }
+      });
+      expect(items[3]).toMatchObject({
+        metadata: { needle_count: 2 }
+      });
+      expect(items[4]).toMatchObject({
+        expected_answer: 'NOT_FOUND',
+        metadata: { needle_count: 0, needle_position: 'absent' }
+      });
+    }
+  });
+
+  it('loads every built-in Python context function retrieval dataset from its file-backed manifest', () => {
+    installBenchmarkLibraryDocuments();
+    for (const size of contextFunctionRetrievalSizes) {
+      const dataset = getBenchmarkDocumentOrNull('dataset_manifest', `dataset-model-context-function-retrieval-${size}-v1`)?.document;
+      expect(dataset).toBeTruthy();
+      const items = resolveBenchmarkDatasetItems({ dataset });
+      expect(items).toHaveLength(5);
+      expect(items.map((item) => item.id)).toEqual([
+        `function-front-${size}`,
+        `function-middle-${size}`,
+        `function-late-${size}`,
+        `function-two-blocks-${size}`,
+        `function-negative-control-${size}`
+      ]);
+      expect(items[0]).toMatchObject({
+        expected_format: 'code',
+        metadata: { function_name: '_constructor_from_mgr', function_position: 'front' }
+      });
+      expect(items[3]).toMatchObject({
+        expected_format: 'code',
+        metadata: { function_names: ['_construct_result', '_to_dict_of_blocks'] }
+      });
+      expect(items[4]).toMatchObject({
+        expected_answer: 'NOT_FOUND',
+        metadata: { function_position: 'absent' }
+      });
+    }
   });
 
   it('rebuilds user-created documents from the user library after the database is erased', () => {

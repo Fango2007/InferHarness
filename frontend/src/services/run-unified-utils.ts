@@ -22,6 +22,7 @@ export interface RunModelOption extends RunTarget {
   server_name: string;
   quantisation: string | null;
   context_window_tokens: number | null;
+  tool_calling_supported: boolean;
   source: 'discovery' | 'persisted' | 'merged';
 }
 
@@ -38,6 +39,11 @@ export interface BenchmarkFailureSummary {
   message: string;
 }
 
+export interface TemplateCompatibility {
+  compatible: boolean;
+  reasons: string[];
+}
+
 interface BenchmarkDocumentLike<TDocument extends Record<string, unknown>> {
   id: string;
   document: TDocument;
@@ -45,6 +51,96 @@ interface BenchmarkDocumentLike<TDocument extends Record<string, unknown>> {
 
 export function targetKey(target: RunTarget): string {
   return `${target.inference_server_id}\u0000${target.model_id}`;
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function metadataRecord(template: BenchmarkDocumentLike<Record<string, unknown>>): Record<string, unknown> {
+  return objectValue(template.document.metadata) ?? {};
+}
+
+function templateContextWindowTokens(template: BenchmarkDocumentLike<Record<string, unknown>>): number | null {
+  const value = metadataRecord(template).context_window_tokens;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function templateBenchmarkFamily(template: BenchmarkDocumentLike<Record<string, unknown>>): string | null {
+  const value = metadataRecord(template).benchmark_family;
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function requiresCapability(template: BenchmarkDocumentLike<Record<string, unknown>>, capability: string): boolean {
+  const required = objectValue(template.document.required_capabilities);
+  return required?.[capability] === true;
+}
+
+function formatContextTokens(tokens: number): string {
+  if (tokens >= 1000 && tokens % 1000 === 0) {
+    return `${tokens / 1000}k`;
+  }
+  return String(tokens);
+}
+
+export function evaluateTemplateCompatibility(
+  template: BenchmarkDocumentLike<Record<string, unknown>>,
+  selectedTargets: RunTarget[],
+  options: RunModelOption[]
+): TemplateCompatibility {
+  const optionMap = new Map(options.map((option) => [targetKey(option), option]));
+  const reasons = new Set<string>();
+  const requiredContext = templateContextWindowTokens(template);
+  if (requiredContext !== null) {
+    const failingLimits = selectedTargets
+      .map((target) => optionMap.get(targetKey(target))?.context_window_tokens ?? null)
+      .filter((limit): limit is number => typeof limit === 'number' && Number.isFinite(limit) && requiredContext > limit);
+    if (failingLimits.length > 0) {
+      reasons.add(`requires ${formatContextTokens(requiredContext)}, model declares ${formatContextTokens(Math.min(...failingLimits))}`);
+    }
+  }
+  if (requiresCapability(template, 'tool_calling') && selectedTargets.length > 0) {
+    const missingTools = selectedTargets.some((target) => optionMap.get(targetKey(target))?.tool_calling_supported !== true);
+    if (missingTools) {
+      reasons.add('requires tool calling');
+    }
+  }
+  return {
+    compatible: reasons.size === 0,
+    reasons: Array.from(reasons)
+  };
+}
+
+export function selectCompatibleTemplateId(
+  currentTemplateId: string,
+  templates: Array<BenchmarkDocumentLike<Record<string, unknown>>>,
+  selectedTargets: RunTarget[],
+  options: RunModelOption[]
+): string {
+  if (templates.length === 0) {
+    return '';
+  }
+  const current = templates.find((template) => template.id === currentTemplateId) ?? null;
+  if (current && evaluateTemplateCompatibility(current, selectedTargets, options).compatible) {
+    return current.id;
+  }
+  const compatibleTemplates = templates.filter((template) => evaluateTemplateCompatibility(template, selectedTargets, options).compatible);
+  if (compatibleTemplates.length === 0) {
+    return currentTemplateId;
+  }
+  const currentFamily = current ? templateBenchmarkFamily(current) : null;
+  if (currentFamily) {
+    const sameFamily = compatibleTemplates.filter((template) => templateBenchmarkFamily(template) === currentFamily);
+    if (sameFamily.length > 0) {
+      return sameFamily
+        .slice()
+        .sort((left, right) => (templateContextWindowTokens(right) ?? 0) - (templateContextWindowTokens(left) ?? 0))[0].id;
+    }
+  }
+  return compatibleTemplates.find((template) => template.document.template_id === 'run-smoke-chat-v1')?.id
+    ?? compatibleTemplates[0].id;
 }
 
 export function findLinkedDatasetManifest<TDataset extends BenchmarkDocumentLike<Record<string, unknown>>>(
@@ -80,6 +176,7 @@ const FAILURE_METRIC_CATEGORIES: Array<[string, string, (value: unknown) => bool
   ['schema_valid', 'schema validation failed', (value) => value === false],
   ['json_valid', 'invalid JSON', (value) => value === false],
   ['exact_match', 'exact match failed', (value) => value === false],
+  ['contains_required_terms', 'required terms missing', (value) => value === false],
   ['regex_match', 'regex match failed', (value) => value === false]
 ];
 
@@ -183,6 +280,12 @@ export function mergeRunModelOptions(
       server.inference_server.display_name
     ])
   );
+  const serverToolCapabilities = new Map(
+    runnableServers.map((server) => [
+      server.inference_server.server_id,
+      Boolean(server.capabilities?.generation?.tools)
+    ])
+  );
 
   for (const server of runnableServers) {
     const serverId = server.inference_server.server_id;
@@ -194,6 +297,7 @@ export function mergeRunModelOptions(
         server_name: server.inference_server.display_name,
         quantisation: formatQuantisation(model.quantisation),
         context_window_tokens: model.context_window_tokens,
+        tool_calling_supported: Boolean(model.capabilities?.function_calling || model.capabilities?.tools || server.capabilities?.generation?.tools),
         source: 'discovery'
       };
       options.set(targetKey(option), option);
@@ -222,6 +326,11 @@ export function mergeRunModelOptions(
       quantisation:
         formatQuantisation(record.architecture.quantisation) ?? existing?.quantisation ?? null,
       context_window_tokens: record.limits.context_window_tokens ?? existing?.context_window_tokens ?? null,
+      tool_calling_supported: Boolean(
+        record.capabilities?.generation?.tools ||
+        existing?.tool_calling_supported ||
+        serverToolCapabilities.get(record.model.server_id)
+      ),
       source: existing ? 'merged' : 'persisted'
     });
   }

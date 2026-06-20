@@ -1,0 +1,46 @@
+{
+  "kind": "dataset_manifest",
+  "schema_version": "benchmark_dataset_manifest_v1",
+  "dataset_id": "dataset-model-context-function-retrieval-128k-v1",
+  "source": {
+    "source_type": "file",
+    "format": "jsonl",
+    "path": "data/datasets/context-function-retrieval-128k.jsonl"
+  },
+  "canonicalization_version": "dataset_canonical_v1",
+  "snapshot_policy": "manifest_only",
+  "dataset_hash": "sha256:79e2c6b53c00e6ca288911567ded0d814063a57164ca813697f8469caa3496cd",
+  "item_count": 5,
+  "item_hashes": [
+    {
+      "item_id": "function-front-128k",
+      "hash": "sha256:89ee905cb4cc217124513eeb69a1ad9b6943ad25c2483a435630396f4dc01d77"
+    },
+    {
+      "item_id": "function-middle-128k",
+      "hash": "sha256:e436ebd5b3d2ac6e99a9a14916f2f8bfcdf4200b8d4da3134450563fe4966f26"
+    },
+    {
+      "item_id": "function-late-128k",
+      "hash": "sha256:a3c2f11070896c8160823a94162f32dfd73ef0c8a1a03fda10f71a8b4e5541cb"
+    },
+    {
+      "item_id": "function-two-blocks-128k",
+      "hash": "sha256:c0d36aa2a4fece4db0cc7c85eb3ba57ec4ab770e3bcb593e012c13250853cf85"
+    },
+    {
+      "item_id": "function-negative-control-128k",
+      "hash": "sha256:0a4a3ba3a168b9fbc378dcb2d53b7aab7174d1377df5a74599e253de1a08dd58"
+    }
+  ],
+  "item_manifest_ref": null,
+  "snapshot_blob_ref": null,
+  "metadata": {
+    "source": "built-in-context-library",
+    "template_id": "model-context-function-retrieval-128k-v1",
+    "source_file": "backend/data/datasets/frame.py",
+    "dataset_file": "backend/data/datasets/context-function-retrieval-128k.jsonl",
+    "dataset_family": "function_retrieval",
+    "context_window_tokens": 128000
+  }
+}

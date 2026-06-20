@@ -484,6 +484,44 @@ function isFatalError(code: string): boolean {
     || ['http_400', 'http_401', 'http_403', 'http_404'].includes(code);
 }
 
+function stringAtPath(value: unknown, path: string[]): string | null {
+  let current = value;
+  for (const part of path) {
+    const record = objectValue(current);
+    if (!record) return null;
+    current = record[part];
+  }
+  return textFromValue(current);
+}
+
+function classifyUpstreamError(input: { status: number; body: unknown; text: string | null }): Record<string, unknown> {
+  const upstreamCode =
+    stringAtPath(input.body, ['error', 'code']) ??
+    stringAtPath(input.body, ['code']) ??
+    null;
+  const upstreamType =
+    stringAtPath(input.body, ['error', 'type']) ??
+    stringAtPath(input.body, ['type']) ??
+    null;
+  const upstreamMessage =
+    stringAtPath(input.body, ['error', 'message']) ??
+    stringAtPath(input.body, ['message']) ??
+    textFromValue(input.text) ??
+    null;
+  const signal = `${upstreamCode ?? ''} ${upstreamType ?? ''} ${upstreamMessage ?? ''}`.toLowerCase();
+  const category = signal.includes('prefill_memory_exceeded') || signal.includes('memory guard') || signal.includes('context length')
+    ? 'context_prefill_memory_exceeded'
+    : input.status === 400
+      ? 'invalid_request'
+      : 'upstream_http_error';
+  return {
+    upstream_code: upstreamCode,
+    upstream_type: upstreamType,
+    upstream_message: upstreamMessage,
+    error_category: category
+  };
+}
+
 export function buildBenchmarkRequestPayload(
   instantiation: Record<string, unknown>,
   item: Record<string, unknown>
@@ -1109,7 +1147,8 @@ async function executeItem(
         ...pairMeta,
         item_index: executable.itemIndex,
         iteration: executable.iteration,
-        attempt
+        attempt,
+        ...classifyUpstreamError({ status: response.status, body: responseBody, text: responseBody === null ? responseText : null })
       };
       attemptErrors.push(issue);
       if (!issue.retryable || attempt >= maxAttempts) {

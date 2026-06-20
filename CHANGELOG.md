@@ -6,15 +6,23 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+### Added
+
+- **Long-context Python function retrieval benchmark** — added seven built-in context-window templates linked to file-backed Python function-retrieval datasets, with front/middle/late function placement, two-function retrieval, and a negative control.
+- **Long-context Python needle benchmark** — added seven built-in context-window templates linked to file-backed Python positional-recall datasets, with front/middle/late needle placement, 4k-256k context sizes, two-fact retrieval, and a negative control.
+
 ### Changed
 
 - **Changelog category workflow** — `AGENTS.md` now requires changelog updates to preserve Keep a Changelog category headings and place entries under the appropriate `Added`, `Changed`, `Fixed`, `Removed`, or `Security` section instead of flattening release notes.
+- **Run fatal upstream errors** — Run-created benchmark profiles now cancel on the first fatal upstream error, context-window retrieval stops on the first failed item, and HTTP diagnostics preserve upstream provider codes such as `prefill_memory_exceeded`.
+- **Run template capability filtering** — Run now disables benchmark templates that exceed a selected model's declared context window or require tool calling when the selected model/server is not tool-capable.
+- **Run audit and functional checks split** — Run now separates pipeline execution health from functional benchmark checks, and treats missing required terms as a visible functional failure when exact matching is disabled.
+- **Run functional failure clue** — Run now surfaces a benchmark assertion failure line when quality metrics fail despite a technically completed run, with categories such as invalid tool arguments or missing tool calls.
 
 ## [0.10.0] - 2026-06-19
 
 ### Added
 
-- **Run functional failure clue** — Run now surfaces a benchmark assertion failure line when quality metrics fail despite a technically completed run, with categories such as invalid tool arguments or missing tool calls.
 - **Datasets editor checkpoint** — added a Datasets page and JSONL dataset-file API for creating, editing, saving, and deleting dataset item files under `INFERHARNESS_BENCHMARK_DATASET_ROOT`, with synced `dataset_manifest` documents, copy-down editing for repeated fields, and clamped long-prompt display.
 - **Tool-call assertion metric** — benchmark tool-call templates now include `tool_call_assertion_pass`, a single-turn pass/fail metric requiring exact expected tool selection and structurally matching arguments while keeping assertion failures as quality metrics rather than execution failures.
 - **Tool-call assertion UI** — Run now promotes tool-call assertion pass/fail as the primary correctness verdict, and Templates groups metrics with readable labels while auto-adding the assertion metric when tool calling is enabled.

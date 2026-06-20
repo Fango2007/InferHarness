@@ -267,6 +267,30 @@ function installMockInferenceFetch(status: number | number[] = 200): { baseUrl: 
   return { baseUrl: 'http://mock.local', requests, headers };
 }
 
+function installMockPrefillMemoryErrorFetch(): { baseUrl: string; requests: unknown[] } {
+  const requests: unknown[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url !== 'http://mock.local/v1/chat/completions') {
+      return new Response('', { status: 404 });
+    }
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
+    requests.push(body);
+    return new Response(JSON.stringify({
+      error: {
+        message: 'oMLX prefill memory guard rejected this prompt.',
+        type: 'invalid_request_error',
+        code: 'prefill_memory_exceeded'
+      },
+      type: 'error'
+    }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }));
+  return { baseUrl: 'http://mock.local', requests };
+}
+
 function installMockTokenSequenceFetch(tokens: number[]): { baseUrl: string; requests: unknown[] } {
   const requests: unknown[] = [];
   const queue = [...tokens];
@@ -1040,6 +1064,56 @@ describe('benchmark runner API', () => {
     expect(result.document.errors[0].code).toBe('http_500');
     expect(result.document.stage_results[0].status).toBe('failed');
     expect(result.document.raw_responses[0].status).toBe(500);
+    await app.close();
+  });
+
+  it('cancels on first fatal upstream prefill memory error and preserves provider diagnostics', async () => {
+    mockServer = installMockPrefillMemoryErrorFetch();
+    const app = createServer();
+    seedServerAndModel(mockServer.baseUrl);
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/benchmark/instantiations',
+      headers: AUTH_HEADERS,
+      payload: {
+        template: benchmarkTemplate(),
+        server_id: 'srv-runner',
+        model_id: 'mock-chat',
+        runtime_profile: runtimeProfile({
+          timeout_ms: 5000,
+          cancellation_policy: { cancel_on_first_fatal_error: true }
+        }),
+        dataset: {
+          dataset_id: 'embedded-runner',
+          source: { source_type: 'inline', format: 'json' },
+          snapshot_policy: 'embedded',
+          items: [
+            { id: 'item-1', prompt: 'Run first.' },
+            { id: 'item-2', prompt: 'Run second.' }
+          ]
+        }
+      }
+    });
+    expect(createResponse.statusCode, JSON.stringify(createResponse.json())).toBe(201);
+
+    const runResponse = await app.inject({
+      method: 'POST',
+      url: `/benchmark/instantiations/${createResponse.json().id}/run`,
+      headers: AUTH_HEADERS
+    });
+    expect(runResponse.statusCode).toBe(201);
+    const result = runResponse.json();
+    expect(result.document.status).toBe('cancelled');
+    expect(result.document.metadata.cancellation_reason).toBe('cancel_on_first_fatal_error');
+    expect(result.document.errors[0]).toMatchObject({
+      code: 'http_400',
+      upstream_code: 'prefill_memory_exceeded',
+      upstream_type: 'invalid_request_error',
+      error_category: 'context_prefill_memory_exceeded'
+    });
+    expect(result.document.stage_results[0].results[1].status).toBe('skipped');
+    expect(mockServer.requests).toHaveLength(1);
     await app.close();
   });
 
