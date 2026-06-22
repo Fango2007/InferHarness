@@ -32,6 +32,13 @@
 - After a branch is merged, resync any related worktrees from the updated base branch before continuing dependent work.
 - Re-check the Node.js runtime before installs, rebuilds, backend startup, or tests in each worktree.
 
+## Release Workflow
+
+- For release preparation, read `RELEASING.md` before changing versions, changelog entries, release commits, or tags.
+- Use `npm version <version> --workspaces --include-workspace-root --no-git-tag-version` to keep workspace package versions aligned without creating an automatic tag.
+- Use annotated release tags (`git tag -a`) so `--follow-tags` and the release workflow pick them up.
+- If `npm run release:check` fails with `ELOOP` under `specs/specs/...`, inspect the worktree for a local recursive `specs` symlink before changing tracked files.
+
 ## Static Data and Reference Content
 
 - Do not hardcode static data in application code.
