@@ -4,7 +4,7 @@
 [![node](https://img.shields.io/badge/node-25.x-339933)](package.json)
 [![python](https://img.shields.io/badge/python-3.10%2B-3776AB)](backend/src/scripts/requirements.txt)
 [![CI](https://github.com/Fango2007/InferHarness/actions/workflows/ci.yml/badge.svg)](https://github.com/Fango2007/InferHarness/actions/workflows/ci.yml)
-[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![license](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
 **A local-first tool for testing, comparing, and evaluating AI models and inference servers.**
 

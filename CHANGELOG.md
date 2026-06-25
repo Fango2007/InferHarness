@@ -13,6 +13,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Changed
 
+- **Project license** — switched the project license from MIT to Apache License 2.0 and updated the README badge.
 - **Changelog category workflow** — `AGENTS.md` now requires changelog updates to preserve Keep a Changelog category headings and place entries under the appropriate `Added`, `Changed`, `Fixed`, `Removed`, or `Security` section instead of flattening release notes.
 - **Release workflow guidance** — `AGENTS.md` now records the release-prep workflow for reading `RELEASING.md`, keeping workspace versions aligned, using annotated tags, and checking local recursive `specs` symlink artifacts before changing tracked files when release checks hit `ELOOP`.
 - **Run fatal upstream errors** — Run-created benchmark profiles now cancel on the first fatal upstream error, context-window retrieval stops on the first failed item, and HTTP diagnostics preserve upstream provider codes such as `prefill_memory_exceeded`.
