@@ -67,6 +67,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - **Human-readable agent workflow guidance** — `AGENTS.md` now groups workflow rules into clearer sections, documents parallel worktree expectations including `origin/main` checks before commit/push requests and resync timing before validation or merge, directs agents to create a focused branch without pausing for confirmation, and asks agents to explicitly request commit approval with a suggested message and details.
 - **Templates agent composer** — The Templates authoring panel now gives the freeform request field more space and removes the preset suggestion chip.
 - **Run selection rail polish** — the Run page model chips, benchmark template selector, and response header now use clearer selected-state borders/backgrounds and denser mono text, with redundant server summary and model helper copy removed.
+- **Templates catalog shell** — `/templates` now opens as a browse-first catalog with category buckets, grouped template cards, dedicated preview state, and the existing AI-first authoring flow embedded in the new shell instead of auto-selecting the first template row.
 
 ### Fixed
 
