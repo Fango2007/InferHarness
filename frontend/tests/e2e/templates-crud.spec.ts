@@ -59,7 +59,9 @@ test('creates, updates, and deletes templates from the redesigned Templates page
 
   try {
     await page.goto('/templates');
-    await page.getByRole('button', { name: 'New benchmark template' }).first().click();
+    await expect(page.getByText('Browse by')).toBeVisible();
+    await expect(page.locator('.template-card').first()).toBeVisible();
+    await page.getByRole('button', { name: '+ New' }).click();
     await page.getByRole('button', { name: 'Advanced form' }).click();
     const createForm = page.locator('.template-advanced-panel form');
     await expect(createForm).toBeVisible();
@@ -91,11 +93,13 @@ test('creates, updates, and deletes templates from the redesigned Templates page
     await page.getByRole('button', { name: 'Live JSON' }).click();
     await page.getByRole('button', { name: 'Save template' }).click();
 
-    const createdRow = page.locator('.template-row').filter({ hasText: templateName });
-    await expect(createdRow).toBeVisible();
-    await expect(createdRow).toContainText(templateName);
+    await expect(page.locator('.template-preview-panel')).toContainText(templateId);
+    await page.getByRole('button', { name: '← All templates' }).click();
 
-    await createdRow.click();
+    const createdCard = page.locator('.template-card').filter({ hasText: templateName });
+    await expect(createdCard).toBeVisible();
+    await expect(createdCard).toContainText(templateName);
+    await createdCard.click();
     await expect(page.locator('.template-preview-panel')).toContainText(templateId);
     await page.locator('.template-preview-panel').getByRole('button', { name: 'Modify' }).click();
     await page.getByRole('button', { name: 'Advanced form' }).click();
@@ -108,10 +112,13 @@ test('creates, updates, and deletes templates from the redesigned Templates page
     await page.getByRole('button', { name: 'Update draft' }).click();
     await page.getByRole('button', { name: 'Save template' }).click();
 
-    const updatedRow = page.locator('.template-row').filter({ hasText: updatedName });
-    await expect(updatedRow).toBeVisible();
-    await expect(updatedRow).toContainText(updatedName);
-    await updatedRow.click();
+    await expect(page.locator('.template-preview-panel')).toContainText(updatedName);
+    await page.getByRole('button', { name: '← All templates' }).click();
+
+    const updatedCard = page.locator('.template-card').filter({ hasText: updatedName });
+    await expect(updatedCard).toBeVisible();
+    await expect(updatedCard).toContainText(updatedName);
+    await updatedCard.click();
     await page.locator('.template-preview-panel').getByRole('button', { name: 'Modify' }).click();
     await page.getByRole('button', { name: 'Raw JSON' }).click();
     await expect(page.locator('.template-raw-json')).toHaveValue(/"pair": \[/);
@@ -120,9 +127,8 @@ test('creates, updates, and deletes templates from the redesigned Templates page
     await page.getByRole('button', { name: 'x Close' }).click();
 
     page.on('dialog', (dialog) => dialog.accept());
-    await updatedRow.click();
     await page.locator('.template-preview-panel').getByRole('button', { name: 'Delete' }).click();
-    await expect(page.locator('.template-row').filter({ hasText: updatedName })).toHaveCount(0);
+    await expect(page.locator('.template-card').filter({ hasText: updatedName })).toHaveCount(0);
   } finally {
     await cleanupTemplateIds(page.request, [templateId]);
   }
@@ -201,7 +207,7 @@ test('authors a template through the in-page benchmark agent', async ({ page }) 
 
   try {
     await page.goto('/templates');
-    await page.getByRole('button', { name: 'New benchmark template' }).first().click();
+    await page.getByRole('button', { name: '+ New' }).click();
     await page.getByPlaceholder('Describe what you want...').fill('Create a tool-call benchmark.');
     await page.getByRole('button', { name: 'Send' }).click();
     await expect(page.getByText('Which success signal should this benchmark score?')).toBeVisible();
@@ -226,9 +232,7 @@ test('authors a template through the in-page benchmark agent', async ({ page }) 
     await expect(page.locator('.template-json-code')).toContainText(templateId);
     await page.getByRole('button', { name: 'Save template' }).click();
 
-    const row = page.locator('.template-row').filter({ hasText: templateName });
-    await expect(row).toBeVisible();
-    await row.click();
+    await expect(page.locator('.template-preview-panel')).toContainText(templateId);
     await expect(page.locator('.template-preview-panel')).toContainText('Tool-call assertion missing');
   } finally {
     await cleanupTemplateIds(page.request, [templateId]);

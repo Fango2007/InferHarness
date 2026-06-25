@@ -17,8 +17,9 @@ import { TOOL_CALL_ASSERTION_METRIC } from '../services/benchmark-metric-metadat
 import { listModels, type ModelRecord } from '../services/models-api.js';
 import { getAppSettings, type AppSettings } from '../services/system-api.js';
 
-type TemplateMode = { kind: 'preview' } | { kind: 'create' } | { kind: 'modify' };
+type TemplateMode = { kind: 'grid' } | { kind: 'preview' } | { kind: 'create' } | { kind: 'modify' };
 type TemplateOperationFilter = 'all' | BenchmarkOperation;
+type TemplateCategory = 'all' | 'tool' | 'agentic' | 'structured';
 type AuthorTab = 'live' | 'advanced' | 'raw';
 type DraftSource = 'none' | 'seed' | 'agent' | 'advanced' | 'raw';
 
@@ -34,8 +35,20 @@ interface ChatEntry {
   questions?: string[];
 }
 
+interface TemplateCategoryDefinition {
+  id: TemplateCategory;
+  name: string;
+  blurb: string;
+}
+
 const OPERATION_FILTERS: TemplateOperationFilter[] = ['all', 'chat_completion', 'completion', 'embedding', 'list_models', 'healthcheck'];
 const ENABLED_OPERATION_FILTERS = new Set<TemplateOperationFilter>(['all', 'chat_completion']);
+const TEMPLATE_CATEGORIES: TemplateCategoryDefinition[] = [
+  { id: 'all', name: 'All templates', blurb: 'Every benchmark in the workspace' },
+  { id: 'tool', name: 'Tool calling', blurb: 'Selection, arguments, and tool-choice mechanics' },
+  { id: 'agentic', name: 'Agentic', blurb: 'Multi-step agents, repo edits, and workflow execution' },
+  { id: 'structured', name: 'Structured output', blurb: 'JSON contracts and schema validation' }
+];
 
 const DEFAULT_TEMPLATE_DRAFT: BenchmarkTestTemplateDocument = {
   kind: 'test_template',
@@ -90,6 +103,27 @@ function parseTemplateStats(template: BenchmarkTestTemplateRecord): {
     capabilityCount: Object.values(capabilities).filter(Boolean).length,
     summary: document.description || `${document.operation} benchmark template`
   };
+}
+
+function categorizeTemplateDocument(document: BenchmarkTestTemplateDocument): Exclude<TemplateCategory, 'all'> {
+  const id = document.template_id.toLowerCase();
+  if (id.startsWith('agent-')) {
+    return 'agentic';
+  }
+  if (id.startsWith('functional-')) {
+    return 'structured';
+  }
+  if (document.required_capabilities?.structured_output && !document.required_capabilities?.tool_calling) {
+    return 'structured';
+  }
+  if (document.required_capabilities?.tool_calling) {
+    return 'tool';
+  }
+  return 'tool';
+}
+
+function categoryName(category: TemplateCategory): string {
+  return TEMPLATE_CATEGORIES.find((entry) => entry.id === category)?.name ?? 'Templates';
 }
 
 function formatDate(value: string): string {
@@ -190,71 +224,146 @@ function JsonView({ lines, showNotes }: { lines: JsonLine[]; showNotes: boolean 
   );
 }
 
-function TemplatesRail({
+function TemplateCategoryRail({
+  category,
+  counts,
+  onCategory
+}: {
+  category: TemplateCategory;
+  counts: Record<TemplateCategory, number>;
+  onCategory: (value: TemplateCategory) => void;
+}) {
+  return (
+    <aside className="template-category-rail">
+      <div className="template-category-rail__top">
+        <div className="template-category-rail__label">Browse by</div>
+        <nav className="template-category-rail__list" aria-label="Template categories">
+          {TEMPLATE_CATEGORIES.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              className={category === entry.id ? 'template-category-item is-active' : 'template-category-item'}
+              onClick={() => onCategory(entry.id)}
+            >
+              <span className="template-category-item__body">
+                <span className="template-category-item__name">{entry.name}</span>
+                <span className="template-category-item__blurb">{entry.blurb}</span>
+              </span>
+              <span className="template-category-item__count">{counts[entry.id] ?? 0}</span>
+            </button>
+          ))}
+        </nav>
+      </div>
+    </aside>
+  );
+}
+
+function TemplateCard({
+  template,
+  onSelect
+}: {
+  template: BenchmarkTestTemplateRecord;
+  onSelect: (templateId: string) => void;
+}) {
+  return (
+    <button type="button" className="template-card" onClick={() => onSelect(template.id)}>
+      <div className="template-card__top">
+        <span className="template-card__name">{templateLabel(template)}</span>
+        <span className="template-card__chip">{template.document.operation}</span>
+      </div>
+      <p className="template-card__description">{template.document.description ?? `${template.document.operation} benchmark template`}</p>
+      <div className="template-card__footer">
+        <span className="template-card__id">{template.document.template_id}</span>
+        <span className="template-card__meta">{template.document.metrics.length} metrics</span>
+      </div>
+    </button>
+  );
+}
+
+function TemplateBrowseGrid({
   templates,
-  selectedId,
+  category,
   query,
   operationFilter,
-  mode,
-  busy,
   onQuery,
   onFilter,
   onSelect,
   onNew
 }: {
   templates: BenchmarkTestTemplateRecord[];
-  selectedId: string | null;
+  category: TemplateCategory;
   query: string;
   operationFilter: TemplateOperationFilter;
-  mode: TemplateMode;
-  busy: boolean;
   onQuery: (value: string) => void;
   onFilter: (value: TemplateOperationFilter) => void;
-  onSelect: (id: string) => void;
+  onSelect: (templateId: string) => void;
   onNew: () => void;
 }) {
+  const groupedSections = category === 'all'
+    ? TEMPLATE_CATEGORIES
+        .filter((entry): entry is TemplateCategoryDefinition & { id: Exclude<TemplateCategory, 'all'> } => entry.id !== 'all')
+        .map((entry) => ({
+          category: entry,
+          items: templates.filter((template) => categorizeTemplateDocument(template.document) === entry.id)
+        }))
+        .filter((section) => section.items.length > 0)
+    : [];
+
   return (
-    <aside className="templates-rail">
-      <div className="templates-rail-tools">
-        <div className="templates-rail-search">
-          <input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Search templates" />
-          <button type="button" className="templates-rail-new" onClick={onNew} disabled={busy} aria-label="New benchmark template">
-            + New
+    <section className="template-browse">
+      <div className="template-browse__bar">
+        <div className="template-browse__title">
+          <h2>{categoryName(category)}</h2>
+          <span className="template-browse__count">{templates.length} template{templates.length === 1 ? '' : 's'}</span>
+        </div>
+        <div className="template-browse__tools">
+          <div className="template-browse__search">
+            <input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Search templates" />
+          </div>
+          <button type="button" className="templates-rail-new" onClick={onNew}>+ New</button>
+        </div>
+      </div>
+      <div className="templates-operation-filter template-browse__filters" aria-label="Template operation">
+        {OPERATION_FILTERS.map((value) => (
+          <button
+            key={value}
+            type="button"
+            className={operationFilter === value ? 'is-active' : ''}
+            onClick={() => onFilter(value)}
+            disabled={!ENABLED_OPERATION_FILTERS.has(value)}
+          >
+            {value}
           </button>
-        </div>
-        <div className="templates-operation-filter" aria-label="Template operation">
-          {OPERATION_FILTERS.map((value) => (
-            <button
-              key={value}
-              type="button"
-              className={operationFilter === value ? 'is-active' : ''}
-              onClick={() => onFilter(value)}
-              disabled={!ENABLED_OPERATION_FILTERS.has(value)}
-            >
-              {value}
-            </button>
-          ))}
-        </div>
+        ))}
       </div>
-      <div className="templates-list">
-        {templates.map((template) => {
-          const document = template.document;
-          return (
-            <button
-              key={template.id}
-              type="button"
-              className={selectedId === template.id && mode.kind === 'preview' ? 'template-row is-selected' : 'template-row'}
-              onClick={() => onSelect(template.id)}
-            >
-              <span className="template-row__name">{document.name ?? document.template_id}</span>
-              <span className="template-row__chip">{document.operation}</span>
-              <span className="template-row__description">{document.description ?? `${document.operation} benchmark template`}</span>
-            </button>
-          );
-        })}
-        {templates.length === 0 ? <p className="muted templates-list-empty">No templates match.</p> : null}
+
+      <div className="template-browse__body">
+        {templates.length === 0 ? (
+          <div className="template-browse-empty">
+            <h3>No templates match</h3>
+            <p>Try a different category, clear the search, or create a new template.</p>
+            <button type="button" className="btn btn--sm" onClick={onNew}>+ New template</button>
+          </div>
+        ) : category === 'all' ? (
+          groupedSections.map((section) => (
+            <section key={section.category.id} className="template-category-section">
+              <div className="template-category-section__head">
+                <span className="template-category-section__name">{section.category.name}</span>
+                <span className="template-category-section__count">{section.items.length}</span>
+                <span className="template-category-section__rule" />
+              </div>
+              <div className="template-card-grid">
+                {section.items.map((template) => <TemplateCard key={template.id} template={template} onSelect={onSelect} />)}
+              </div>
+            </section>
+          ))
+        ) : (
+          <div className="template-card-grid">
+            {templates.map((template) => <TemplateCard key={template.id} template={template} onSelect={onSelect} />)}
+          </div>
+        )}
       </div>
-    </aside>
+    </section>
   );
 }
 
@@ -294,10 +403,12 @@ function TemplateJsonWindow({
 
 function TemplatePreview({
   template,
+  onBack,
   onModify,
   onDelete
 }: {
   template: BenchmarkTestTemplateRecord;
+  onBack: () => void;
   onModify: () => void;
   onDelete: () => void;
 }) {
@@ -307,6 +418,7 @@ function TemplatePreview({
   const includesToolCallAssertion = document.metrics.includes(TOOL_CALL_ASSERTION_METRIC);
   return (
     <article className="template-preview-panel">
+      <button type="button" className="template-preview-backlink" onClick={onBack}>← All templates</button>
       <header>
         <div>
           <span className="template-kind template-kind--benchmark">benchmark</span>
@@ -490,6 +602,13 @@ function TemplateAgentPanel({
         ) : null}
       </div>
 
+      {currentDraft ? (
+        <div className="template-agent-draft-card">
+          <strong>Validated draft / passes benchmark_test_template_v1</strong>
+          <p>{currentDraft.name ?? currentDraft.template_id} / {currentDraft.operation} / {currentDraft.metrics.length} metrics</p>
+        </div>
+      ) : null}
+
       <footer className="template-agent-composer">
         <div className="template-agent-input-row">
           <textarea
@@ -506,12 +625,6 @@ function TemplateAgentPanel({
           />
           <button type="button" className="template-agent-send" onClick={() => sendMessage()} disabled={!canSend}>Send</button>
         </div>
-        {currentDraft ? (
-          <div className="template-agent-draft-card">
-            <strong>Validated draft / passes benchmark_test_template_v1</strong>
-            <p>{currentDraft.name ?? currentDraft.template_id} / {currentDraft.operation} / {currentDraft.metrics.length} metrics</p>
-          </div>
-        ) : null}
       </footer>
     </section>
   );
@@ -582,6 +695,7 @@ function TemplateAuthor({
   const saveEnabled = canSave && (mode === 'modify' || draftSource !== 'none');
   const title = mode === 'modify' ? 'Modify template' : 'Create template';
   const filename = `${currentDraft?.template_id || selectedTemplate?.document.template_id || 'template'}.json`;
+  const category = categorizeTemplateDocument(authorDocument);
 
   function openTab(nextTab: AuthorTab) {
     if (nextTab === 'raw' && !rawDirty) {
@@ -634,7 +748,13 @@ function TemplateAuthor({
     <div className="template-author">
       <div className="template-author__center">
         <div className="template-author__header">
-          <h2>{title}</h2>
+          <div className="template-author__heading">
+            <h2>{title}</h2>
+            <span className="template-category-badge">
+              <i className="template-category-badge__dot" aria-hidden="true" />
+              Category <strong>{categoryName(category)}</strong>
+            </span>
+          </div>
           <div className="template-author-tabs">
             <button type="button" className={tab === 'live' ? 'is-active' : ''} onClick={() => openTab('live')}>Live JSON</button>
             <button type="button" className={tab === 'advanced' ? 'is-active' : ''} onClick={() => openTab('advanced')}>Advanced form</button>
@@ -707,7 +827,8 @@ function TemplateAuthor({
 export function Templates() {
   const [templates, setTemplates] = useState<BenchmarkTestTemplateRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [mode, setMode] = useState<TemplateMode>({ kind: 'preview' });
+  const [mode, setMode] = useState<TemplateMode>({ kind: 'grid' });
+  const [category, setCategory] = useState<TemplateCategory>('all');
   const [query, setQuery] = useState('');
   const [operationFilter, setOperationFilter] = useState<TemplateOperationFilter>('all');
   const [error, setError] = useState<string | null>(null);
@@ -723,9 +844,27 @@ export function Templates() {
     [templates, selectedId]
   );
 
+  const categoryCounts = useMemo<Record<TemplateCategory, number>>(() => {
+    const counts: Record<TemplateCategory, number> = {
+      all: templates.length,
+      tool: 0,
+      agentic: 0,
+      structured: 0
+    };
+    templates.forEach((template) => {
+      counts[categorizeTemplateDocument(template.document)] += 1;
+    });
+    return counts;
+  }, [templates]);
+
+  const categorizedTemplates = useMemo(() => {
+    if (category === 'all') return templates;
+    return templates.filter((template) => categorizeTemplateDocument(template.document) === category);
+  }, [category, templates]);
+
   const filteredTemplates = useMemo(() => {
     const lower = query.trim().toLowerCase();
-    return templates.filter((template) => {
+    return categorizedTemplates.filter((template) => {
       if (operationFilter !== 'all' && template.document.operation !== operationFilter) return false;
       if (!lower) return true;
       return [
@@ -735,34 +874,34 @@ export function Templates() {
         template.document.description ?? ''
       ].some((value) => value.toLowerCase().includes(lower));
     });
-  }, [operationFilter, query, templates]);
-
-  useEffect(() => {
-    if (mode.kind !== 'preview') return;
-    setSelectedId((current) => (
-      current && filteredTemplates.some((template) => template.id === current)
-        ? current
-        : filteredTemplates[0]?.id ?? null
-    ));
-  }, [filteredTemplates, mode.kind]);
+  }, [categorizedTemplates, operationFilter, query]);
 
   const loadTemplates = useCallback(async () => {
     const data = await listBenchmarkDocuments<BenchmarkTestTemplateDocument>('test_template');
     setTemplates(data);
-    setSelectedId((current) => current && data.some((template) => template.id === current) ? current : data[0]?.id ?? null);
+    return data;
   }, []);
 
   useEffect(() => {
     loadTemplates().catch(() => setTemplates([]));
   }, [loadTemplates]);
 
+  useEffect(() => {
+    if (mode.kind !== 'preview' && mode.kind !== 'modify') return;
+    if (selectedTemplate) return;
+    setMode({ kind: 'grid' });
+    setSelectedId(null);
+  }, [mode.kind, selectedTemplate]);
+
   async function handleSave(input: BenchmarkTestTemplateDocument) {
     setError(null);
     setBusy(true);
     try {
       await saveBenchmarkDocument(input);
-      await loadTemplates();
-      setSelectedId(input.template_id);
+      const data = await loadTemplates();
+      const savedTemplate = data.find((template) => template.id === input.template_id || template.document.template_id === input.template_id) ?? null;
+      setSelectedId(savedTemplate?.id ?? input.template_id);
+      setCategory(categorizeTemplateDocument(input));
       setMode({ kind: 'preview' });
       window.dispatchEvent(new CustomEvent('templates:changed'));
     } catch (err) {
@@ -782,9 +921,8 @@ export function Templates() {
       await deleteBenchmarkDocument('test_template', template.id);
       await loadTemplates();
       window.dispatchEvent(new CustomEvent('templates:changed'));
-      if (selectedId === template.id) {
-        setSelectedId(null);
-      }
+      setSelectedId(null);
+      setMode({ kind: 'grid' });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to delete benchmark template');
     } finally {
@@ -792,11 +930,14 @@ export function Templates() {
     }
   }
 
+  const selectedCategory = selectedTemplate ? categorizeTemplateDocument(selectedTemplate.document) : category;
   const breadcrumb = mode.kind === 'create'
     ? 'Templates / New'
     : mode.kind === 'modify' && selectedTemplate
       ? `Templates / ${templateLabel(selectedTemplate)} / Modify`
-      : undefined;
+      : mode.kind === 'preview' && selectedTemplate
+        ? `Templates / ${categoryName(selectedCategory)} / ${templateLabel(selectedTemplate)}`
+        : undefined;
 
   const subtitle = breadcrumb ? `${breadcrumb} / Reusable benchmark test_template documents.` : 'Reusable benchmark test_template documents.';
 
@@ -804,84 +945,93 @@ export function Templates() {
     <>
       <MergedPageHeader title="Templates" subtitle={subtitle} />
       <section className="page templates-page templates-page--polish">
-        {templates.length === 0 && mode.kind === 'preview' ? (
-          <EmptyState
-            className="templates-empty"
-            title="Your benchmark templates live here"
-            body="Create a reusable test_template document for benchmark runs."
-            actions={<button type="button" onClick={() => setMode({ kind: 'create' })}>New benchmark template</button>}
+        <div className="templates-layout templates-layout--catalog">
+          <TemplateCategoryRail
+            category={category}
+            counts={categoryCounts}
+            onCategory={(nextCategory) => {
+              setCategory(nextCategory);
+              setMode({ kind: 'grid' });
+              setSelectedId(null);
+              setError(null);
+            }}
           />
-        ) : (
-          <div className="templates-layout">
-            <TemplatesRail
-              templates={filteredTemplates}
-              selectedId={selectedId}
-              query={query}
-              operationFilter={operationFilter}
-              mode={mode}
-              busy={busy}
-              onQuery={setQuery}
-              onFilter={setOperationFilter}
-              onSelect={(id) => {
-                setSelectedId(id);
-                setMode({ kind: 'preview' });
-                setError(null);
-              }}
-              onNew={() => {
-                setMode({ kind: 'create' });
-                setError(null);
-              }}
-            />
-            <main className="templates-main">
-              {mode.kind === 'create' ? (
-                <TemplateAuthor
-                  mode="create"
-                  selectedTemplate={null}
-                  error={error}
-                  busy={busy}
-                  onCancel={() => {
+          <main className="templates-main">
+            {mode.kind === 'create' ? (
+              <TemplateAuthor
+                mode="create"
+                selectedTemplate={null}
+                error={error}
+                busy={busy}
+                onCancel={() => {
+                  setMode({ kind: 'grid' });
+                  setError(null);
+                }}
+                onSave={handleSave}
+                onBusy={setBusy}
+                onError={setError}
+              />
+            ) : mode.kind === 'modify' && selectedTemplate ? (
+              <TemplateAuthor
+                mode="modify"
+                selectedTemplate={selectedTemplate}
+                error={error}
+                busy={busy}
+                onCancel={() => {
+                  setMode({ kind: 'preview' });
+                  setError(null);
+                }}
+                onSave={handleSave}
+                onBusy={setBusy}
+                onError={setError}
+              />
+            ) : mode.kind === 'preview' && selectedTemplate ? (
+              <>
+                {error ? <div className="error templates-page-error">{error}</div> : null}
+                <TemplatePreview
+                  template={selectedTemplate}
+                  onBack={() => {
+                    setMode({ kind: 'grid' });
+                    setError(null);
+                  }}
+                  onModify={() => {
+                    setMode({ kind: 'modify' });
+                    setError(null);
+                  }}
+                  onDelete={() => handleDelete(selectedTemplate)}
+                />
+              </>
+            ) : templates.length === 0 ? (
+              <EmptyState
+                className="templates-empty"
+                title="Your benchmark templates live here"
+                body="Create a reusable test_template document for benchmark runs."
+                actions={<button type="button" onClick={() => setMode({ kind: 'create' })}>New benchmark template</button>}
+              />
+            ) : (
+              <>
+                {error ? <div className="error templates-page-error">{error}</div> : null}
+                <TemplateBrowseGrid
+                  templates={filteredTemplates}
+                  category={category}
+                  query={query}
+                  operationFilter={operationFilter}
+                  onQuery={setQuery}
+                  onFilter={setOperationFilter}
+                  onSelect={(templateId) => {
+                    setSelectedId(templateId);
                     setMode({ kind: 'preview' });
                     setError(null);
                   }}
-                  onSave={handleSave}
-                  onBusy={setBusy}
-                  onError={setError}
-                />
-              ) : mode.kind === 'modify' && selectedTemplate ? (
-                <TemplateAuthor
-                  mode="modify"
-                  selectedTemplate={selectedTemplate}
-                  error={error}
-                  busy={busy}
-                  onCancel={() => {
-                    setMode({ kind: 'preview' });
+                  onNew={() => {
+                    setMode({ kind: 'create' });
                     setError(null);
                   }}
-                  onSave={handleSave}
-                  onBusy={setBusy}
-                  onError={setError}
                 />
-              ) : selectedTemplate ? (
-                <>
-                  {error ? <div className="error templates-page-error">{error}</div> : null}
-                  <TemplatePreview
-                    template={selectedTemplate}
-                    onModify={() => {
-                      setMode({ kind: 'modify' });
-                      setError(null);
-                    }}
-                    onDelete={() => handleDelete(selectedTemplate)}
-                  />
-                </>
-              ) : (
-                <EmptyState
-                  title="Select a template"
-                  body="Choose a benchmark test_template from the list to preview its schema, metrics, and version details."
-                />
-              )}
-            </main>
-          </div>
-        )}
+              </>
+            )}
+          </main>
+        </div>
       </section>
     </>
   );

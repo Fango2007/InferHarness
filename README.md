@@ -86,7 +86,7 @@ Start with built-in benchmark templates, then create tests for one prompt, a dat
 Benchmark documents are persisted as JSON in a file-backed library and indexed into SQLite for runtime use. Built-in documents ship with the app, while user-created templates, datasets, runtime profiles, and plans are written to a local library directory so they can be restored if the database is rebuilt.
 
 **Benchmark template agent**
-Use the Templates page agent as the primary authoring flow to challenge underspecified benchmark ideas, draft runnable `chat_completion` benchmark templates, validate them against the benchmark schema, and review the live JSON before saving. The full structured editor remains available as an Advanced escape hatch.
+Use the Templates catalog page agent as the primary authoring flow to challenge underspecified benchmark ideas, draft runnable `chat_completion` benchmark templates, validate them against the benchmark schema, browse the library by category, and review the live JSON before saving. The full structured editor remains available as an Advanced escape hatch.
 
 **Benchmark runs**
 Run the same test against one model, many models, or the same model served by different inference servers.
