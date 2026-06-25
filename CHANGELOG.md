@@ -6,6 +6,8 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-06-25
+
 ### Added
 
 - **Long-context Python function retrieval benchmark** — added seven built-in context-window templates linked to file-backed Python function-retrieval datasets, with front/middle/late function placement, two-function retrieval, and a negative control.
@@ -20,6 +22,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - **Run template capability filtering** — Run now disables benchmark templates that exceed a selected model's declared context window or require tool calling when the selected model/server is not tool-capable.
 - **Run audit and functional checks split** — Run now separates pipeline execution health from functional benchmark checks, and treats missing required terms as a visible functional failure when exact matching is disabled.
 - **Run functional failure clue** — Run now surfaces a benchmark assertion failure line when quality metrics fail despite a technically completed run, with categories such as invalid tool arguments or missing tool calls.
+- **Templates catalog shell** — `/templates` now opens as a browse-first catalog with category buckets, grouped template cards, dedicated preview state, and the existing AI-first authoring flow embedded in the new shell instead of auto-selecting the first template row.
 
 ## [0.10.0] - 2026-06-19
 
@@ -67,7 +70,6 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - **Human-readable agent workflow guidance** — `AGENTS.md` now groups workflow rules into clearer sections, documents parallel worktree expectations including `origin/main` checks before commit/push requests and resync timing before validation or merge, directs agents to create a focused branch without pausing for confirmation, and asks agents to explicitly request commit approval with a suggested message and details.
 - **Templates agent composer** — The Templates authoring panel now gives the freeform request field more space and removes the preset suggestion chip.
 - **Run selection rail polish** — the Run page model chips, benchmark template selector, and response header now use clearer selected-state borders/backgrounds and denser mono text, with redundant server summary and model helper copy removed.
-- **Templates catalog shell** — `/templates` now opens as a browse-first catalog with category buckets, grouped template cards, dedicated preview state, and the existing AI-first authoring flow embedded in the new shell instead of auto-selecting the first template row.
 
 ### Fixed
 
