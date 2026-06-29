@@ -37,6 +37,8 @@
 - For release preparation, read `RELEASING.md` before changing versions, changelog entries, release commits, or tags.
 - Use `npm version <version> --workspaces --include-workspace-root --no-git-tag-version` to keep workspace package versions aligned without creating an automatic tag.
 - Use annotated release tags (`git tag -a`) so `--follow-tags` and the release workflow pick them up.
+- Create and push the release tag only after the release commit is merged into `origin/main`; run `git fetch origin` and `git merge-base --is-ancestor <release-commit> origin/main` first.
+- Before calling a release complete, use `git ls-remote --tags origin "refs/tags/vX.Y.Z^{}"` to verify the remote tag resolves to the merged release commit, then confirm the GitHub release contains its notes and source archives.
 - If `npm run release:check` fails with `ELOOP` under `specs/specs/...`, inspect the worktree for a local recursive `specs` symlink before changing tracked files.
 
 ## Static Data and Reference Content
