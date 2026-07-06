@@ -32,6 +32,13 @@
 - After a branch is merged, resync any related worktrees from the updated base branch before continuing dependent work.
 - Re-check the Node.js runtime before installs, rebuilds, backend startup, or tests in each worktree.
 
+## Common Commands
+
+- Standard validation from the repo root: `npm run lint`, `npm test`, `npm run build`, and `npm run release:check`.
+- Workspace test shortcuts: `npm -w backend run test` and `npm -w frontend run test`.
+- Local development: `npm run dev` starts backend and frontend together; use `npm run start:backend` and `npm -w frontend run dev` when you need separate terminals or custom ports.
+- End-to-end tests: start the app with `npm run e2e:serve`, then run `npm -w frontend run e2e`.
+
 ## Release Workflow
 
 - For release preparation, read `RELEASING.md` before changing versions, changelog entries, release commits, or tags.
@@ -46,6 +53,8 @@
 - Do not hardcode static data in application code.
 - Store static prompts, templates, schemas, fixtures, examples, and other long-lived reference content in dedicated files or data resources.
 - Keep code responsible for orchestration, validation, and transformation rather than embedding large static payloads directly.
+- Use the benchmark document APIs or UI for user-created templates, datasets, runtime profiles, and plans so changes persist under `INFERHARNESS_BENCHMARK_LIBRARY_ROOT` and can be re-imported after database rebuilds.
+- Use the Datasets page or JSONL dataset-file API for benchmark item files under `INFERHARNESS_BENCHMARK_DATASET_ROOT`; saved files should stay paired with synced `dataset_manifest` documents.
 
 ## Node.js Runtime
 
