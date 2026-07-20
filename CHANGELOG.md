@@ -14,6 +14,10 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 - **Orphaned manual inference flow** — removed the unused `EvaluationForm` frontend and its dedicated `/eval-inference` API while retaining the Evaluate scoring queue, evaluation persistence, and leaderboard.
 
+### Security
+
+- **Dependency vulnerability fixes** — refreshed the npm lockfile to patched Vite, Undici, ECharts, and JS-YAML releases, clearing all reported `npm audit` vulnerabilities without forced or breaking upgrades.
+
 ## [0.11.0] - 2026-06-25
 
 ### Added
