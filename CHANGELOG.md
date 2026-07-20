@@ -10,6 +10,10 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 - **Agent workflow commands** — `AGENTS.md` now records the common validation, development, E2E, and benchmark data persistence workflows agents should use when changing the repo.
 
+### Removed
+
+- **Orphaned manual inference flow** — removed the unused `EvaluationForm` frontend and its dedicated `/eval-inference` API while retaining the Evaluate scoring queue, evaluation persistence, and leaderboard.
+
 ## [0.11.0] - 2026-06-25
 
 ### Added

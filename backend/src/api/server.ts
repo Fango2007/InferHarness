@@ -9,7 +9,6 @@ import { registerResultsViewRoutes } from './routes/results-view.js';
 import { registerInferenceServersRoutes } from './routes/inference-servers.js';
 import { registerModelsRoutes } from './routes/models.js';
 import { registerSystemRoutes } from './routes/system.js';
-import { registerEvalInferenceRoutes } from './routes/eval-inference.js';
 import { registerEvaluationsRoutes } from './routes/evaluations.js';
 import { registerLeaderboardRoutes } from './routes/leaderboard.js';
 import { registerArchitectureRoutes } from './routes/architecture.js';
@@ -100,7 +99,6 @@ export function createServer() {
   registerInferenceServersRoutes(app);
   registerModelsRoutes(app);
   registerResultsViewRoutes(app);
-  registerEvalInferenceRoutes(app);
   registerEvaluationsRoutes(app);
   registerEvaluationQueueRoutes(app);
   registerInferenceParamPresetRoutes(app);
