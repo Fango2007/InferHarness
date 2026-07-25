@@ -1,0 +1,369 @@
+/* ============================================================
+   InferHarness — Color & Type Foundations
+   ------------------------------------------------------------
+   The aesthetic is "lab notebook on warm parchment": a calm
+   reading surface for engineers staring at logs and metrics
+   for hours. Near-black ink on cream, with golden accents
+   reserved for *selection* and *attention*, not decoration.
+   ============================================================ */
+
+/* ---- 1. Typefaces ------------------------------------------
+   Self-hosted IBM Plex (SIL OFL 1.1). WOFF2 files live in
+   ./fonts/ — paths are relative so any stylesheet importing
+   this file resolves them from its own location. If you move
+   colors_and_type.css, keep fonts/ next to it.
+
+   Loaded subset: Latin only. Sans 400/500/600, Mono 400/600,
+   Serif 500. Add weights here if a new component needs them.
+   ------------------------------------------------------------ */
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/IBMPlexSans-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('fonts/IBMPlexSans-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('fonts/IBMPlexSans-SemiBold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/IBMPlexMono-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('fonts/IBMPlexMono-SemiBold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Serif';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('fonts/IBMPlexSerif-Medium.woff2') format('woff2');
+}
+
+:root {
+  /* font stacks */
+  --font-sans:  'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+  --font-mono:  'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  --font-serif: 'IBM Plex Serif', 'Iowan Old Style', 'Apple Garamond', Georgia, serif;
+
+  /* ---- 2. Type scale ---------------------------------------
+     The original tokens are dense (11–24px). I'm extending
+     upwards so display surfaces (modals, hero metrics, slide
+     headers) have proper presence, while keeping data-table
+     scale untouched.
+     -------------------------------------------------------- */
+
+  --fs-xs:        11px;   /* eyebrow, micro-meta */
+  --fs-sm:        12px;   /* meta, table head, health pill */
+  --fs-base:      13px;   /* table cells, dense data */
+  --fs-md:        14px;   /* body / form text */
+  --fs-lg:        16px;   /* lead paragraph */
+  --fs-xl:        20px;   /* h3 */
+  --fs-2xl:       24px;   /* h2 */
+  --fs-3xl:       32px;   /* h1 / hero metric */
+  --fs-4xl:       44px;   /* display */
+  --fs-5xl:       64px;   /* slide display */
+
+  --lh-tight:     1.15;
+  --lh-snug:      1.3;
+  --lh-normal:    1.5;
+  --lh-loose:     1.65;
+
+  --fw-regular:   400;
+  --fw-medium:    500;
+  --fw-semibold:  600;
+  --fw-bold:      700;
+
+  --tracking-tight:    -0.02em;   /* h1, h2, h3 */
+  --tracking-display:  -0.03em;   /* hero numerals */
+  --tracking-label:     0.12em;   /* metric titles, table headers */
+  --tracking-eyebrow:   0.18em;   /* eyebrow / kicker */
+
+  /* ---- 3. Colors — neutral parchment ramp -----------------
+     Existing tokens covered the middle of this ramp. I added
+     bookend stops (paper-0, ink-0) to support display moods,
+     plus a darker chrome ink for "code window" surfaces.
+     -------------------------------------------------------- */
+
+  --paper-0:      #fdfbf5;   /* brightest, used for hover lift */
+  --paper-1:      #fffdf8;   /* card / modal surface (token: surface) */
+  --paper-2:      #f9f6ef;   /* row stripe, inner panel (token: surface-subtle) */
+  --paper-3:      #f5f1ea;   /* page top of gradient */
+  --paper-4:      #efe9df;   /* page mid */
+  --paper-5:      #e9e3d9;   /* tab inactive */
+  --paper-6:      #e4ddd1;   /* page bottom of gradient */
+  --paper-7:      #dacfc0;   /* default border */
+  --paper-8:      #c7c0b3;   /* input border, deeper rule */
+  --paper-9:      #b8b1a5;   /* disabled fill, neutral chip */
+
+  --ink-9:        #1b1a17;   /* default text + primary fill */
+  --ink-8:        #2b2821;   /* env-key, headlines */
+  --ink-7:        #3f3a33;   /* button pending, body strong */
+  --ink-6:        #4f4a43;   /* secondary text */
+  --ink-5:        #5b554c;   /* subtle / footnote dark */
+  --ink-4:        #645f57;   /* eyebrow text */
+  --ink-3:        #6a645b;   /* muted */
+  --ink-2:        #7a7266;   /* footnote */
+  --ink-1:        #171615;   /* darkest — code <pre> background */
+
+  /* ---- 4. Page surfaces ----------------------------------- */
+  --bg-page:      radial-gradient(circle at top,
+                    var(--paper-3) 0%,
+                    var(--paper-4) 45%,
+                    var(--paper-6) 100%);
+  --bg-header:    linear-gradient(120deg,
+                    rgba(255, 249, 241, 0.9),
+                    rgba(240, 233, 223, 0.9));
+  --bg-pre-dark:  var(--ink-1);
+  --bg-pre-light: #f6f1e6;
+  --bg-error:     #ffe8e5;
+  --bg-tab-active:    #fff8ea;
+  --bg-tab-inactive:  var(--paper-5);
+  --bg-nav-active:    #fff4e6;
+  --bg-selected:      #fff1d6;
+
+  /* ---- 5. Accent — gold ("selection") --------------------
+     The system's only chromatic accent. Used when the user
+     has *picked* something or when the system is *focused*
+     on a thing. Never decorative.
+     -------------------------------------------------------- */
+  --gold-1:       #f3e6c4;   /* tint, focus ring soft */
+  --gold-2:       #d9bd86;   /* hover on accent surfaces */
+  --gold-3:       #b79c6a;   /* default golden border (active tab) */
+  --gold-4:       #b59862;   /* selected list border */
+  --gold-5:       #8c7340;   /* deep — used very sparingly */
+
+  /* ---- 6. Semantic ---------------------------------------- */
+  --ok:           #2f9e44;
+  --ok-tint:      rgba(47, 158, 68, 0.12);
+  --ok-halo:      rgba(47, 158, 68, 0.2);
+
+  --danger:       #c92a2a;
+  --danger-icon:  #b42318;
+  --danger-tint:  rgba(201, 42, 42, 0.1);
+  --danger-halo:  rgba(201, 42, 42, 0.2);
+
+  --pending:      #b3aca2;
+  --pending-text: #766f66;
+  --pending-halo: rgba(179, 172, 162, 0.2);
+
+  --warning-dot:  #f2c94c;
+  --warning-tint: rgba(242, 201, 76, 0.18);
+
+  /* ---- 7. Borders ----------------------------------------- */
+  --border-default:    var(--paper-7);
+  --border-input:      var(--paper-8);
+  --border-divider:    #e1d8cb;
+  --border-table-row:  #e1dbcf;
+  --border-error:      #f4c7c3;
+  --border-tab:        #cfc7bc;
+  --border-tabs-pill:  #b8b1a5;
+  --border-tabs-rule:  #d9d1c6;
+  --border-header:     #d4cbbf;
+  --border-nav:        #d8d1c4;
+  --border-nav-active: #c8bfb2;
+  --border-health:     #d7cdbf;
+  --border-selected:   var(--gold-4);
+
+  /* ---- 8. Radii ------------------------------------------- */
+  --r-pill:       999px;
+  --r-input:      8px;
+  --r-row:        10px;
+  --r-list:       12px;
+  --r-card-sm:    14px;
+  --r-card:       16px;
+  --r-nav-btn:    14px;
+  --r-tab:        10px 10px 0 0;
+
+  /* ---- 9. Shadow system ----------------------------------
+     The system uses warm-ink shadows (rgba 27,26,23). I
+     added an "elevated" tier for modals & popovers and
+     two "halo" tokens for focus rings.
+     -------------------------------------------------------- */
+  --shadow-card:        0 12px 30px rgba(27, 26, 23, 0.08);
+  --shadow-card-hover:  0 16px 38px rgba(27, 26, 23, 0.12);
+  --shadow-header:      0 12px 30px rgba(24, 22, 18, 0.08);
+  --shadow-metrics:     0 12px 24px rgba(27, 26, 23, 0.08);
+  --shadow-nav:         0 8px 16px rgba(27, 26, 23, 0.14);
+  --shadow-nav-active:  inset 0 2px 4px rgba(27, 26, 23, 0.18),
+                        0 4px 10px rgba(27, 26, 23, 0.12);
+  --shadow-nav-press:   inset 0 3px 6px rgba(27, 26, 23, 0.22),
+                        0 2px 6px rgba(27, 26, 23, 0.12);
+  --shadow-modal:       0 20px 40px rgba(27, 26, 23, 0.2);
+  --shadow-popover:     0 8px 24px rgba(27, 26, 23, 0.14);
+
+  --halo-focus:         0 0 0 3px var(--gold-1),
+                        0 0 0 4px var(--gold-3);
+  --halo-ok:            0 0 0 4px var(--ok-halo);
+  --halo-danger:        0 0 0 4px var(--danger-halo);
+  --halo-pending:       0 0 0 4px var(--pending-halo);
+
+  --overlay-modal:      rgba(27, 26, 23, 0.4);
+
+  /* ---- 10. Spacing scale (4-base, with 2px micro) -------- */
+  --s-0:  0;
+  --s-1:  2px;
+  --s-2:  4px;
+  --s-3:  6px;
+  --s-4:  8px;
+  --s-5:  10px;
+  --s-6:  12px;
+  --s-7:  14px;
+  --s-8:  16px;
+  --s-10: 20px;
+  --s-12: 24px;
+  --s-16: 32px;
+  --s-20: 40px;
+  --s-24: 48px;
+  --s-32: 64px;
+
+  /* ---- 11. Motion --------------------------------------- */
+  --ease-out:     cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-spring:  cubic-bezier(0.5, 1.6, 0.4, 1);
+  --t-fast:       120ms;
+  --t-base:       180ms;
+  --t-slow:       320ms;
+  --xfm-press:    translateY(1px);
+
+  /* ---- 12. Layout --------------------------------------- */
+  --page-max:       960px;
+  --page-max-wide:  1200px;
+  --sidebar-w:      72px;
+  --nav-btn-size:   44px;
+  --input-h:        34px;
+  --bp-mobile:      900px;
+}
+
+/* ============================================================
+   Semantic typography — apply via class or element
+   ============================================================ */
+
+.h1, h1 {
+  font-family: var(--font-sans);
+  font-size: var(--fs-3xl);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--lh-tight);
+  color: var(--ink-9);
+  margin: 0;
+}
+
+.h2, h2 {
+  font-family: var(--font-sans);
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--lh-snug);
+  color: var(--ink-9);
+  margin: 0;
+}
+
+.h3, h3 {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--lh-snug);
+  color: var(--ink-8);
+  margin: 0;
+}
+
+.display {
+  font-family: var(--font-sans);
+  font-size: var(--fs-4xl);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-display);
+  line-height: var(--lh-tight);
+  color: var(--ink-9);
+}
+
+.metric {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1, "ss01" 1;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-3xl);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--ink-9);
+}
+
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.label {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-normal);
+  color: var(--ink-9);
+}
+
+.body-sm {
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: var(--lh-normal);
+  color: var(--ink-6);
+}
+
+.meta {
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+.footnote {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.code, code, kbd, samp, pre {
+  font-family: var(--font-mono);
+  font-size: var(--fs-base);
+  font-feature-settings: "ss01" 1, "zero" 1;
+}
+
+.code-inline {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--bg-pre-light);
+  border: 1px solid var(--border-divider);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--ink-8);
+}

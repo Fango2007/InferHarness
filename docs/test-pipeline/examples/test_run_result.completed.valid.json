@@ -1,0 +1,73 @@
+{
+  "kind": "test_run_result",
+  "schema_version": "benchmark_test_run_result_v1",
+  "engine_version": "0.1.0",
+  "run_id": "run_20260516_001",
+  "instantiation_id": "test_20260516_001",
+  "status": "completed",
+  "started_at": "2026-05-16T15:40:00Z",
+  "completed_at": "2026-05-16T15:42:00Z",
+  "instantiation_snapshot": {
+    "instantiation_id": "test_20260516_001"
+  },
+  "stage_results": [
+    {
+      "stage_id": "measure",
+      "stage_type": "dataset_loop",
+      "status": "completed",
+      "record_metrics": true,
+      "run_count": 1,
+      "results": [
+        {
+          "dataset_item_id": "p001",
+          "iteration": 1,
+          "response_id": "resp_001"
+        }
+      ],
+      "errors": [],
+      "warnings": []
+    }
+  ],
+  "raw_responses": [
+    {
+      "response_id": "resp_001",
+      "status_code": 200,
+      "raw_response": {
+        "message": {
+          "role": "assistant",
+          "content": "RAG combines retrieval and generation."
+        }
+      }
+    }
+  ],
+  "normalized_responses": [
+    {
+      "response_id": "resp_001",
+      "ok": true,
+      "content": "RAG combines retrieval and generation.",
+      "input_tokens": 42,
+      "output_tokens": 128,
+      "elapsed_ms": 1240.52
+    }
+  ],
+  "metric_results": [
+    {
+      "response_id": "resp_001",
+      "input_tokens": 42,
+      "output_tokens": 128,
+      "elapsed_ms": 1240.52,
+      "tokens_per_second": 103.18
+    }
+  ],
+  "aggregated_metrics": {
+    "elapsed_ms": {
+      "mean": 1240.52,
+      "valid_sample_count": 1,
+      "expected_sample_count": 1,
+      "missing_sample_count": 0,
+      "partial_execution": false
+    }
+  },
+  "errors": [],
+  "warnings": []
+}

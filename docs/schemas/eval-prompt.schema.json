@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "eval-prompt.schema.json",
+  "title": "EvalPrompt",
+  "description": "A prompt record used for manual LLM evaluation sessions.",
+  "version": "1.0.0",
+  "type": "object",
+  "required": ["text"],
+  "additionalProperties": false,
+  "properties": {
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 10000,
+      "description": "Raw prompt text submitted to the LLM."
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 50 },
+      "maxItems": 20,
+      "uniqueItems": true,
+      "default": [],
+      "description": "Categorical tags for filtering evaluations on the leaderboard."
+    }
+  }
+}

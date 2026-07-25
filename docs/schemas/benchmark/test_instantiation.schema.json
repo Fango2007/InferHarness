@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://inferharness.local/schemas/benchmark/test_instantiation.schema.json",
+  "title": "Benchmark TestInstantiation",
+  "description": "Immutable, resolved benchmark snapshot ready for execution.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "instantiation_id", "created_at", "template", "model_profile", "model_snapshot", "operation_spec", "runtime_parameters", "dataset"],
+  "properties": {
+    "kind": { "type": "string", "const": "test_instantiation" },
+    "schema_version": { "type": "string", "const": "benchmark_test_instantiation_v1" },
+    "instantiation_id": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "template": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["template_id", "template_version", "template_hash", "snapshot"],
+      "properties": {
+        "template_id": { "type": "string", "minLength": 1 },
+        "template_version": { "type": "string", "minLength": 1 },
+        "template_hash": { "type": "string", "pattern": "^sha256:[a-fA-F0-9]{64}$" },
+        "snapshot": {
+          "type": "object",
+          "description": "Temporary checkpoint-1 loose resolved template snapshot. Target contract: resolved snapshot shape from test_template.schema.json.",
+          "$comment": "Harden by inlining or bundling the resolved test_template.schema.json snapshot shape while preserving standalone validation.",
+          "additionalProperties": true
+        }
+      }
+    },
+    "model_profile": {
+      "type": "object",
+      "description": "Temporary checkpoint-1 loose embedded model profile. Target contract: model_profile.schema.json.",
+      "$comment": "Harden by inlining or bundling model_profile.schema.json; avoid external refs unless the validator registers referenced schemas.",
+      "additionalProperties": true
+    },
+    "model_snapshot": {
+      "type": "object",
+      "description": "Temporary checkpoint-1 loose embedded model snapshot. Target contract: model_snapshot.schema.json.",
+      "$comment": "Harden by inlining or bundling model_snapshot.schema.json; avoid external refs unless the validator registers referenced schemas.",
+      "additionalProperties": true
+    },
+    "model_snapshot_hash": { "type": "string", "pattern": "^sha256:[a-fA-F0-9]{64}$" },
+    "operation_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "url", "endpoint", "protocol", "operation"],
+      "properties": {
+        "method": { "type": "string", "enum": ["GET", "POST"] },
+        "url": { "type": "string", "minLength": 1 },
+        "endpoint": { "type": "string", "minLength": 1 },
+        "protocol": { "type": "string", "enum": ["ollama_chat", "ollama_generate", "ollama_embedding", "ollama_list_models", "openai_chat", "openai_embedding", "openai_list_models", "anthropic_messages", "gemini_generate_content"] },
+        "operation": { "type": "string", "enum": ["chat_completion", "completion", "embedding", "list_models", "healthcheck"] },
+        "supports_streaming": { "type": "boolean" },
+        "supports_usage": { "type": "boolean" }
+      }
+    },
+    "runtime_parameters": {
+      "type": "object",
+      "description": "Temporary checkpoint-1 loose embedded runtime parameters. Target contracts: runtime_profile.schema.json#/runtime_parameters and backend/src/schemas/inference-config.schema.json.",
+      "$comment": "Harden by inlining or bundling the runtime parameter definition while preserving standalone validation.",
+      "additionalProperties": true
+    },
+    "execution_policy": {
+      "type": "object",
+      "description": "Temporary checkpoint-1 loose embedded execution policy. Target contract: runtime_profile.schema.json#/execution_policy.",
+      "$comment": "Harden by inlining or bundling the execution policy definition while preserving standalone validation.",
+      "additionalProperties": true
+    },
+    "dataset": {
+      "type": "object",
+      "description": "Temporary checkpoint-1 loose embedded dataset manifest. Target contract: dataset_manifest.schema.json.",
+      "$comment": "Harden by inlining or bundling dataset_manifest.schema.json; keep fixture validation aligned with strict manifest rules.",
+      "additionalProperties": true
+    },
+    "metadata": { "type": "object", "additionalProperties": true },
+    "extensions": { "type": "object", "additionalProperties": true }
+  }
+}

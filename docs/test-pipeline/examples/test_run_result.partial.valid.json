@@ -1,0 +1,48 @@
+{
+  "kind": "test_run_result",
+  "schema_version": "benchmark_test_run_result_v1",
+  "engine_version": "0.1.0",
+  "run_id": "run_20260516_002",
+  "instantiation_id": "test_20260516_001",
+  "status": "cancelled",
+  "started_at": "2026-05-16T16:00:00Z",
+  "completed_at": "2026-05-16T16:01:00Z",
+  "instantiation_snapshot": {
+    "instantiation_id": "test_20260516_001"
+  },
+  "stage_results": [
+    {
+      "stage_id": "measure",
+      "stage_type": "dataset_loop",
+      "status": "cancelled",
+      "record_metrics": true,
+      "run_count": 1,
+      "results": [],
+      "errors": [],
+      "warnings": [
+        {
+          "code": "partial_stage",
+          "message": "Run cancelled before all dataset items were executed."
+        }
+      ]
+    }
+  ],
+  "raw_responses": [],
+  "normalized_responses": [],
+  "metric_results": [],
+  "aggregated_metrics": {
+    "elapsed_ms": {
+      "valid_sample_count": 0,
+      "expected_sample_count": 100,
+      "missing_sample_count": 100,
+      "partial_execution": true
+    }
+  },
+  "errors": [],
+  "warnings": [
+    {
+      "code": "partial_execution",
+      "message": "Run was cancelled before completion."
+    }
+  ]
+}

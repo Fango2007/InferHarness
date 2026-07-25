@@ -1,0 +1,18 @@
+{
+  "kind": "test_template",
+  "schema_version": "benchmark_test_template_v1",
+  "template_id": "bad_template_v1",
+  "template_version": "1.0.0",
+  "operation": "chat_completion",
+  "required_capabilities": {
+    "magical_reasoning": true
+  },
+  "stages": [
+    {
+      "id": "measure",
+      "type": "dataset_loop"
+    }
+  ],
+  "metrics": ["elapsed_ms"],
+  "aggregations": ["mean"]
+}

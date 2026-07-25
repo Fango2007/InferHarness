@@ -1,6 +1,6 @@
-# Backend Schemas
+# InferHarness Schema Specifications
 
-The backend runtime schema files live in this directory. Application code validates persisted records, runtime snapshots, evaluation payloads, benchmark documents, and architecture inspection output from this source-tree copy. The durable documentation copy lives under `docs/schemas/`; keep both locations synchronized when schema contracts change.
+This directory documents the active application schemas. These files describe the canonical shapes for persisted records, runtime snapshots, evaluation payloads, benchmark documents, and architecture inspection output. Runtime backend code loads its implementation copy from `backend/src/schemas/`; it must not load schemas from `docs/`. Keep the documented schemas here synchronized with the backend source copy when schema contracts change. New benchmark pipeline contracts should reuse these object names and nested structures directly, or extend the canonical schema when a benchmark need is missing.
 
 **`model-schema.json`**
 Role: canonical model catalog record.

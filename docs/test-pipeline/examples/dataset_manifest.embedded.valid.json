@@ -1,0 +1,38 @@
+{
+  "kind": "dataset_manifest",
+  "schema_version": "benchmark_dataset_manifest_v1",
+  "dataset_id": "small_prompts_v1",
+  "source": {
+    "source_type": "inline",
+    "format": "json",
+    "description": "Small embedded dataset for a unit benchmark."
+  },
+  "canonicalization_version": "dataset_canonical_v1",
+  "snapshot_policy": "embedded",
+  "dataset_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "item_count": 1,
+  "items": [
+    {
+      "id": "p001",
+      "prompt": "Explain RAG in simple terms.",
+      "system_prompt": null,
+      "interaction_mode": "chat",
+      "tools": [],
+      "expected_tool_calls": [],
+      "expected_answer": null,
+      "expected_format": "free_text",
+      "expected_schema": null,
+      "evaluation": null,
+      "tags": ["rag", "simple"],
+      "metadata": {}
+    }
+  ],
+  "item_hashes": [
+    {
+      "item_id": "p001",
+      "hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  ],
+  "item_manifest_ref": null,
+  "snapshot_blob_ref": null
+}

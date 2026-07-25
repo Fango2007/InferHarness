@@ -1,0 +1,247 @@
+{
+  "model_schema_version": "1.2.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Model Schema",
+  "type": "object",
+  "required": [
+    "model_schema_version",
+    "model",
+    "identity",
+    "architecture",
+    "modalities",
+    "capabilities",
+    "limits",
+    "performance",
+    "configuration",
+    "discovery",
+    "raw"
+  ],
+  "properties": {
+    "model_schema_version": { "type": "string" },
+    "model": {
+      "type": "object",
+      "required": [
+        "model_id",
+        "server_id",
+        "display_name",
+        "active",
+        "archived",
+        "created_at",
+        "updated_at",
+        "archived_at"
+      ],
+      "properties": {
+        "model_id": { "type": "string" },
+        "server_id": { "type": "string" },
+        "display_name": { "type": "string", "pattern": "\\S" },
+        "active": { "type": "boolean" },
+        "archived": { "type": "boolean" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "archived_at": { "type": ["string", "null"] },
+        "base_model_name": { "type": ["string", "null"] }
+      },
+      "allOf": [
+        {
+          "not": {
+            "properties": {
+              "active": { "const": true },
+              "archived": { "const": true }
+            },
+            "required": ["active", "archived"]
+          }
+        }
+      ]
+    },
+    "identity": {
+      "type": "object",
+      "required": ["provider", "family", "version", "revision", "checksum"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["openai", "meta", "mistral", "qwen", "google", "moonshot", "cohere", "deepseek", "anthropic", "nvidia", "zai", "custom", "unknown"]
+        },
+        "family": { "type": ["string", "null"] },
+        "version": { "type": ["string", "null"] },
+        "revision": { "type": ["string", "null"] },
+        "checksum": { "type": ["string", "null"] },
+        "quantized_provider": { "type": ["string", "null"] }
+      }
+    },
+    "architecture": {
+      "type": "object",
+      "required": ["type", "parameter_count", "precision", "quantisation"],
+      "properties": {
+        "type": { "type": "string", "enum": ["decoder-only", "encoder-decoder", "other", "unknown"] },
+        "parameter_count": { "type": ["number", "null"] },
+        "parameter_count_label": { "type": ["string", "null"] },
+        "active_parameter_label": { "type": ["string", "null"] },
+        "precision": {
+          "type": "string",
+          "enum": ["fp32", "fp16", "bf16", "int8", "int4", "mixed", "unknown"]
+        },
+        "quantisation": {
+          "type": "object",
+          "required": ["method", "bits", "group_size"],
+          "properties": {
+            "method": {
+              "type": "string",
+              "enum": ["gguf", "gptq", "awq", "mlx", "none", "unknown"]
+            },
+            "bits": { "type": ["number", "null"] },
+            "group_size": { "type": ["number", "null"] },
+            "scheme": {
+              "type": ["string", "null"],
+              "enum": ["k-quant", "legacy", "tensorwise", "unknown", null]
+            },
+            "variant": {
+              "type": ["string", "null"],
+              "enum": ["S", "M", "L", null]
+            },
+            "weight_format": {
+              "type": ["string", "null"],
+              "description": "Canonical published quantization label, e.g. Q4_K_M"
+            }
+          }
+        },
+        "format": {
+          "type": ["string", "null"],
+          "enum": ["MLX", "GGUF", "GPTQ", "AWQ", "SafeTensors", null]
+        }
+      }
+    },
+    "modalities": {
+      "type": "object",
+      "required": ["input", "output"],
+      "properties": {
+        "input": { "type": "array", "items": { "type": "string" } },
+        "output": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "required": ["generation", "multimodal", "reasoning"],
+      "properties": {
+        "generation": {
+          "type": "object",
+          "required": ["text", "json_schema_output", "tools", "embeddings"],
+          "properties": {
+            "text": { "type": "boolean" },
+            "json_schema_output": { "type": "boolean" },
+            "tools": { "type": "boolean" },
+            "embeddings": { "type": "boolean" }
+          }
+        },
+        "multimodal": {
+          "type": "object",
+          "required": ["vision", "audio"],
+          "properties": {
+            "vision": { "type": "boolean" },
+            "audio": { "type": "boolean" }
+          }
+        },
+        "reasoning": {
+          "type": "object",
+          "required": ["supported", "explicit_tokens"],
+          "properties": {
+            "supported": { "type": "boolean" },
+            "explicit_tokens": { "type": "boolean" }
+          }
+        },
+        "use_case": {
+          "type": "object",
+          "properties": {
+            "thinking": { "type": "boolean" },
+            "coding": { "type": "boolean" },
+            "instruct": { "type": "boolean" },
+            "mixture_of_experts": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "required": ["context_window_tokens", "max_output_tokens", "max_images", "max_batch_size"],
+      "properties": {
+        "context_window_tokens": { "type": ["number", "null"] },
+        "max_output_tokens": { "type": ["number", "null"] },
+        "max_images": { "type": ["number", "null"] },
+        "max_batch_size": { "type": ["number", "null"] }
+      }
+    },
+    "performance": {
+      "type": "object",
+      "required": ["theoretical", "observed"],
+      "properties": {
+        "theoretical": {
+          "type": "object",
+          "required": ["tokens_per_second"],
+          "properties": {
+            "tokens_per_second": { "type": ["number", "null"] }
+          }
+        },
+        "observed": {
+          "type": "object",
+          "required": [
+            "prefill_tps",
+            "generation_tps",
+            "latency_ms_p50",
+            "latency_ms_p95",
+            "measured_at"
+          ],
+          "properties": {
+            "prefill_tps": { "type": ["number", "null"] },
+            "generation_tps": { "type": ["number", "null"] },
+            "latency_ms_p50": { "type": ["number", "null"] },
+            "latency_ms_p95": { "type": ["number", "null"] },
+            "measured_at": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+    "configuration": {
+      "type": "object",
+      "required": ["default_parameters", "context_strategy"],
+      "properties": {
+        "default_parameters": {
+          "type": "object",
+          "required": [
+            "temperature",
+            "top_p",
+            "top_k",
+            "presence_penalty",
+            "frequency_penalty",
+            "seed"
+          ],
+          "properties": {
+            "temperature": { "type": ["number", "null"] },
+            "top_p": { "type": ["number", "null"] },
+            "top_k": { "type": ["number", "null"] },
+            "presence_penalty": { "type": ["number", "null"] },
+            "frequency_penalty": { "type": ["number", "null"] },
+            "seed": { "type": ["number", "null"] }
+          }
+        },
+        "context_strategy": {
+          "type": "object",
+          "required": ["type", "window_tokens"],
+          "properties": {
+            "type": { "type": "string", "enum": ["truncate", "sliding", "summarise", "custom"] },
+            "window_tokens": { "type": ["number", "null"] }
+          }
+        }
+      }
+    },
+    "discovery": {
+      "type": "object",
+      "required": ["retrieved_at", "source"],
+      "properties": {
+        "retrieved_at": { "type": "string" },
+        "source": { "type": "string", "enum": ["server", "manual", "test"] },
+        "discovery_status": { "type": "string", "enum": ["present", "absent"] }
+      }
+    },
+    "raw": { "type": "object" }
+  }
+}

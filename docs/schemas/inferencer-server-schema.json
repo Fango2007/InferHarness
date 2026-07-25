@@ -1,0 +1,262 @@
+{
+  "inference_server_schema_version": "1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Inference Server Schema",
+  "type": "object",
+  "required": [
+    "inference_server",
+    "runtime",
+    "endpoints",
+    "auth",
+    "capabilities",
+    "discovery",
+    "raw"
+  ],
+  "properties": {
+    "inference_server": {
+      "type": "object",
+      "required": [
+        "server_id",
+        "display_name",
+        "active",
+        "archived",
+        "created_at",
+        "updated_at",
+        "archived_at"
+      ],
+      "properties": {
+        "server_id": { "type": "string" },
+        "display_name": { "type": "string", "pattern": "\\S" },
+        "active": { "type": "boolean" },
+        "archived": { "type": "boolean" },
+        "created_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "archived_at": { "type": ["string", "null"] }
+      },
+      "allOf": [
+        {
+          "not": {
+            "properties": {
+              "active": { "const": true },
+              "archived": { "const": true }
+            },
+            "required": ["active", "archived"]
+          }
+        }
+      ]
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["retrieved_at", "source", "server_software", "api", "platform", "hardware"],
+      "properties": {
+        "retrieved_at": { "type": "string" },
+        "source": { "type": "string", "enum": ["server", "client", "mixed"] },
+        "server_software": {
+          "type": "object",
+          "required": ["name", "version", "build"],
+          "properties": {
+            "name": { "type": "string" },
+            "version": { "type": ["string", "null"] },
+            "build": { "type": ["string", "null"] }
+          }
+        },
+        "api": {
+          "type": "object",
+          "required": ["schema_family", "api_version"],
+          "properties": {
+            "schema_family": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "enum": ["openai-compatible", "ollama", "anthropic", "gemini", "custom"] }
+            },
+            "api_version": { "type": ["string", "null"] }
+          }
+        },
+        "platform": {
+          "type": "object",
+          "required": ["os", "container"],
+          "properties": {
+            "os": {
+              "type": "object",
+              "required": ["name", "version", "arch"],
+              "properties": {
+                "name": { "type": "string", "enum": ["macos", "linux", "windows", "unknown"] },
+                "version": { "type": ["string", "null"] },
+                "arch": { "type": "string", "enum": ["arm64", "x86_64", "unknown"] }
+              }
+            },
+            "container": {
+              "type": "object",
+              "required": ["type", "image"],
+              "properties": {
+                "type": { "type": "string", "enum": ["docker", "podman", "none", "unknown"] },
+                "image": { "type": ["string", "null"] }
+              }
+            }
+          }
+        },
+        "hardware": {
+          "type": "object",
+          "required": ["cpu", "gpu", "ram_mb"],
+          "properties": {
+            "cpu": {
+              "type": "object",
+              "required": ["model", "cores"],
+              "properties": {
+                "model": { "type": ["string", "null"] },
+                "cores": { "type": ["number", "null"] }
+              }
+            },
+            "gpu": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["vendor", "model", "vram_mb"],
+                "properties": {
+                  "vendor": {
+                    "type": "string",
+                    "enum": ["nvidia", "amd", "apple", "intel", "google", "unknown"]
+                  },
+                  "model": { "type": ["string", "null"] },
+                  "vram_mb": { "type": ["number", "null"] },
+                  "gpu_cores": { "type": ["number", "null"] },
+                  "neural_engine_tops": { "type": ["number", "null"] }
+                }
+              }
+            },
+            "ram_mb": { "type": ["number", "null"] }
+          }
+        }
+      }
+    },
+    "endpoints": {
+      "type": "object",
+      "required": ["base_url", "health_url", "https"],
+      "properties": {
+        "base_url": { "type": "string", "pattern": "^https?://" },
+        "health_url": { "type": ["string", "null"] },
+        "https": { "type": "boolean" }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "required": ["type", "header_name", "token_env"],
+      "properties": {
+        "type": { "type": "string", "enum": ["none", "bearer", "basic", "oauth", "custom"] },
+        "header_name": { "type": "string" },
+        "token_env": { "type": ["string", "null"] },
+        "token": { "type": ["string", "null"] },
+        "token_present": { "type": "boolean" }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "required": ["server", "generation", "multimodal", "reasoning", "concurrency", "enforcement"],
+      "properties": {
+        "server": {
+          "type": "object",
+          "required": ["streaming", "models_endpoint"],
+          "properties": {
+            "streaming": { "type": "boolean" },
+            "models_endpoint": { "type": "boolean" }
+          }
+        },
+        "generation": {
+          "type": "object",
+          "required": ["text", "json_schema_output", "tools", "embeddings"],
+          "properties": {
+            "text": { "type": "boolean" },
+            "json_schema_output": { "type": "boolean" },
+            "tools": { "type": "boolean" },
+            "embeddings": { "type": "boolean" }
+          }
+        },
+        "multimodal": {
+          "type": "object",
+          "required": ["vision", "audio"],
+          "properties": {
+            "vision": {
+              "type": "object",
+              "required": ["input_images", "output_images"],
+              "properties": {
+                "input_images": { "type": "boolean" },
+                "output_images": { "type": "boolean" }
+              }
+            },
+            "audio": {
+              "type": "object",
+              "required": ["input_audio", "output_audio"],
+              "properties": {
+                "input_audio": { "type": "boolean" },
+                "output_audio": { "type": "boolean" }
+              }
+            }
+          }
+        },
+        "reasoning": {
+          "type": "object",
+          "required": ["exposed", "token_budget_configurable"],
+          "properties": {
+            "exposed": { "type": "boolean" },
+            "token_budget_configurable": { "type": "boolean" }
+          }
+        },
+        "concurrency": {
+          "type": "object",
+          "required": ["parallel_requests", "parallel_tool_calls", "max_concurrent_requests"],
+          "properties": {
+            "parallel_requests": { "type": "boolean" },
+            "parallel_tool_calls": { "type": "boolean" },
+            "max_concurrent_requests": { "type": ["number", "null"] }
+          }
+        },
+        "enforcement": { "type": "string", "enum": ["server"] }
+      }
+    },
+    "discovery": {
+      "type": "object",
+      "required": ["retrieved_at", "ttl_seconds", "model_list"],
+      "properties": {
+        "retrieved_at": { "type": "string" },
+        "ttl_seconds": { "type": "number" },
+        "model_list": {
+          "type": "object",
+          "required": ["raw", "normalised"],
+          "properties": {
+            "raw": { "type": "object" },
+            "normalised": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["model_id", "display_name", "context_window_tokens", "quantisation"],
+                "properties": {
+                  "model_id": { "type": "string" },
+                  "display_name": { "type": ["string", "null"] },
+                  "context_window_tokens": { "type": ["number", "null"] },
+                  "quantisation": {
+                    "oneOf": [
+                      { "type": ["string", "null"] },
+                      {
+                        "type": "object",
+                        "required": ["method", "bits", "group_size"],
+                        "properties": {
+                          "method": { "type": "string" },
+                          "bits": { "type": ["number", "null"] },
+                          "group_size": { "type": ["number", "null"] },
+                          "scheme": { "type": ["string", "null"] },
+                          "variant": { "type": ["string", "null"] },
+                          "weight_format": { "type": ["string", "null"] }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "raw": { "type": "object" }
+  }
+}
