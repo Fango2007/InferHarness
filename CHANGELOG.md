@@ -8,6 +8,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Added
 
+- **Product roadmap** — added `docs/ROADMAP.md` to define InferHarness product intent, the five milestone outcomes, feature-family sequencing, completion criteria, and deferred capabilities without prematurely specifying implementation design.
 - **Native provider tool-call streaming** — benchmark execution now supports Anthropic Messages and Gemini GenerateContent SSE responses and normalizes streamed tool calls across OpenAI-compatible, Ollama, Anthropic, and Gemini protocols.
 - **Application architecture documentation** — added `docs/ARCHITECTURE.md` to describe the current InferHarness runtime topology, frontend and backend module boundaries, persistence model, provider integration, and major feature areas.
 - **Canonical metrics specification** — added the root `docs/` directory for durable InferHarness documentation, with `docs/METRICS.md` defining metric formulas, applicability, provenance, aggregation, comparison rules, and the target `metrics-v2` contract.

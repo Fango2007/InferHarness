@@ -13,6 +13,8 @@ source tree and keep them synchronized with the documented specification.
 
 ## Specifications
 
+- [Product Roadmap](ROADMAP.md): product intent, current capability baseline,
+  milestone outcomes, feature-family sequencing, and deferred scope.
 - [Architecture](ARCHITECTURE.md): current app runtime topology, frontend and
   backend module boundaries, persistence model, provider integration, and major
   feature areas.
