@@ -9,11 +9,17 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ### Added
 
 - **Native provider tool-call streaming** — benchmark execution now supports Anthropic Messages and Gemini GenerateContent SSE responses and normalizes streamed tool calls across OpenAI-compatible, Ollama, Anthropic, and Gemini protocols.
+- **Application architecture documentation** — added `docs/ARCHITECTURE.md` to describe the current InferHarness runtime topology, frontend and backend module boundaries, persistence model, provider integration, and major feature areas.
 - **Canonical metrics specification** — added the root `docs/` directory for durable InferHarness documentation, with `docs/METRICS.md` defining metric formulas, applicability, provenance, aggregation, comparison rules, and the target `metrics-v2` contract.
+- **Database schema documentation** — added `docs/DATABASE_SCHEMA.md` to describe the current SQLite table groups, relationships, indexes, JSON columns, startup migrations, and change-control rules.
+- **Design system documentation** — added `docs/design-system/` with the current InferHarness visual language overview, token snapshot, bundled token fonts, component primitives, and frontend styling rules.
+- **Schema specifications** — copied the application JSON Schema contract pack into `docs/schemas/` as the durable documentation source while keeping runtime validators on the backend source copy.
+- **Test pipeline specification** — promoted the benchmark execution model into `docs/test-pipeline/` with supporting valid and invalid benchmark document examples.
 
 ### Changed
 
 - **Agent workflow commands** — `AGENTS.md` now records the common validation, development, E2E, and benchmark data persistence workflows agents should use when changing the repo.
+- **Documentation source-of-truth rules** — `AGENTS.md` now freezes `docs/` as the durable documentation home for product and engineering specifications, keeps `specs/` reserved for temporary implementation inputs, and requires runtime code to consume source-tree implementation copies.
 
 ### Removed
 

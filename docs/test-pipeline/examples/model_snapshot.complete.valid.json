@@ -1,0 +1,126 @@
+{
+  "kind": "model_snapshot",
+  "schema_version": "benchmark_model_snapshot_v1",
+  "model": {
+    "model_id": "lmstudio-community/Mistral-7B-Instruct-v0.3-GGUF-Q4_K_M",
+    "server_id": "ollama-local",
+    "display_name": "Mistral-7B-Instruct-v0.3-GGUF-Q4_K_M",
+    "base_model_name": "Mistral-7B-Instruct-v0.3"
+  },
+  "identity": {
+    "provider": "mistral",
+    "family": "mistral",
+    "version": "7B-Instruct-v0.3",
+    "revision": null,
+    "checksum": null,
+    "quantized_provider": "lmstudio-community"
+  },
+  "architecture": {
+    "type": "decoder-only",
+    "parameter_count": null,
+    "parameter_count_label": "7B",
+    "active_parameter_label": null,
+    "precision": "int4",
+    "quantisation": {
+      "method": "gguf",
+      "bits": 4,
+      "group_size": null,
+      "scheme": "k-quant",
+      "variant": "M",
+      "weight_format": "Q4_K_M"
+    },
+    "format": "GGUF"
+  },
+  "model_capabilities": {
+    "generation": {
+      "text": true,
+      "json_schema_output": true,
+      "tools": false,
+      "embeddings": false
+    },
+    "multimodal": {
+      "vision": false,
+      "audio": false
+    },
+    "reasoning": {
+      "supported": false,
+      "explicit_tokens": false
+    }
+  },
+  "inference_server": {
+    "server_id": "ollama-local",
+    "display_name": "Local Ollama"
+  },
+  "runtime": {
+    "retrieved_at": "2026-05-16T15:30:00Z",
+    "source": "server",
+    "server_software": {
+      "name": "ollama",
+      "version": "unknown",
+      "build": null
+    },
+    "api": {
+      "schema_family": ["ollama"],
+      "api_version": null
+    }
+  },
+  "endpoints": {
+    "base_url": "http://localhost:11434",
+    "health_url": null,
+    "https": false
+  },
+  "auth": {
+    "type": "none",
+    "header_name": "Authorization",
+    "token_env": null,
+    "token": null,
+    "token_present": false
+  },
+  "capabilities": {
+    "server": {
+      "streaming": true,
+      "models_endpoint": true
+    },
+    "generation": {
+      "text": true,
+      "json_schema_output": true,
+      "tools": false,
+      "embeddings": false
+    },
+    "multimodal": {
+      "vision": {
+        "input_images": false,
+        "output_images": false
+      },
+      "audio": {
+        "input_audio": false,
+        "output_audio": false
+      }
+    },
+    "reasoning": {
+      "exposed": false,
+      "token_budget_configurable": false
+    },
+    "concurrency": {
+      "parallel_requests": true,
+      "parallel_tool_calls": false,
+      "max_concurrent_requests": null
+    },
+    "enforcement": "server"
+  },
+  "discovery": {
+    "retrieved_at": "2026-05-16T15:30:00Z",
+    "ttl_seconds": 300,
+    "model_list": {
+      "raw": {},
+      "normalised": []
+    }
+  },
+  "raw": {},
+  "model_metadata": {},
+  "snapshot_quality": {
+    "completeness": "partial",
+    "sources": ["provider_api", "model_name_parse"],
+    "warnings": ["quantisation inferred from model name; not confirmed by provider API"]
+  }
+}

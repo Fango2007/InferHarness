@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "evaluation.schema.json",
+  "title": "Evaluation",
+  "description": "A complete scored evaluation of a model's answer to a prompt.",
+  "version": "1.0.0",
+  "type": "object",
+  "required": [
+    "prompt_text",
+    "tags",
+    "server_id",
+    "model_name",
+    "inference_config",
+    "answer_text",
+    "accuracy_score",
+    "relevance_score",
+    "coherence_score",
+    "completeness_score",
+    "helpfulness_score"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "prompt_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 10000
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 50 },
+      "maxItems": 20
+    },
+    "server_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "inference_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "temperature": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 2
+        },
+        "top_p": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "max_tokens": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "quantization_level": {
+          "type": ["string", "null"]
+        },
+        "stream": {
+          "type": ["boolean", "null"]
+        },
+        "seed": {
+          "type": ["integer", "null"]
+        },
+        "stop": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "minLength": 1 },
+            {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "minItems": 1
+            }
+          ]
+        },
+        "presence_penalty": {
+          "type": ["number", "null"],
+          "minimum": -2,
+          "maximum": 2
+        },
+        "frequency_penalty": {
+          "type": ["number", "null"],
+          "minimum": -2,
+          "maximum": 2
+        },
+        "timeout_ms": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "unsupported_parameter_policy": {
+          "type": ["string", "null"],
+          "enum": ["strict", "permissive", null]
+        }
+      }
+    },
+    "answer_text": {
+      "type": "string"
+    },
+    "input_tokens": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "output_tokens": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "total_tokens": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "latency_ms": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "word_count": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "estimated_cost": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "accuracy_score": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "relevance_score": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "coherence_score": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "completeness_score": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "helpfulness_score": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "note": {
+      "type": ["string", "null"],
+      "maxLength": 2000
+    },
+    "source_test_result_id": {
+      "type": ["string", "null"]
+    }
+  }
+}

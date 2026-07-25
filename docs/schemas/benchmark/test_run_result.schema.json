@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://inferharness.local/schemas/benchmark/test_run_result.schema.json",
+  "title": "Benchmark TestRunResult",
+  "description": "Append-only result document for a concrete benchmark execution.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "engine_version", "run_id", "instantiation_id", "status", "started_at", "instantiation_snapshot", "stage_results", "raw_responses", "normalized_responses", "metric_results", "aggregated_metrics", "errors", "warnings"],
+  "properties": {
+    "kind": { "type": "string", "const": "test_run_result" },
+    "schema_version": { "type": "string", "const": "benchmark_test_run_result_v1" },
+    "engine_version": { "type": "string", "minLength": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "instantiation_id": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "enum": ["created", "running", "completed", "completed_with_errors", "cancelled", "failed", "timeout"] },
+    "started_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": ["string", "null"], "format": "date-time" },
+    "instantiation_snapshot": { "type": "object", "additionalProperties": true },
+    "stage_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["stage_id", "stage_type", "status", "record_metrics", "run_count", "results", "errors", "warnings"],
+        "properties": {
+          "stage_id": { "type": "string" },
+          "stage_type": { "type": "string", "enum": ["dataset_loop", "single_request", "paired_request_loop"] },
+          "status": { "type": "string", "enum": ["pending", "running", "completed", "failed", "retried", "cancelled", "skipped"] },
+          "record_metrics": { "type": "boolean" },
+          "run_count": { "type": "integer", "minimum": 0 },
+          "results": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "errors": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "warnings": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+        }
+      }
+    },
+    "raw_responses": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+    "normalized_responses": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+    "metric_results": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+    "aggregated_metrics": { "type": "object", "additionalProperties": true },
+    "errors": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+    "warnings": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+    "load_estimate": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["basis", "cold_ms", "warm_baseline_ms", "warm_sample_count", "estimated_load_ms", "model_load_detected"],
+          "properties": {
+            "basis": { "type": "string", "enum": ["first_token_ms", "elapsed_ms"] },
+            "cold_ms": { "type": "number" },
+            "warm_baseline_ms": { "type": "number" },
+            "warm_sample_count": { "type": "integer", "minimum": 0 },
+            "estimated_load_ms": { "type": "number", "minimum": 0 },
+            "model_load_detected": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "metric_version": { "type": "string" },
+    "normalizer_version": { "type": "string" },
+    "metadata": { "type": "object", "additionalProperties": true },
+    "extensions": { "type": "object", "additionalProperties": true }
+  }
+}

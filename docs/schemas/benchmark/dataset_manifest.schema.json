@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://inferharness.local/schemas/benchmark/dataset_manifest.schema.json",
+  "title": "Benchmark DatasetManifest",
+  "description": "Persistable proof of the exact dataset used by a benchmark.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "dataset_id", "source", "canonicalization_version", "snapshot_policy", "dataset_hash", "item_count"],
+  "properties": {
+    "kind": { "type": "string", "const": "dataset_manifest" },
+    "schema_version": { "type": "string", "const": "benchmark_dataset_manifest_v1" },
+    "dataset_id": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_type", "format"],
+      "properties": {
+        "source_type": { "type": "string", "enum": ["inline", "file", "url"] },
+        "format": { "type": "string", "enum": ["json", "jsonl", "csv"] },
+        "path": { "type": "string" },
+        "url": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "canonicalization_version": { "type": "string", "const": "dataset_canonical_v1" },
+    "snapshot_policy": { "type": "string", "enum": ["embedded", "manifest_only", "compressed_blob"] },
+    "dataset_hash": { "type": "string", "pattern": "^sha256:[a-fA-F0-9]{64}$" },
+    "item_count": { "type": "integer", "minimum": 0 },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "prompt"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "prompt": { "type": "string" },
+          "system_prompt": { "type": ["string", "null"] },
+          "interaction_mode": { "type": "string", "enum": ["chat", "tool_calling", "structured_output", "multi_turn", "agentic"] },
+          "tools": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "tool_choice": { "type": ["string", "object", "null"], "additionalProperties": true },
+          "expected_tool_calls": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "expected_answer": { "type": ["string", "number", "boolean", "object", "array", "null"] },
+          "expected_format": { "type": "string", "enum": ["free_text", "json", "markdown", "code", "boolean", "number", "schema", "regex"] },
+          "expected_schema": { "type": ["object", "null"], "additionalProperties": true },
+          "evaluation": { "type": ["object", "null"], "additionalProperties": true },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "metadata": { "type": "object", "additionalProperties": true }
+        }
+      }
+    },
+    "item_hashes": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item_id", "hash"],
+        "properties": {
+          "item_id": { "type": "string", "minLength": 1 },
+          "hash": { "type": "string", "pattern": "^sha256:[a-fA-F0-9]{64}$" }
+        }
+      }
+    },
+    "item_manifest_ref": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["type", "hash", "uri"],
+      "properties": {
+        "type": { "type": "string", "enum": ["local_artifact", "content_addressed_manifest"] },
+        "hash": { "type": "string", "pattern": "^sha256:[a-fA-F0-9]{64}$" },
+        "uri": { "type": "string", "minLength": 1 }
+      }
+    },
+    "snapshot_blob_ref": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["type", "hash", "uri", "compression", "media_type", "size_bytes", "uncompressed_size_bytes", "item_count"],
+      "properties": {
+        "type": { "type": "string", "enum": ["content_addressed_blob"] },
+        "hash": { "type": "string", "pattern": "^sha256:[a-fA-F0-9]{64}$" },
+        "uri": { "type": "string", "minLength": 1 },
+        "compression": { "type": "string", "enum": ["zstd", "gzip", "none"] },
+        "media_type": { "type": "string", "minLength": 1 },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "uncompressed_size_bytes": { "type": "integer", "minimum": 0 },
+        "item_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "metadata": { "type": "object", "additionalProperties": true },
+    "extensions": { "type": "object", "additionalProperties": true }
+  }
+}

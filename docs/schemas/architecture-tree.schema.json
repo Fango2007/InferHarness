@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "architecture-tree.schema.json",
+  "title": "ArchitectureTree",
+  "type": "object",
+  "required": ["schema_version", "model_id", "format", "summary", "root", "inspected_at"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "model_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "format": {
+      "type": "string",
+      "enum": ["transformers", "gguf", "mlx", "gptq", "awq", "safetensors"]
+    },
+    "inspection_method": {
+      "type": "string",
+      "enum": ["transformers_exact", "config_fallback", "gguf_header", "safetensors_header", "hybrid"]
+    },
+    "accuracy": {
+      "type": "string",
+      "enum": ["exact", "estimated"]
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "summary": {
+      "$ref": "#/$defs/ArchitectureSummary"
+    },
+    "root": {
+      "$ref": "#/$defs/ArchitectureLayerNode"
+    },
+    "inspected_at": {
+      "type": "string"
+    }
+  },
+  "$defs": {
+    "ArchitectureSummary": {
+      "type": "object",
+      "required": ["total_parameters", "trainable_parameters", "non_trainable_parameters", "by_type"],
+      "additionalProperties": false,
+      "properties": {
+        "total_parameters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "trainable_parameters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "non_trainable_parameters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "by_type": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type", "count", "parameters"],
+            "additionalProperties": false,
+            "properties": {
+              "type": { "type": "string" },
+              "count": { "type": "number", "minimum": 0 },
+              "parameters": { "type": "number", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "ArchitectureLayerNode": {
+      "type": "object",
+      "required": ["name", "type", "parameters", "trainable", "children"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "number",
+          "minimum": 0
+        },
+        "trainable": {
+          "type": "boolean"
+        },
+        "shape": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "array", "items": { "type": "number" } }
+          ]
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ArchitectureLayerNode"
+          }
+        }
+      }
+    }
+  }
+}

@@ -48,6 +48,14 @@
 - Before calling a release complete, use `git ls-remote --tags origin "refs/tags/vX.Y.Z^{}"` to verify the remote tag resolves to the merged release commit, then confirm the GitHub release contains its notes and source archives.
 - If `npm run release:check` fails with `ELOOP` under `specs/specs/...`, inspect the worktree for a local recursive `specs` symlink before changing tracked files.
 
+## Documentation and Specifications
+
+- Treat `docs/` as the durable source of truth for product behavior, architecture, design system, engineering contracts, and other repository-maintained specifications.
+- Treat `specs/` as temporary implementation input only: handoffs, mockups, one-off plans, exploratory notes, screenshots, and short-lived specifications needed to complete a specific change.
+- Do not make `specs/` the canonical home for enduring product or engineering contracts. When a temporary specification becomes durable, promote or summarize it under `docs/` in the same change that makes it authoritative.
+- Do not make application runtime code load source files from `docs/`. Runtime code should consume implementation copies under the relevant source tree, such as `backend/src/schemas/`, and those copies must be kept synchronized with the documented specification.
+- Keep `docs/README.md` synchronized with durable documents added, moved, renamed, or retired under `docs/`.
+
 ## Static Data and Reference Content
 
 - Do not hardcode static data in application code.

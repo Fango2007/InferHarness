@@ -1,0 +1,251 @@
+{
+  "kind": "test_instantiation",
+  "schema_version": "benchmark_test_instantiation_v1",
+  "instantiation_id": "test_20260516_001",
+  "created_at": "2026-05-16T15:30:00Z",
+  "template": {
+    "template_id": "verbosity_ratio_v1",
+    "template_version": "1.0.0",
+    "template_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "snapshot": {
+      "operation": "chat_completion",
+      "required_capabilities": {
+        "chat_completion": true
+      },
+      "stages": [
+        {
+          "id": "measure",
+          "type": "dataset_loop",
+          "iterations_per_item": 5,
+          "record_metrics": true
+        }
+      ],
+      "metrics": ["input_tokens", "output_tokens", "elapsed_ms"],
+      "aggregations": ["mean", "p95"]
+    }
+  },
+  "model_profile": {
+    "kind": "model_profile",
+    "schema_version": "benchmark_model_profile_v1",
+    "model": {
+      "model_id": "lmstudio-community/Mistral-7B-Instruct-v0.3-GGUF-Q4_K_M",
+      "server_id": "ollama-local",
+      "display_name": "Mistral-7B-Instruct-v0.3-GGUF-Q4_K_M",
+      "base_model_name": "Mistral-7B-Instruct-v0.3"
+    },
+    "identity": {
+      "provider": "mistral",
+      "family": "mistral",
+      "version": "7B-Instruct-v0.3",
+      "revision": null,
+      "checksum": null,
+      "quantized_provider": "lmstudio-community"
+    },
+    "inference_server": {
+      "server_id": "ollama-local",
+      "display_name": "Local Ollama"
+    },
+    "runtime": {
+      "server_software": {
+        "name": "ollama",
+        "version": null,
+        "build": null
+      },
+      "api": {
+        "schema_family": ["ollama"],
+        "api_version": null
+      }
+    },
+    "endpoints": {
+      "base_url": "http://localhost:11434"
+    },
+    "capabilities": {
+      "server": {
+        "streaming": true,
+        "models_endpoint": true
+      },
+      "generation": {
+        "text": true,
+        "json_schema_output": true,
+        "tools": false,
+        "embeddings": false
+      },
+      "multimodal": {},
+      "reasoning": {},
+      "concurrency": {},
+      "enforcement": "server"
+    },
+    "discovery": {
+      "retrieved_at": "2026-05-16T15:30:00Z"
+    }
+  },
+  "model_snapshot": {
+    "kind": "model_snapshot",
+    "schema_version": "benchmark_model_snapshot_v1",
+    "model": {
+      "model_id": "lmstudio-community/Mistral-7B-Instruct-v0.3-GGUF-Q4_K_M",
+      "server_id": "ollama-local",
+      "display_name": "Mistral-7B-Instruct-v0.3-GGUF-Q4_K_M",
+      "base_model_name": "Mistral-7B-Instruct-v0.3"
+    },
+    "identity": {
+      "provider": "mistral",
+      "family": "mistral",
+      "version": "7B-Instruct-v0.3",
+      "revision": null,
+      "checksum": null,
+      "quantized_provider": "lmstudio-community"
+    },
+    "architecture": {
+      "type": "decoder-only",
+      "parameter_count": null,
+      "parameter_count_label": "7B",
+      "active_parameter_label": null,
+      "precision": "int4",
+      "quantisation": {
+        "method": "gguf",
+        "bits": 4,
+        "group_size": null,
+        "scheme": "k-quant",
+        "variant": "M",
+        "weight_format": "Q4_K_M"
+      },
+      "format": "GGUF"
+    },
+    "model_capabilities": {
+      "generation": {
+        "text": true,
+        "json_schema_output": true,
+        "tools": false,
+        "embeddings": false
+      },
+      "multimodal": {
+        "vision": false,
+        "audio": false
+      },
+      "reasoning": {
+        "supported": false,
+        "explicit_tokens": false
+      }
+    },
+    "inference_server": {
+      "server_id": "ollama-local",
+      "display_name": "Local Ollama"
+    },
+    "runtime": {
+      "retrieved_at": "2026-05-16T15:30:00Z",
+      "source": "server",
+      "server_software": {
+        "name": "ollama",
+        "version": "unknown",
+        "build": null
+      },
+      "api": {
+        "schema_family": ["ollama"],
+        "api_version": null
+      }
+    },
+    "endpoints": {
+      "base_url": "http://localhost:11434",
+      "health_url": null,
+      "https": false
+    },
+    "auth": {
+      "type": "none",
+      "header_name": "Authorization",
+      "token_env": null,
+      "token": null,
+      "token_present": false
+    },
+    "capabilities": {
+      "server": {
+        "streaming": true,
+        "models_endpoint": true
+      },
+      "generation": {
+        "text": true,
+        "json_schema_output": true,
+        "tools": false,
+        "embeddings": false
+      },
+      "multimodal": {
+        "vision": {
+          "input_images": false,
+          "output_images": false
+        },
+        "audio": {
+          "input_audio": false,
+          "output_audio": false
+        }
+      },
+      "reasoning": {
+        "exposed": false,
+        "token_budget_configurable": false
+      },
+      "concurrency": {
+        "parallel_requests": true,
+        "parallel_tool_calls": false,
+        "max_concurrent_requests": null
+      },
+      "enforcement": "server"
+    },
+    "discovery": {
+      "retrieved_at": "2026-05-16T15:30:00Z",
+      "ttl_seconds": 300,
+      "model_list": {
+        "raw": {},
+        "normalised": []
+      }
+    },
+    "raw": {},
+    "model_metadata": {},
+    "snapshot_quality": {
+      "completeness": "partial",
+      "sources": ["provider_api", "model_name_parse"],
+      "warnings": ["quantisation inferred from model name; not confirmed by provider API"]
+    }
+  },
+  "model_snapshot_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "operation_spec": {
+    "method": "POST",
+    "url": "http://localhost:11434/api/chat",
+    "endpoint": "/api/chat",
+    "protocol": "ollama_chat",
+    "operation": "chat_completion",
+    "supports_streaming": true,
+    "supports_usage": false
+  },
+  "runtime_parameters": {
+    "temperature": 0.2,
+    "top_p": 0.9,
+    "max_tokens": 512,
+    "stream": false,
+    "timeout_ms": 300000
+  },
+  "execution_policy": {
+    "timeout_ms": 300000,
+    "retry_policy": {
+      "max_retries": 2,
+      "retry_on": ["timeout", "connection_error", "http_429", "http_503"],
+      "backoff": "exponential"
+    }
+  },
+  "dataset": {
+    "kind": "dataset_manifest",
+    "schema_version": "benchmark_dataset_manifest_v1",
+    "dataset_id": "verbosity_prompts_v1",
+    "source": {
+      "source_type": "file",
+      "format": "jsonl",
+      "path": "./datasets/verbosity_prompts.jsonl"
+    },
+    "canonicalization_version": "dataset_canonical_v1",
+    "snapshot_policy": "manifest_only",
+    "dataset_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "item_count": 2500,
+    "item_hashes": null,
+    "item_manifest_ref": null,
+    "snapshot_blob_ref": null
+  },
+  "metadata": {}
+}

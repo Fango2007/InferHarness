@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "architecture-settings.schema.json",
+  "title": "ArchitectureSettings",
+  "type": "object",
+  "required": ["trust_remote_code"],
+  "additionalProperties": false,
+  "properties": {
+    "trust_remote_code": {
+      "type": "boolean"
+    }
+  }
+}

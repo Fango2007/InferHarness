@@ -1,0 +1,13 @@
+{
+  "kind": "dataset_manifest",
+  "schema_version": "benchmark_dataset_manifest_v1",
+  "dataset_id": "verbosity_prompts_v1",
+  "source": {
+    "source_type": "file",
+    "format": "jsonl",
+    "path": "./datasets/verbosity_prompts.jsonl"
+  },
+  "canonicalization_version": "dataset_canonical_v1",
+  "snapshot_policy": "manifest_only",
+  "item_count": 2500
+}

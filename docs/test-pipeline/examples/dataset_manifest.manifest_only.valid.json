@@ -1,0 +1,21 @@
+{
+  "kind": "dataset_manifest",
+  "schema_version": "benchmark_dataset_manifest_v1",
+  "dataset_id": "verbosity_prompts_v1",
+  "source": {
+    "source_type": "file",
+    "format": "jsonl",
+    "path": "./datasets/verbosity_prompts.jsonl"
+  },
+  "canonicalization_version": "dataset_canonical_v1",
+  "snapshot_policy": "manifest_only",
+  "dataset_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "item_count": 2500,
+  "item_hashes": null,
+  "item_manifest_ref": {
+    "type": "local_artifact",
+    "hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "uri": "datasets/manifests/sha256-bbbb.json"
+  },
+  "snapshot_blob_ref": null
+}

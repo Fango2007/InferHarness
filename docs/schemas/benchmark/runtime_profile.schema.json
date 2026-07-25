@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://inferharness.local/schemas/benchmark/runtime_profile.schema.json",
+  "title": "Benchmark RuntimeProfile",
+  "description": "Resolved runtime parameters and execution policies applied to a benchmark.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "runtime_parameters"],
+  "properties": {
+    "kind": { "type": "string", "const": "runtime_profile" },
+    "schema_version": { "type": "string", "const": "benchmark_runtime_profile_v1" },
+    "profile_id": { "type": "string", "minLength": 1 },
+    "runtime_parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "temperature": { "type": ["number", "null"], "minimum": 0, "maximum": 2 },
+        "top_p": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "max_tokens": { "type": ["integer", "null"], "minimum": 1 },
+        "stream": { "type": ["boolean", "null"] },
+        "seed": { "type": ["integer", "null"] },
+        "stop": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "minLength": 1 },
+            {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "minItems": 1
+            }
+          ]
+        },
+        "presence_penalty": { "type": ["number", "null"], "minimum": -2, "maximum": 2 },
+        "frequency_penalty": { "type": ["number", "null"], "minimum": -2, "maximum": 2 },
+        "timeout_ms": { "type": ["integer", "null"], "minimum": 1 },
+        "unsupported_parameter_policy": { "type": ["string", "null"], "enum": ["strict", "permissive", null] }
+      }
+    },
+    "execution_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": { "type": "integer", "minimum": 1 },
+        "retry_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_retries": { "type": "integer", "minimum": 0 },
+            "retry_on": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["timeout", "connection_error", "http_408", "http_429", "http_500", "http_502", "http_503", "http_504"]
+              },
+              "uniqueItems": true
+            },
+            "backoff": { "type": "string", "enum": ["none", "fixed", "linear", "exponential"] },
+            "base_delay_ms": { "type": "integer", "minimum": 0 },
+            "max_delay_ms": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "cancellation_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cancel_on_first_fatal_error": { "type": "boolean" },
+            "max_error_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+            "max_consecutive_errors": { "type": "integer", "minimum": 1 },
+            "graceful_shutdown": { "type": "boolean" },
+            "persist_partial_results": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "metadata": { "type": "object", "additionalProperties": true }
+  }
+}
