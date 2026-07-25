@@ -9,6 +9,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ### Added
 
 - **Native provider tool-call streaming** — benchmark execution now supports Anthropic Messages and Gemini GenerateContent SSE responses and normalizes streamed tool calls across OpenAI-compatible, Ollama, Anthropic, and Gemini protocols.
+- **Canonical metrics specification** — added the root `docs/` directory for durable InferHarness documentation, with `docs/METRICS.md` defining metric formulas, applicability, provenance, aggregation, comparison rules, and the target `metrics-v2` contract.
 
 ### Changed
 

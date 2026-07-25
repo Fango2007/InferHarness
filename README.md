@@ -96,6 +96,7 @@ Run separates execution health from functional checks so a technically completed
 
 **Automated metrics**
 Capture time to first token, total latency, prefill/decode timing, prompt tokens, completion tokens, and tokens per second.
+Canonical metric definitions and the target `metrics-v2` contract are maintained in [docs/METRICS.md](docs/METRICS.md).
 
 **Qualitative evaluation**
 Score model answers on accuracy, relevance, coherence, completeness, and helpfulness. Compare Mode runs the same prompt across up to four models side by side.
