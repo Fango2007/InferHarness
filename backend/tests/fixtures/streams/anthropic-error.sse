@@ -1,0 +1,5 @@
+event: message_start
+data: {"type":"message_start","message":{"id":"msg_error","type":"message","role":"assistant","content":[],"model":"mock-chat","usage":{"input_tokens":5,"output_tokens":1}}}
+
+event: error
+data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}

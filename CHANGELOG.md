@@ -6,6 +6,10 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+### Added
+
+- **Native provider tool-call streaming** — benchmark execution now supports Anthropic Messages and Gemini GenerateContent SSE responses and normalizes streamed tool calls across OpenAI-compatible, Ollama, Anthropic, and Gemini protocols.
+
 ### Changed
 
 - **Agent workflow commands** — `AGENTS.md` now records the common validation, development, E2E, and benchmark data persistence workflows agents should use when changing the repo.

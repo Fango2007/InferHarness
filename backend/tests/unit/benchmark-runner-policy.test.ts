@@ -1,14 +1,23 @@
+import fs from 'fs';
+
 import { describe, expect, it } from 'vitest';
 
 import {
   BenchmarkStreamParseError,
+  BenchmarkUpstreamStreamError,
   buildBenchmarkRequestPayload,
   isRetryableError,
+  parseAnthropicSseStream,
   parseExecutionPolicy,
+  parseGeminiSseStream,
   parseOllamaJsonlStream,
   parseOpenAiSseStream,
   retryDelayMs
 } from '../../src/services/benchmark-runner.js';
+
+function streamFixture(name: string): string {
+  return fs.readFileSync(new URL(`../fixtures/streams/${name}`, import.meta.url), 'utf8');
+}
 
 describe('benchmark runner execution policy', () => {
   it('parses retry and cancellation defaults', () => {
@@ -89,6 +98,48 @@ describe('benchmark runner execution policy', () => {
     expect(stream.input_tokens).toBe(4);
     expect(stream.output_tokens).toBe(2);
     expect(stream.total_tokens).toBe(6);
+  });
+
+  it('normalizes streamed tool calls across supported protocols', () => {
+    const streams = [
+      parseOpenAiSseStream(streamFixture('openai-tool.sse')),
+      parseOllamaJsonlStream(streamFixture('ollama-tool.jsonl')),
+      parseAnthropicSseStream(streamFixture('anthropic-tool.sse')),
+      parseGeminiSseStream(streamFixture('gemini-tool.sse'))
+    ];
+    for (const stream of streams) {
+      expect(stream.tool_calls?.[0]).toMatchObject({
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          arguments: { city: 'Paris', unit: 'celsius' }
+        }
+      });
+      expect(stream.done).toBe(true);
+      expect(stream.total_tokens).toBeGreaterThan(0);
+    }
+  });
+
+  it('preserves Anthropic event names and rejects provider stream errors', () => {
+    const stream = parseAnthropicSseStream(streamFixture('anthropic-tool.sse'));
+    expect(stream.events[0]).toMatchObject({ event_name: 'message_start' });
+    expect(() => parseAnthropicSseStream(streamFixture('anthropic-error.sse')))
+      .toThrow(BenchmarkUpstreamStreamError);
+  });
+
+  it('normalizes native text streams and retains unknown valid Anthropic events', () => {
+    const anthropic = parseAnthropicSseStream(streamFixture('anthropic-text.sse'));
+    const gemini = parseGeminiSseStream(streamFixture('gemini-text.sse'));
+    expect(anthropic.answer_text).toBe('benchmark answer');
+    expect(anthropic.events).toContainEqual(expect.objectContaining({ event_name: 'ping' }));
+    expect(gemini.answer_text).toBe('benchmark answer');
+    expect(gemini.total_tokens).toBe(7);
+  });
+
+  it('rejects incomplete Anthropic tool arguments', () => {
+    const malformed = streamFixture('anthropic-tool.sse')
+      .replace('is\\",\\"unit\\":\\"celsius\\"}', 'is');
+    expect(() => parseAnthropicSseStream(malformed)).toThrow(BenchmarkStreamParseError);
   });
 
   it('keeps whitespace-only Ollama chunks', () => {

@@ -1,0 +1,2 @@
+{"message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"get_weather","arguments":{"city":"Paris","unit":"celsius"}}}]},"done":false}
+{"done":true,"prompt_eval_count":19,"eval_count":7}
