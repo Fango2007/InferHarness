@@ -115,6 +115,7 @@ interface StreamEventSnapshot {
   json: Record<string, unknown> | unknown[] | null;
   done: boolean;
   seq: number;
+  event_name?: string;
 }
 
 interface StreamNormalization {
@@ -125,6 +126,7 @@ interface StreamNormalization {
   input_tokens: number | null;
   output_tokens: number | null;
   total_tokens: number | null;
+  tool_calls: unknown[] | null;
   final_metadata: Record<string, unknown> | null;
 }
 
@@ -136,6 +138,19 @@ export class BenchmarkStreamParseError extends Error {
   constructor(message: string, format: 'sse' | 'jsonl', events: StreamEventSnapshot[]) {
     super(message);
     this.name = 'BenchmarkStreamParseError';
+    this.format = format;
+    this.events = events;
+  }
+}
+
+export class BenchmarkUpstreamStreamError extends Error {
+  readonly code = 'upstream_stream_error';
+  readonly format: 'sse' | 'jsonl';
+  readonly events: StreamEventSnapshot[];
+
+  constructor(message: string, format: 'sse' | 'jsonl', events: StreamEventSnapshot[]) {
+    super(message);
+    this.name = 'BenchmarkUpstreamStreamError';
     this.format = format;
     this.events = events;
   }
@@ -567,13 +582,11 @@ export function buildBenchmarkRequestPayload(
   }
 
   if (protocol === 'anthropic_messages') {
-    if (stream) {
-      throw new BenchmarkValidationError('Streaming benchmark execution is not supported for anthropic_messages in this checkpoint.');
-    }
     const payload: Record<string, unknown> = {
       model,
       messages: anthropicMessages(messages),
-      max_tokens: typeof params.max_tokens === 'number' ? params.max_tokens : 1024
+      max_tokens: typeof params.max_tokens === 'number' ? params.max_tokens : 1024,
+      ...(stream ? { stream: true } : {})
     };
     const system = systemPromptFromMessages(messages);
     const tools = anthropicToolsFromItem(item);
@@ -588,9 +601,6 @@ export function buildBenchmarkRequestPayload(
   }
 
   if (protocol === 'gemini_generate_content') {
-    if (stream) {
-      throw new BenchmarkValidationError('Streaming benchmark execution is not supported for gemini_generate_content in this checkpoint.');
-    }
     const generationConfig: Record<string, unknown> = {};
     if (params.temperature !== undefined && params.temperature !== null) generationConfig.temperature = params.temperature;
     if (params.top_p !== undefined && params.top_p !== null) generationConfig.topP = params.top_p;
@@ -667,46 +677,132 @@ function usageTokens(metadata: Record<string, unknown> | null): Pick<NormalizedR
   };
 }
 
-function openAiDeltaContent(json: unknown): string {
-  const record = objectValue(json);
-  const choices = Array.isArray(record?.choices) ? record.choices : [];
-  const firstChoice = objectValue(choices[0]);
-  const delta = objectValue(firstChoice?.delta);
-  const message = objectValue(firstChoice?.message);
-  if (typeof delta?.content === 'string') return delta.content;
-  if (typeof message?.content === 'string') return message.content;
-  return '';
+function streamEventSnapshot(
+  raw: string,
+  json: Record<string, unknown> | unknown[] | null,
+  done: boolean,
+  seq: number,
+  eventName?: string
+): StreamEventSnapshot {
+  return {
+    raw,
+    json,
+    done,
+    seq,
+    ...(eventName ? { event_name: eventName } : {})
+  };
+}
+
+function streamErrorMessage(record: Record<string, unknown> | null): string | null {
+  const error = objectValue(record?.error);
+  return textFromValue(error?.message)
+    ?? textFromValue(record?.error)
+    ?? textFromValue(record?.message);
+}
+
+function parseToolArguments(
+  value: unknown,
+  context: string,
+  format: 'sse' | 'jsonl',
+  events: StreamEventSnapshot[]
+): Record<string, unknown> {
+  if (value === undefined || value === null || value === '') {
+    return {};
+  }
+  let parsed: unknown = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value) as unknown;
+    } catch (error) {
+      throw new BenchmarkStreamParseError(`Malformed ${context} tool arguments: ${(error as Error).message}`, format, events);
+    }
+  }
+  const record = objectValue(parsed);
+  if (!record) {
+    throw new BenchmarkStreamParseError(`Malformed ${context} tool arguments: expected a JSON object.`, format, events);
+  }
+  return record;
+}
+
+function canonicalToolCall(name: string, args: Record<string, unknown>, id?: string): Record<string, unknown> {
+  return {
+    ...(id ? { id } : {}),
+    type: 'function',
+    function: { name, arguments: args }
+  };
 }
 
 export function parseOpenAiSseStream(raw: string): StreamNormalization {
   const parsed = parseSseEvents(raw);
   const events: StreamEventSnapshot[] = [];
   const content: string[] = [];
+  const toolCallParts = new Map<number, { id: string; name: string; arguments: string }>();
   let done = false;
   let finalMetadata: Record<string, unknown> | null = null;
 
   parsed.forEach((event, index) => {
     if (event.type === 'done') {
       done = true;
-      events.push({ raw: '[DONE]', json: null, done: true, seq: index });
+      events.push(streamEventSnapshot('[DONE]', null, true, index, event.event));
       return;
     }
     const eventRaw = event.payload ?? '';
     try {
       const json = JSON.parse(eventRaw) as Record<string, unknown> | unknown[];
-      events.push({ raw: eventRaw, json, done: false, seq: index });
-      const delta = openAiDeltaContent(json);
-      if (delta) {
-        content.push(delta);
-      }
+      events.push(streamEventSnapshot(eventRaw, json, false, index, event.event));
       const jsonRecord = objectValue(json);
+      if (event.event === 'error' || jsonRecord?.error) {
+        throw new BenchmarkUpstreamStreamError(
+          streamErrorMessage(jsonRecord) ?? 'OpenAI-compatible provider returned a stream error.',
+          'sse',
+          events
+        );
+      }
+      const choices = Array.isArray(jsonRecord?.choices) ? jsonRecord.choices : [];
+      for (const choice of choices) {
+        const choiceRecord = objectValue(choice);
+        const delta = objectValue(choiceRecord?.delta);
+        const message = objectValue(choiceRecord?.message);
+        const text = typeof delta?.content === 'string'
+          ? delta.content
+          : typeof message?.content === 'string' ? message.content : null;
+        if (text !== null) {
+          content.push(text);
+        }
+        const streamedCalls = Array.isArray(delta?.tool_calls)
+          ? delta.tool_calls
+          : Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+        streamedCalls.forEach((call, callIndex) => {
+          const callRecord = objectValue(call);
+          const callPosition = typeof callRecord?.index === 'number' ? callRecord.index : callIndex;
+          const functionRecord = objectValue(callRecord?.function);
+          const current = toolCallParts.get(callPosition) ?? { id: '', name: '', arguments: '' };
+          if (typeof callRecord?.id === 'string') current.id += callRecord.id;
+          if (typeof functionRecord?.name === 'string') current.name += functionRecord.name;
+          if (typeof functionRecord?.arguments === 'string') current.arguments += functionRecord.arguments;
+          else if (objectValue(functionRecord?.arguments)) current.arguments = JSON.stringify(functionRecord?.arguments);
+          toolCallParts.set(callPosition, current);
+        });
+      }
       if (jsonRecord?.usage || jsonRecord?.choices) {
         finalMetadata = jsonRecord;
       }
     } catch (error) {
+      if (error instanceof BenchmarkUpstreamStreamError) {
+        throw error;
+      }
       throw new BenchmarkStreamParseError(`Malformed OpenAI SSE stream event ${index}: ${(error as Error).message}`, 'sse', events);
     }
   });
+
+  const toolCalls = [...toolCallParts.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([, call]) => {
+      if (!call.name) {
+        throw new BenchmarkStreamParseError('Malformed OpenAI streamed tool call: missing function name.', 'sse', events);
+      }
+      return canonicalToolCall(call.name, parseToolArguments(call.arguments, 'OpenAI', 'sse', events), call.id || undefined);
+    });
 
   return {
     format: 'sse',
@@ -714,6 +810,7 @@ export function parseOpenAiSseStream(raw: string): StreamNormalization {
     done,
     answer_text: content.join(''),
     ...usageTokens(finalMetadata),
+    tool_calls: toolCalls.length > 0 ? toolCalls : null,
     final_metadata: finalMetadata
   };
 }
@@ -722,6 +819,7 @@ export function parseOllamaJsonlStream(raw: string): StreamNormalization {
   const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const events: StreamEventSnapshot[] = [];
   const content: string[] = [];
+  const toolCalls: unknown[] = [];
   let done = false;
   let finalMetadata: Record<string, unknown> | null = null;
 
@@ -729,7 +827,14 @@ export function parseOllamaJsonlStream(raw: string): StreamNormalization {
     try {
       const json = JSON.parse(line) as Record<string, unknown>;
       const record = objectValue(json);
-      events.push({ raw: line, json, done: record?.done === true, seq: index });
+      events.push(streamEventSnapshot(line, json, record?.done === true, index));
+      if (record?.error) {
+        throw new BenchmarkUpstreamStreamError(
+          streamErrorMessage(record) ?? 'Ollama provider returned a stream error.',
+          'jsonl',
+          events
+        );
+      }
       const message = objectValue(record?.message);
       const part = typeof message?.content === 'string'
         ? message.content
@@ -737,11 +842,28 @@ export function parseOllamaJsonlStream(raw: string): StreamNormalization {
       if (part !== null) {
         content.push(part);
       }
+      const calls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+      for (const call of calls) {
+        const callRecord = objectValue(call);
+        const functionRecord = objectValue(callRecord?.function);
+        const name = textFromValue(functionRecord?.name);
+        if (!name) {
+          throw new BenchmarkStreamParseError('Malformed Ollama streamed tool call: missing function name.', 'jsonl', events);
+        }
+        toolCalls.push(canonicalToolCall(
+          name,
+          parseToolArguments(functionRecord?.arguments, 'Ollama', 'jsonl', events),
+          textFromValue(callRecord?.id) ?? undefined
+        ));
+      }
       if (record?.done === true) {
         done = true;
         finalMetadata = record;
       }
     } catch (error) {
+      if (error instanceof BenchmarkStreamParseError || error instanceof BenchmarkUpstreamStreamError) {
+        throw error;
+      }
       throw new BenchmarkStreamParseError(`Malformed Ollama JSONL stream line ${index + 1}: ${(error as Error).message}`, 'jsonl', events);
     }
   });
@@ -752,6 +874,179 @@ export function parseOllamaJsonlStream(raw: string): StreamNormalization {
     done,
     answer_text: content.join(''),
     ...usageTokens(finalMetadata),
+    tool_calls: toolCalls.length > 0 ? toolCalls : null,
+    final_metadata: finalMetadata
+  };
+}
+
+export function parseAnthropicSseStream(raw: string): StreamNormalization {
+  const parsed = parseSseEvents(raw);
+  const events: StreamEventSnapshot[] = [];
+  const content: string[] = [];
+  const toolCalls: unknown[] = [];
+  const blocks = new Map<number, {
+    type: string;
+    id?: string;
+    name?: string;
+    initialInput: unknown;
+    partialJson: string;
+  }>();
+  let done = false;
+  let finalMetadata: Record<string, unknown> | null = null;
+
+  parsed.forEach((event, index) => {
+    const eventRaw = event.payload ?? '';
+    try {
+      const json = JSON.parse(eventRaw) as Record<string, unknown>;
+      const record = objectValue(json);
+      events.push(streamEventSnapshot(eventRaw, json, false, index, event.event));
+      const eventType = event.event ?? textFromValue(record?.type);
+      if (eventType === 'error' || record?.error) {
+        throw new BenchmarkUpstreamStreamError(
+          streamErrorMessage(record) ?? 'Anthropic returned a stream error.',
+          'sse',
+          events
+        );
+      }
+      if (eventType === 'message_start') {
+        const message = objectValue(record?.message);
+        if (message) finalMetadata = message;
+      } else if (eventType === 'content_block_start') {
+        const blockIndex = numberAt(record, 'index');
+        const block = objectValue(record?.content_block);
+        if (blockIndex !== null && block) {
+          const type = textFromValue(block.type) ?? 'unknown';
+          blocks.set(blockIndex, {
+            type,
+            id: textFromValue(block.id) ?? undefined,
+            name: textFromValue(block.name) ?? undefined,
+            initialInput: block.input,
+            partialJson: ''
+          });
+          if (type === 'text' && typeof block.text === 'string') content.push(block.text);
+        }
+      } else if (eventType === 'content_block_delta') {
+        const blockIndex = numberAt(record, 'index');
+        const delta = objectValue(record?.delta);
+        const block = blockIndex === null ? undefined : blocks.get(blockIndex);
+        if (delta?.type === 'text_delta' && typeof delta.text === 'string') {
+          content.push(delta.text);
+        } else if (block && delta?.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
+          block.partialJson += delta.partial_json;
+        }
+      } else if (eventType === 'content_block_stop') {
+        const blockIndex = numberAt(record, 'index');
+        const block = blockIndex === null ? undefined : blocks.get(blockIndex);
+        if (block?.type === 'tool_use') {
+          if (!block.name) {
+            throw new BenchmarkStreamParseError('Malformed Anthropic streamed tool call: missing function name.', 'sse', events);
+          }
+          toolCalls.push(canonicalToolCall(
+            block.name,
+            parseToolArguments(block.partialJson || block.initialInput, 'Anthropic', 'sse', events),
+            block.id
+          ));
+        }
+        if (blockIndex !== null) blocks.delete(blockIndex);
+      } else if (eventType === 'message_delta') {
+        const usage = objectValue(record?.usage);
+        if (usage) {
+          finalMetadata = {
+            ...(finalMetadata ?? {}),
+            usage: {
+              ...(objectValue(finalMetadata?.usage) ?? {}),
+              ...usage
+            }
+          };
+        }
+      } else if (eventType === 'message_stop') {
+        done = true;
+        events[events.length - 1].done = true;
+      }
+    } catch (error) {
+      if (error instanceof BenchmarkStreamParseError || error instanceof BenchmarkUpstreamStreamError) {
+        throw error;
+      }
+      throw new BenchmarkStreamParseError(`Malformed Anthropic SSE stream event ${index}: ${(error as Error).message}`, 'sse', events);
+    }
+  });
+
+  if (!done || blocks.size > 0) {
+    throw new BenchmarkStreamParseError('Malformed Anthropic SSE stream: missing message_stop or incomplete content block.', 'sse', events);
+  }
+  return {
+    format: 'sse',
+    events,
+    done,
+    answer_text: content.join(''),
+    ...usageTokens(finalMetadata),
+    tool_calls: toolCalls.length > 0 ? toolCalls : null,
+    final_metadata: finalMetadata
+  };
+}
+
+export function parseGeminiSseStream(raw: string): StreamNormalization {
+  const parsed = parseSseEvents(raw);
+  const events: StreamEventSnapshot[] = [];
+  const content: string[] = [];
+  const toolCalls: unknown[] = [];
+  let finalMetadata: Record<string, unknown> | null = null;
+
+  parsed.forEach((event, index) => {
+    const eventRaw = event.payload ?? '';
+    try {
+      const json = JSON.parse(eventRaw) as Record<string, unknown>;
+      const record = objectValue(json);
+      events.push(streamEventSnapshot(eventRaw, json, false, index, event.event));
+      if (event.event === 'error' || record?.error) {
+        throw new BenchmarkUpstreamStreamError(
+          streamErrorMessage(record) ?? 'Gemini returned a stream error.',
+          'sse',
+          events
+        );
+      }
+      const candidates = Array.isArray(record?.candidates) ? record.candidates : [];
+      for (const candidate of candidates) {
+        const candidateRecord = objectValue(candidate);
+        const candidateContent = objectValue(candidateRecord?.content);
+        const parts = Array.isArray(candidateContent?.parts) ? candidateContent.parts : [];
+        for (const part of parts) {
+          const partRecord = objectValue(part);
+          if (typeof partRecord?.text === 'string') content.push(partRecord.text);
+          const functionCall = objectValue(partRecord?.functionCall);
+          const name = textFromValue(functionCall?.name);
+          if (functionCall && !name) {
+            throw new BenchmarkStreamParseError('Malformed Gemini streamed tool call: missing function name.', 'sse', events);
+          }
+          if (name) {
+            toolCalls.push(canonicalToolCall(
+              name,
+              parseToolArguments(functionCall?.args, 'Gemini', 'sse', events),
+              textFromValue(functionCall?.id) ?? undefined
+            ));
+          }
+        }
+      }
+      if (record?.usageMetadata || record?.candidates) finalMetadata = record;
+    } catch (error) {
+      if (error instanceof BenchmarkStreamParseError || error instanceof BenchmarkUpstreamStreamError) {
+        throw error;
+      }
+      throw new BenchmarkStreamParseError(`Malformed Gemini SSE stream event ${index}: ${(error as Error).message}`, 'sse', events);
+    }
+  });
+
+  if (events.length === 0) {
+    throw new BenchmarkStreamParseError('Malformed Gemini SSE stream: no response events.', 'sse', events);
+  }
+  events[events.length - 1].done = true;
+  return {
+    format: 'sse',
+    events,
+    done: true,
+    answer_text: content.join(''),
+    ...usageTokens(finalMetadata),
+    tool_calls: toolCalls.length > 0 ? toolCalls : null,
     final_metadata: finalMetadata
   };
 }
@@ -759,7 +1054,11 @@ export function parseOllamaJsonlStream(raw: string): StreamNormalization {
 function normalizeStreamResponse(protocol: unknown, contentType: string, responseText: string): NormalizedResponse {
   const stream = protocol === 'ollama_chat' && !contentType.includes('text/event-stream')
     ? parseOllamaJsonlStream(responseText)
-    : parseOpenAiSseStream(responseText);
+    : protocol === 'anthropic_messages'
+      ? parseAnthropicSseStream(responseText)
+      : protocol === 'gemini_generate_content'
+        ? parseGeminiSseStream(responseText)
+        : parseOpenAiSseStream(responseText);
   return {
     answer_text: stream.answer_text,
     input_tokens: stream.input_tokens,
@@ -769,7 +1068,7 @@ function normalizeStreamResponse(protocol: unknown, contentType: string, respons
     server_total_time_ms: extractServerTotalTimeMs(stream.final_metadata),
     server_prompt_eval_ms: extractServerPromptEvalMs(stream.final_metadata),
     server_eval_ms: extractServerEvalMs(stream.final_metadata),
-    tool_calls: null,
+    tool_calls: stream.tool_calls,
     body: stream.final_metadata,
     text: null,
     stream: {
@@ -940,7 +1239,7 @@ async function executeItem(
   }
   const timeoutMs = Number(runtimeParameters(instantiation).timeout_ms ?? objectAt(instantiation, 'execution_policy')?.timeout_ms ?? DEFAULT_TIMEOUT_MS);
   const payload = buildBenchmarkRequestPayload(instantiation, executable.item);
-  const streaming = payload.stream === true;
+  const streaming = runtimeParameters(instantiation).stream === true;
   const startedAt = nowIso();
   const start = performance.now();
   let firstTokenMs: number | null = null;
@@ -997,7 +1296,7 @@ async function executeItem(
           ? normalizeStreamResponse(operationSpec?.protocol, contentType, responseText)
           : normalizeResponse(operationSpec?.protocol, responseBody, responseBody === null ? responseText : null);
       } catch (error) {
-        if (!(error instanceof BenchmarkStreamParseError)) {
+        if (!(error instanceof BenchmarkStreamParseError) && !(error instanceof BenchmarkUpstreamStreamError)) {
           throw error;
         }
         const issue = {
@@ -1036,7 +1335,14 @@ async function executeItem(
             headers: Object.fromEntries(response.headers.entries()),
             body: null,
             text: responseText,
-            stream: { format: error.format, events: error.events, done: false, parse_error: error.message }
+            stream: {
+              format: error.format,
+              events: error.events,
+              done: false,
+              ...(error instanceof BenchmarkStreamParseError
+                ? { parse_error: error.message }
+                : { upstream_error: error.message })
+            }
           },
           normalizedResponse: {
             stage_id: stage.id,
@@ -1050,7 +1356,14 @@ async function executeItem(
             total_tokens: null,
             body: null,
             text: null,
-            stream: { format: error.format, events: error.events, done: false, parse_error: error.message }
+            stream: {
+              format: error.format,
+              events: error.events,
+              done: false,
+              ...(error instanceof BenchmarkStreamParseError
+                ? { parse_error: error.message }
+                : { upstream_error: error.message })
+            }
           },
           metrics: {
             stage_id: stage.id,

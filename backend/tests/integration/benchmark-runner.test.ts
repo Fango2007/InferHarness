@@ -13,6 +13,10 @@ import { sha256Document } from '../../src/services/benchmark-schemas.js';
 
 const AUTH_HEADERS = { 'x-api-token': 'test-token' };
 
+function streamFixture(name: string): string {
+  return fs.readFileSync(new URL(`../fixtures/streams/${name}`, import.meta.url), 'utf8');
+}
+
 function benchmarkTemplate(iterations = 1, stopOnError = false): Record<string, unknown> {
   return {
     kind: 'test_template',
@@ -447,6 +451,41 @@ function installMockGeminiFetch(): { baseUrl: string; requests: unknown[]; heade
   return { baseUrl: 'http://mock.local', requests, headers };
 }
 
+function installMockAnthropicStreamFetch(mode: 'ok' | 'error' = 'ok'): { baseUrl: string; requests: unknown[]; headers: Record<string, string>[] } {
+  const requests: unknown[] = [];
+  const headers: Record<string, string>[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) !== 'http://mock.local/v1/messages') {
+      return new Response('', { status: 404 });
+    }
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
+    requests.push(body);
+    headers.push(Object.fromEntries(new Headers(init?.headers).entries()));
+    const fixture = streamFixture(mode === 'error' ? 'anthropic-error.sse' : 'anthropic-tool.sse');
+    return streamResponse(
+      [fixture.slice(0, 137), fixture.slice(137, 411), fixture.slice(411)],
+      'text/event-stream'
+    );
+  }));
+  return { baseUrl: 'http://mock.local', requests, headers };
+}
+
+function installMockGeminiStreamFetch(): { baseUrl: string; requests: unknown[]; headers: Record<string, string>[] } {
+  const requests: unknown[] = [];
+  const headers: Record<string, string>[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) !== 'http://mock.local/v1beta/models/mock-chat:streamGenerateContent?alt=sse') {
+      return new Response('', { status: 404 });
+    }
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
+    requests.push(body);
+    headers.push(Object.fromEntries(new Headers(init?.headers).entries()));
+    const fixture = streamFixture('gemini-tool.sse');
+    return streamResponse([fixture.slice(0, 73), fixture.slice(73)], 'text/event-stream');
+  }));
+  return { baseUrl: 'http://mock.local', requests, headers };
+}
+
 function runtimeProfile(executionPolicy: Record<string, unknown>): Record<string, unknown> {
   return {
     kind: 'runtime_profile',
@@ -826,6 +865,168 @@ describe('benchmark runner API', () => {
     expect(result.document.metric_results[0].input_tokens).toBe(19);
     expect(result.document.metric_results[0].output_tokens).toBe(7);
     expect(result.document.metric_results[0].total_tokens).toBe(26);
+    await app.close();
+  });
+
+  it('executes streamed Anthropic tool calls with native events and unchanged metrics', async () => {
+    mockServer = installMockAnthropicStreamFetch();
+    const app = createServer();
+    seedServerAndModel(mockServer.baseUrl, {
+      schemaFamily: ['anthropic'],
+      streaming: true,
+      authToken: 'anthropic-secret',
+      authHeader: 'x-api-key',
+      tools: true
+    });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/benchmark/instantiations',
+      headers: AUTH_HEADERS,
+      payload: {
+        template: toolBenchmarkTemplate(),
+        server_id: 'srv-runner',
+        model_id: 'mock-chat',
+        runtime_profile: streamingRuntimeProfile(),
+        dataset: toolDataset()
+      }
+    });
+    expect(createResponse.statusCode, JSON.stringify(createResponse.json())).toBe(201);
+    expect(createResponse.json().document.operation_spec).toMatchObject({
+      protocol: 'anthropic_messages',
+      supports_streaming: true,
+      endpoint: '/v1/messages'
+    });
+
+    const runResponse = await app.inject({
+      method: 'POST',
+      url: `/benchmark/instantiations/${createResponse.json().id}/run`,
+      headers: AUTH_HEADERS
+    });
+    expect(runResponse.statusCode, JSON.stringify(runResponse.json())).toBe(201);
+    const result = runResponse.json();
+    expect(result.document.status).toBe('completed');
+    expect(mockServer.headers?.[0]).toMatchObject({
+      'anthropic-version': '2023-06-01',
+      'x-api-key': 'anthropic-secret'
+    });
+    expect(mockServer.requests[0]).toMatchObject({ model: 'mock-chat', stream: true });
+    expect(result.document.raw_responses[0].stream.events[0]).toMatchObject({
+      event_name: 'message_start'
+    });
+    expect(result.document.normalized_responses[0].tool_calls[0]).toMatchObject({
+      id: 'toolu_1',
+      type: 'function',
+      function: {
+        name: 'get_weather',
+        arguments: { city: 'Paris', unit: 'celsius' }
+      }
+    });
+    expect(result.document.metric_results[0]).toMatchObject({
+      tool_call_count: 1,
+      tool_call_assertion_pass: true,
+      input_tokens: 21,
+      output_tokens: 9
+    });
+    await app.close();
+  });
+
+  it('executes streamed Gemini tool calls through streamGenerateContent without a stream body field', async () => {
+    mockServer = installMockGeminiStreamFetch();
+    const app = createServer();
+    seedServerAndModel(mockServer.baseUrl, {
+      schemaFamily: ['gemini'],
+      streaming: true,
+      authToken: 'gemini-secret',
+      authHeader: 'x-goog-api-key',
+      tools: true
+    });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/benchmark/instantiations',
+      headers: AUTH_HEADERS,
+      payload: {
+        template: toolBenchmarkTemplate(),
+        server_id: 'srv-runner',
+        model_id: 'mock-chat',
+        runtime_profile: streamingRuntimeProfile(),
+        dataset: toolDataset()
+      }
+    });
+    expect(createResponse.statusCode, JSON.stringify(createResponse.json())).toBe(201);
+    expect(createResponse.json().document.operation_spec).toMatchObject({
+      protocol: 'gemini_generate_content',
+      supports_streaming: true,
+      endpoint: '/v1beta/{model}:streamGenerateContent?alt=sse',
+      url: 'http://mock.local/v1beta/models/mock-chat:streamGenerateContent?alt=sse'
+    });
+
+    const runResponse = await app.inject({
+      method: 'POST',
+      url: `/benchmark/instantiations/${createResponse.json().id}/run`,
+      headers: AUTH_HEADERS
+    });
+    expect(runResponse.statusCode, JSON.stringify(runResponse.json())).toBe(201);
+    const result = runResponse.json();
+    expect(result.document.status).toBe('completed');
+    expect(mockServer.headers?.[0]).toMatchObject({ 'x-goog-api-key': 'gemini-secret' });
+    expect(mockServer.requests[0]).not.toHaveProperty('stream');
+    expect(result.document.normalized_responses[0].stream.done).toBe(true);
+    expect(result.document.normalized_responses[0].tool_calls[0]).toMatchObject({
+      type: 'function',
+      function: {
+        name: 'get_weather',
+        arguments: { city: 'Paris', unit: 'celsius' }
+      }
+    });
+    expect(result.document.metric_results[0]).toMatchObject({
+      tool_call_count: 1,
+      tool_call_assertion_pass: true,
+      input_tokens: 19,
+      output_tokens: 7,
+      total_tokens: 26
+    });
+    await app.close();
+  });
+
+  it('persists Anthropic provider stream errors separately from malformed streams', async () => {
+    mockServer = installMockAnthropicStreamFetch('error');
+    const app = createServer();
+    seedServerAndModel(mockServer.baseUrl, {
+      schemaFamily: ['anthropic'],
+      streaming: true,
+      tools: true
+    });
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/benchmark/instantiations',
+      headers: AUTH_HEADERS,
+      payload: {
+        template: toolBenchmarkTemplate(),
+        server_id: 'srv-runner',
+        model_id: 'mock-chat',
+        runtime_profile: streamingRuntimeProfile(),
+        dataset: toolDataset()
+      }
+    });
+    expect(createResponse.statusCode, JSON.stringify(createResponse.json())).toBe(201);
+
+    const runResponse = await app.inject({
+      method: 'POST',
+      url: `/benchmark/instantiations/${createResponse.json().id}/run`,
+      headers: AUTH_HEADERS
+    });
+    expect(runResponse.statusCode, JSON.stringify(runResponse.json())).toBe(201);
+    const result = runResponse.json();
+    expect(result.document.status).toBe('completed_with_errors');
+    expect(result.document.errors[0]).toMatchObject({
+      code: 'upstream_stream_error',
+      message: 'Overloaded'
+    });
+    expect(result.document.raw_responses[0].stream.upstream_error).toBe('Overloaded');
+    expect(result.document.raw_responses[0].stream).not.toHaveProperty('parse_error');
     await app.close();
   });
 

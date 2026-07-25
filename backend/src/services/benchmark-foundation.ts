@@ -252,13 +252,16 @@ function assertCapabilities(template: Record<string, unknown>, snapshot: Record<
 
 export function resolveOperationSpec(
   template: Record<string, unknown>,
-  snapshot: Record<string, unknown>
+  snapshot: Record<string, unknown>,
+  runtimeProfile?: Record<string, unknown>
 ): Record<string, unknown> {
   const operation = String(template.operation ?? 'chat_completion');
   const runtime = snapshot.runtime as { api?: { schema_family?: string[] } };
   const endpoints = snapshot.endpoints as { base_url?: string };
   const schemaFamily = runtime.api?.schema_family ?? [];
   const baseUrl = endpoints.base_url ?? '';
+  const streaming = runtimeParameters(runtimeProfile).stream === true;
+  const supportsStreaming = Boolean((snapshot.capabilities as { server?: { streaming?: boolean } }).server?.streaming);
 
   if (operation !== 'chat_completion') {
     throw new BenchmarkValidationError(`Only chat_completion operation resolution is supported in this checkpoint.`);
@@ -284,20 +287,25 @@ export function resolveOperationSpec(
       endpoint: '/v1/messages',
       protocol: 'anthropic_messages',
       operation,
-      supports_streaming: false,
+      supports_streaming: supportsStreaming,
       supports_usage: true
     };
   }
   if (schemaFamily.includes('gemini')) {
     const modelId = String((snapshot.model as { model_id?: unknown } | undefined)?.model_id ?? '');
     const modelPath = modelId.startsWith('models/') ? modelId : `models/${modelId}`;
+    const endpoint = streaming
+      ? `/v1beta/${modelPath}:streamGenerateContent?alt=sse`
+      : `/v1beta/${modelPath}:generateContent`;
     return {
       method: 'POST',
-      url: new URL(`/v1beta/${modelPath}:generateContent`, baseUrl).toString(),
-      endpoint: `/v1beta/{model}:generateContent`,
+      url: new URL(endpoint, baseUrl).toString(),
+      endpoint: streaming
+        ? '/v1beta/{model}:streamGenerateContent?alt=sse'
+        : '/v1beta/{model}:generateContent',
       protocol: 'gemini_generate_content',
       operation,
-      supports_streaming: false,
+      supports_streaming: supportsStreaming,
       supports_usage: true
     };
   }
@@ -331,7 +339,7 @@ export function buildBenchmarkInstantiationDocument(input: InstantiateBenchmarkI
   const modelProfile = buildModelProfile(input.server_id, input.model_id);
   const modelSnapshot = captureModelSnapshot(input.server_id, input.model_id);
   assertCapabilities(input.template, modelSnapshot);
-  const operationSpec = resolveOperationSpec(input.template, modelSnapshot);
+  const operationSpec = resolveOperationSpec(input.template, modelSnapshot, input.runtime_profile);
   const dataset =
     'kind' in input.dataset && (input.dataset as Record<string, unknown>).kind === 'dataset_manifest'
       ? input.dataset as Record<string, unknown>
