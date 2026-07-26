@@ -1,12 +1,16 @@
 import { expect, test } from '@playwright/test';
 import crypto from 'node:crypto';
 
-import { archiveInferenceServer, findInferenceServerByName } from './helpers.js';
+import { archiveInferenceServer, dismissOnboarding, findInferenceServerByName } from './helpers.js';
+
+test.beforeEach(async ({ page }) => {
+  await dismissOnboarding(page);
+});
 
 test('populates safe cloud provider defaults without filling the bearer token', async ({ page }) => {
   await page.goto('/catalog?tab=servers');
 
-  await page.getByRole('button', { name: '+ Add server' }).click();
+  await page.getByRole('button', { name: '+ Add server', exact: true }).click();
 
   const createDrawer = page
     .getByRole('dialog')
@@ -20,6 +24,8 @@ test('populates safe cloud provider defaults without filling the bearer token', 
     'Local / custom inference server',
     'OpenAI',
     'Mistral',
+    'Anthropic',
+    'Google Gemini',
     'Groq',
     'Together AI',
     'Fireworks AI',
@@ -68,7 +74,7 @@ test('creates a new inference server from the dashboard', async ({ page, request
 
   await page.goto('/catalog?tab=servers');
 
-  await page.getByRole('button', { name: '+ Add server' }).click();
+  await page.getByRole('button', { name: '+ Add server', exact: true }).click();
 
   const createDrawer = page
     .getByRole('dialog')

@@ -97,7 +97,9 @@ test('model filter rail narrows visible model cards', async ({ page, request }) 
   await page.goto(`/catalog?tab=models&servers=${encodeURIComponent(serverId)}`);
   await page.waitForLoadState('networkidle');
 
-  await page.getByLabel('MLX').check();
+  const mlxFilter = page.getByLabel('MLX');
+  await mlxFilter.click();
+  await expect(mlxFilter).toBeChecked();
   await expect(page.locator('.catalog-model-card').filter({ hasText: 'Qwen3 Coder' })).toBeVisible();
   await expect(page.locator('.catalog-model-card').filter({ hasText: 'Devstral' })).toHaveCount(0);
 
@@ -121,7 +123,9 @@ test('model filter rail uses persisted metadata instead of inferring from model 
   await page.goto(`/catalog?tab=models&servers=${encodeURIComponent(serverId)}`);
   await page.waitForLoadState('networkidle');
 
-  await page.getByLabel('MLX').check();
+  const mlxFilter = page.getByLabel('MLX');
+  await mlxFilter.click();
+  await expect(mlxFilter).toBeChecked();
   await expect(page.locator('.catalog-model-card').filter({ hasText: 'Persisted MLX' })).toBeVisible();
   await expect(page.locator('.catalog-model-card').filter({ hasText: 'Raw MLX Suffix' })).toHaveCount(0);
 

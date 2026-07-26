@@ -2,7 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 
-import { APIRequestContext, APIResponse, expect } from '@playwright/test';
+import { APIRequestContext, APIResponse, expect, type Page } from '@playwright/test';
 import { loadEnv } from 'vite';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -12,6 +12,16 @@ const env = { ...rawEnv, ...process.env };
 const API_BASE_URL = env.E2E_API_BASE_URL ?? 'http://localhost:8080';
 const API_TOKEN = env.INFERHARNESS_API_TOKEN ?? env.VITE_INFERHARNESS_API_TOKEN;
 const authHeaders = API_TOKEN ? { 'x-api-token': API_TOKEN } : undefined;
+
+export async function dismissOnboarding(page: Page) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('inferharness.onboarding.v1', JSON.stringify({
+      dismissedAt: '2026-01-01T00:00:00.000Z',
+      replaying: false,
+      ribbonsDismissed: []
+    }));
+  });
+}
 
 export interface InferenceServerRecord {
   inference_server: {

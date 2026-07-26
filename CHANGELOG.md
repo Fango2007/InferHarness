@@ -21,6 +21,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Changed
 
+- **Design-system page conformance** — updated deterministic browser fixtures for current onboarding, provider, navigation, Settings, Catalog, and Run behavior; added responsive route, mobile navigation, focus restoration, target-size, overflow, and template-chip contrast regression coverage.
 - **Design-system primitive ownership** — moved the native control, shared button, field, card, list, tab, empty-state, status, and utility patterns used by the frontend into `components.css`, removed unconsumed handoff primitives and duplicate app-level definitions, and tokenized application font sizes and border radii.
 - **Design-system foundation** — promoted `docs/design-system/tokens/` as the durable byte-identical token source, standardized the desktop sidebar at 220px, added input and accessible semantic-status tokens, resolved invalid aliases, and restored readable template operation chips.
 - **Agent workflow commands** — `AGENTS.md` now records the common validation, development, E2E, and benchmark data persistence workflows agents should use when changing the repo.

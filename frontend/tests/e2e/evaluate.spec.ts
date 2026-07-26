@@ -45,7 +45,7 @@ test.describe('Evaluate queue', () => {
     await expect(page.getByRole('heading', { name: 'Evaluate' })).toBeVisible();
     await expect(page.locator('.merged-page-header').getByRole('heading', { name: 'Evaluate' })).toBeVisible();
     await expect(page.locator('.evaluate-header')).toHaveCount(0);
-    await expect(page.getByText('Params')).toBeVisible();
+    await expect(page.getByText('Params')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'All caught up' })).toBeVisible();
   });
 
