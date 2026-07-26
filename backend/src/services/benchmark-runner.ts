@@ -21,6 +21,11 @@ import {
   type ProviderMetricContext,
   type ProviderProtocol
 } from './benchmark-provider-metrics.js';
+import {
+  measuredClientMetric,
+  normalizeClientMetricObservations,
+  type ClientAttemptTelemetry
+} from './benchmark-client-metrics.js';
 
 const ENGINE_VERSION = 'benchmark-runner-v1';
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -1298,6 +1303,10 @@ function providerHeaders(protocol: unknown): Record<string, string> {
   return {};
 }
 
+function roundMilliseconds(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
 async function executeItem(
   instantiation: Record<string, unknown>,
   stage: BenchmarkStage,
@@ -1322,13 +1331,28 @@ async function executeItem(
   const streaming = runtimeParameters(instantiation).stream === true;
   const metricContext = providerMetricContext(instantiation, operationSpec?.protocol);
   const startedAt = nowIso();
-  const start = performance.now();
+  const operationStartedAtMs = performance.now();
   let firstTokenMs: number | null = null;
   const attemptErrors: Record<string, unknown>[] = [];
+  const clientAttempts: ClientAttemptTelemetry[] = [];
   const maxAttempts = policy.retry.max_retries + 1;
   const pairMeta = executable.pairMemberId ? { pair_member_id: executable.pairMemberId } : {};
+  const operationElapsedMs = () => {
+    const observations = normalizeClientMetricObservations({
+      operation_started_at_ms: operationStartedAtMs,
+      operation_ended_at_ms: performance.now(),
+      streaming,
+      attempts: clientAttempts
+    });
+    return roundMilliseconds(
+      measuredClientMetric(observations, 'operation_elapsed_ms')
+      ?? (performance.now() - operationStartedAtMs)
+    );
+  };
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const attemptStartedAtMs = performance.now();
+    let firstChunkAtMs: number | null = null;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -1351,8 +1375,9 @@ async function executeItem(
           if (done) {
             break;
           }
-          if (firstTokenMs === null) {
-            firstTokenMs = Math.round((performance.now() - start) * 1000) / 1000;
+          if (firstTokenMs === null && value.byteLength > 0) {
+            firstChunkAtMs = performance.now();
+            firstTokenMs = roundMilliseconds(firstChunkAtMs - operationStartedAtMs);
           }
           responseText += decoder.decode(value, { stream: true });
         }
@@ -1360,8 +1385,8 @@ async function executeItem(
       } else {
         responseText = await response.text();
       }
+      const attemptEndedAtMs = performance.now();
       const completedAt = nowIso();
-      const elapsedMs = Math.round((performance.now() - start) * 1000) / 1000;
       let responseBody: unknown = null;
       const contentType = response.headers.get('content-type') ?? '';
       if (!effectiveStreaming && contentType.includes('application/json')) {
@@ -1397,6 +1422,16 @@ async function executeItem(
           stream_format: error.format
         };
         attemptErrors.push(issue);
+        clientAttempts.push({
+          started_at_ms: attemptStartedAtMs,
+          ended_at_ms: attemptEndedAtMs,
+          first_chunk_at_ms: firstChunkAtMs,
+          request_succeeded: response.ok,
+          timed_out: false,
+          response_normalization_succeeded: false,
+          stream_completed: effectiveStreaming ? false : null
+        });
+        const elapsedMs = operationElapsedMs();
         return {
           result: {
             item_index: executable.itemIndex,
@@ -1469,6 +1504,17 @@ async function executeItem(
           error: issue
         };
       }
+      const errorCode = response.ok ? null : `http_${response.status}`;
+      clientAttempts.push({
+        started_at_ms: attemptStartedAtMs,
+        ended_at_ms: attemptEndedAtMs,
+        first_chunk_at_ms: firstChunkAtMs,
+        request_succeeded: response.ok,
+        timed_out: false,
+        response_normalization_succeeded: response.ok,
+        stream_completed: streaming ? Boolean(normalized.stream?.done) : null
+      });
+      const elapsedMs = operationElapsedMs();
       const rawResponse = {
         stage_id: stage.id,
         ...pairMeta,
@@ -1504,7 +1550,6 @@ async function executeItem(
         item: executable.item
       });
       const metrics = { ...baseMetrics, ...computedMetrics };
-      const errorCode = response.ok ? null : `http_${response.status}`;
       if (!errorCode) {
         return {
           result: {
@@ -1580,6 +1625,7 @@ async function executeItem(
       }
     } catch (error) {
       const err = error as Error;
+      const attemptEndedAtMs = performance.now();
       const issue = {
         code: err.name === 'AbortError' ? 'timeout' : 'connection_error',
         message: err.name === 'AbortError' ? `Benchmark request timed out after ${timeoutMs}ms` : err.message,
@@ -1591,9 +1637,18 @@ async function executeItem(
         attempt
       };
       attemptErrors.push(issue);
+      clientAttempts.push({
+        started_at_ms: attemptStartedAtMs,
+        ended_at_ms: attemptEndedAtMs,
+        first_chunk_at_ms: firstChunkAtMs,
+        request_succeeded: false,
+        timed_out: err.name === 'AbortError',
+        response_normalization_succeeded: null,
+        stream_completed: streaming ? false : null
+      });
       if (!issue.retryable || attempt >= maxAttempts) {
         const completedAt = nowIso();
-        const elapsedMs = Math.round((performance.now() - start) * 1000) / 1000;
+        const elapsedMs = operationElapsedMs();
         return {
           result: {
             item_index: executable.itemIndex,

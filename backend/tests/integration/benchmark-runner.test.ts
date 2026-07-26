@@ -387,6 +387,18 @@ function installMockOllamaStreamFetch(): { baseUrl: string; requests: unknown[] 
   return { baseUrl: 'http://mock.local', requests };
 }
 
+function installMockTimeoutFetch(): { baseUrl: string; requests: unknown[] } {
+  const requests: unknown[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
+    requests.push(body);
+    const error = new Error('aborted');
+    error.name = 'AbortError';
+    throw error;
+  }));
+  return { baseUrl: 'http://mock.local', requests };
+}
+
 function installMockAnthropicFetch(): { baseUrl: string; requests: unknown[]; headers: Record<string, string>[] } {
   const requests: unknown[] = [];
   const headers: Record<string, string>[] = [];
@@ -1171,6 +1183,8 @@ describe('benchmark runner API', () => {
     expect(result.document.stage_results[0].results[0].attempts).toBe(2);
     expect(result.document.stage_results[0].results[0].attempt_errors[0].code).toBe('http_503');
     expect(result.document.normalized_responses[0].answer_text).toBe('benchmark answer');
+    expect(result.document.metric_results[0].elapsed_ms).toEqual(expect.any(Number));
+    expect(result.document.normalized_responses[0]).not.toHaveProperty('metric_observations');
     expect(mockServer.requests).toHaveLength(2);
     await app.close();
   });
@@ -1446,6 +1460,8 @@ describe('benchmark runner API', () => {
     expect(result.document.status).toBe('completed');
     expect(result.document.stage_results[0].results[0].attempts).toBe(2);
     expect(result.document.stage_results[0].results[0].attempt_errors[0].code).toBe('http_503');
+    expect(result.document.metric_results[0].elapsed_ms).toEqual(expect.any(Number));
+    expect(result.document.metric_version).toBe('metrics-v1');
     expect(mockServer.requests).toHaveLength(2);
     await app.close();
   });
@@ -1488,6 +1504,49 @@ describe('benchmark runner API', () => {
     expect(result.document.errors[0].code).toBe('http_503');
     expect(result.document.stage_results[0].results[0].attempts).toBe(2);
     expect(mockServer.requests).toHaveLength(2);
+    await app.close();
+  });
+
+  it('persists terminal timeout diagnostics without exposing transient observations', async () => {
+    mockServer = installMockTimeoutFetch();
+    const app = createServer();
+    seedServerAndModel(mockServer.baseUrl);
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/benchmark/instantiations',
+      headers: AUTH_HEADERS,
+      payload: {
+        template: benchmarkTemplate(),
+        server_id: 'srv-runner',
+        model_id: 'mock-chat',
+        runtime_profile: runtimeProfile({ timeout_ms: 5 }),
+        dataset: {
+          dataset_id: 'embedded-runner',
+          source: { source_type: 'inline', format: 'json' },
+          snapshot_policy: 'embedded',
+          items: [{ id: 'item-1', prompt: 'Run benchmark.' }]
+        }
+      }
+    });
+    expect(createResponse.statusCode, JSON.stringify(createResponse.json())).toBe(201);
+
+    const runResponse = await app.inject({
+      method: 'POST',
+      url: `/benchmark/instantiations/${createResponse.json().id}/run`,
+      headers: AUTH_HEADERS
+    });
+    expect(runResponse.statusCode).toBe(201);
+    const result = runResponse.json();
+    expect(result.document.status).toBe('completed_with_errors');
+    expect(result.document.errors[0].code).toBe('timeout');
+    expect(result.document.stage_results[0].results[0]).toMatchObject({
+      attempts: 1,
+      elapsed_ms: expect.any(Number)
+    });
+    expect(result.document).not.toHaveProperty('metric_observations');
+    expect(result.document.metric_version).toBe('metrics-v1');
+    expect(mockServer.requests).toHaveLength(1);
     await app.close();
   });
 
