@@ -16,6 +16,7 @@
   "scripts": {
     "build": "npm run build:frontend",
     "build:frontend": "npm -w frontend run build",
+    "check:design-system": "node scripts/check-design-system.mjs",
     "check:node": "node scripts/check-node-version.mjs",
     "dev": "concurrently \"npm -w backend run dev\" \"npm -w frontend run dev\"",
     "prebuild": "npm -w backend run bootstrap-env",
@@ -24,7 +25,7 @@
     "prestart": "npm -w backend run bootstrap-env",
     "e2e:serve": "concurrently --kill-others-on-fail \"npm run start:backend\" \"npm -w frontend run dev\"",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
-    "release:check": "npm run lint && npm test && npm run build",
+    "release:check": "npm run check:design-system && npm run lint && npm test && npm run build",
     "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
     "start:backend": "npm -w backend run start",
     "start:frontend": "npm -w frontend run preview",
@@ -44,6 +45,7 @@
     "@typescript-eslint/parser": "^8.0.0",
     "concurrently": "^9.0.1",
     "eslint": "^8.57.0",
-    "eslint-plugin-import": "^2.31.0"
+    "eslint-plugin-import": "^2.31.0",
+    "postcss": "^8.5.23"
   }
 }

@@ -2,14 +2,14 @@ import type { InferenceServerRecord } from './inference-servers-api.js';
 import type { ModelRecord } from './models-api.js';
 
 export const RUN_ACCENTS = [
-  '#3776ab',
-  '#cb6d1a',
-  '#5b8a3a',
-  '#8a4a9c',
-  '#b85c5c',
-  '#3a7a7a',
-  '#7a6a3a',
-  '#5c5c5c'
+  'var(--run-accent-1)',
+  'var(--run-accent-2)',
+  'var(--run-accent-3)',
+  'var(--run-accent-4)',
+  'var(--run-accent-5)',
+  'var(--run-accent-6)',
+  'var(--run-accent-7)',
+  'var(--run-accent-8)'
 ] as const;
 
 export interface RunTarget {

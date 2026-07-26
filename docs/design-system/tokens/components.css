@@ -40,7 +40,7 @@ body.atb {
               background var(--t-fast) var(--ease-out);
   white-space: nowrap;
 }
-.btn:hover { transform: translateY(-1px); box-shadow: 0 6px 14px rgba(27,26,23,0.18); }
+.btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-button-hover); }
 .btn:active { transform: var(--xfm-press); box-shadow: none; }
 .btn:focus-visible { outline: none; box-shadow: var(--halo-focus); }
 
@@ -110,7 +110,7 @@ body.atb {
   width: 100%;
   padding: 0 var(--s-10);
   font-family: var(--font-sans); font-size: var(--fs-md); color: var(--ink-9);
-  background: #fffdfa; border: 1px solid var(--border-input); border-radius: var(--r-input);
+  background: var(--bg-input); border: 1px solid var(--border-input); border-radius: var(--r-input);
   outline: none;
   transition: border-color var(--t-fast), box-shadow var(--t-fast);
 }
@@ -121,7 +121,7 @@ body.atb {
 .textarea {
   width: 100%; min-height: 220px; padding: var(--s-8) var(--s-10);
   font-family: var(--font-mono); font-size: var(--fs-base); color: var(--ink-9);
-  background: #fffdfa; border: 1px solid var(--border-input); border-radius: var(--r-input);
+  background: var(--bg-input); border: 1px solid var(--border-input); border-radius: var(--r-input);
   outline: none; resize: vertical;
 }
 .textarea:focus { border-color: var(--gold-3); box-shadow: 0 0 0 3px var(--gold-1); }

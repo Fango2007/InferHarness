@@ -136,7 +136,11 @@
                     rgba(240, 233, 223, 0.9));
   --bg-pre-dark:  var(--ink-1);
   --bg-pre-light: #f6f1e6;
+  --bg-input:     #fffdfa;
+  --bg-input-alt: #fffefa;
   --bg-error:     #ffe8e5;
+  --bg-error-soft: #fff8f5;
+  --bg-streaming: #fff9ec;
   --bg-tab-active:    #fff8ea;
   --bg-tab-inactive:  var(--paper-5);
   --bg-nav-active:    #fff4e6;
@@ -155,20 +159,42 @@
 
   /* ---- 6. Semantic ---------------------------------------- */
   --ok:           #2f9e44;
-  --ok-tint:      rgba(47, 158, 68, 0.12);
+  --ok-text:      #246b3d;
+  --ok-tint:      #ddf2e4;
+  --ok-border:    #8abf92;
   --ok-halo:      rgba(47, 158, 68, 0.2);
 
   --danger:       #c92a2a;
   --danger-icon:  #b42318;
-  --danger-tint:  rgba(201, 42, 42, 0.1);
+  --danger-text:  #93403d;
+  --danger-tint:  #f7dedb;
+  --danger-border: #d99a9a;
+  --danger-accent: #c95b45;
+  --danger-field-border: #9c3f2e;
+  --danger-soft-transparent: rgba(255, 248, 245, 0);
   --danger-halo:  rgba(201, 42, 42, 0.2);
 
   --pending:      #b3aca2;
   --pending-text: #766f66;
+  --pending-tint: #e9e3d9;
   --pending-halo: rgba(179, 172, 162, 0.2);
 
   --warning-dot:  #f2c94c;
-  --warning-tint: rgba(242, 201, 76, 0.18);
+  --warning-text: #7a5b11;
+  --warning-tint: #f8edc7;
+
+  --benchmark-text: #55601f;
+  --benchmark-tint: #e7ead8;
+
+  /* distinguish concurrent run targets */
+  --run-accent-1: #3776ab;
+  --run-accent-2: #cb6d1a;
+  --run-accent-3: #5b8a3a;
+  --run-accent-4: #8a4a9c;
+  --run-accent-5: #b85c5c;
+  --run-accent-6: #3a7a7a;
+  --run-accent-7: #7a6a3a;
+  --run-accent-8: #5c5c5c;
 
   /* ---- 7. Borders ----------------------------------------- */
   --border-default:    var(--paper-7);
@@ -211,6 +237,8 @@
                         0 2px 6px rgba(27, 26, 23, 0.12);
   --shadow-modal:       0 20px 40px rgba(27, 26, 23, 0.2);
   --shadow-popover:     0 8px 24px rgba(27, 26, 23, 0.14);
+  --shadow-drawer:      -12px 0 30px rgba(27, 26, 23, 0.18);
+  --shadow-button-hover: 0 6px 14px rgba(27, 26, 23, 0.18);
 
   --halo-focus:         0 0 0 3px var(--gold-1),
                         0 0 0 4px var(--gold-3);
@@ -219,6 +247,22 @@
   --halo-pending:       0 0 0 4px var(--pending-halo);
 
   --overlay-modal:      rgba(27, 26, 23, 0.4);
+  --halo-neutral:       0 0 0 3px rgba(55, 53, 47, 0.08);
+
+  /* dark structured-data editor */
+  --terminal-border:       #2a2722;
+  --terminal-surface:      #211e1a;
+  --terminal-control:      #3f3a33;
+  --terminal-warning:      #e0a23a;
+  --terminal-muted:        #5b554c;
+  --terminal-text:         #e7ddc9;
+  --terminal-text-muted:   #cabfa9;
+  --terminal-text-subtle:  #7c756a;
+  --terminal-field-border: #3a352d;
+  --terminal-field-text:   #b6a986;
+  --terminal-selection:    rgba(140, 115, 64, 0.22);
+  --terminal-highlight:    rgba(140, 115, 64, 0.16);
+  --terminal-pulse:        rgba(140, 115, 64, 0.55);
 
   /* ---- 10. Spacing scale (4-base, with 2px micro) -------- */
   --s-0:  0;
@@ -248,10 +292,9 @@
   /* ---- 12. Layout --------------------------------------- */
   --page-max:       960px;
   --page-max-wide:  1200px;
-  --sidebar-w:      72px;
+  --sidebar-w:      220px;
   --nav-btn-size:   44px;
   --input-h:        34px;
-  --bp-mobile:      900px;
 }
 
 /* ============================================================
