@@ -12,6 +12,21 @@ import { BENCHMARK_DATASET_ROOT_ENV } from '../../src/services/benchmark-dataset
 import { sha256Document } from '../../src/services/benchmark-schemas.js';
 
 const AUTH_HEADERS = { 'x-api-token': 'test-token' };
+const CANONICAL_DERIVED_METRIC_IDS = [
+  'generation_window_ms',
+  'per_request_output_tokens_per_second',
+  'time_per_output_token_ms',
+  'decode_output_tokens_per_second',
+  'server_prefill_tokens_per_second',
+  'server_decode_tokens_per_second',
+  'output_input_token_ratio'
+];
+
+function expectNoCanonicalDerivedMetrics(value: Record<string, unknown>): void {
+  for (const metricId of CANONICAL_DERIVED_METRIC_IDS) {
+    expect(value).not.toHaveProperty(metricId);
+  }
+}
 
 function streamFixture(name: string): string {
   return fs.readFileSync(new URL(`../fixtures/streams/${name}`, import.meta.url), 'utf8');
@@ -621,6 +636,7 @@ describe('benchmark runner API', () => {
     expect(result.document.normalized_responses[0]).not.toHaveProperty('provider_version');
     expect(result.document.metric_results[0].total_tokens).toBe(7);
     expect(result.document.metric_version).toBe('metrics-v1');
+    expectNoCanonicalDerivedMetrics(result.document.metric_results[0]);
     expect(result.document.aggregated_metrics.elapsed_ms.valid_sample_count).toBe(1);
     expect(mockServer.requests).toHaveLength(1);
     expect((mockServer.requests[0] as Record<string, unknown>).model).toBe('mock-chat');
@@ -955,6 +971,7 @@ describe('benchmark runner API', () => {
     expect(result.document.normalized_responses[0]).not.toHaveProperty('metric_observations');
     expect(result.document.metric_results[0]).not.toHaveProperty('time_to_first_tool_call_ms');
     expect(result.document.metric_results[0]).not.toHaveProperty('time_to_tool_calls_ready_ms');
+    expectNoCanonicalDerivedMetrics(result.document.metric_results[0]);
     await app.close();
   });
 
@@ -1100,6 +1117,7 @@ describe('benchmark runner API', () => {
     expect(result.document).not.toHaveProperty('metric_observations');
     expect(result.document.normalized_responses[0]).not.toHaveProperty('metric_observations');
     expect(result.document.metric_results[0]).not.toHaveProperty('time_to_first_output_ms');
+    expectNoCanonicalDerivedMetrics(result.document.metric_results[0]);
     expect((mockServer.requests[0] as Record<string, unknown>).stream).toBe(true);
     await app.close();
   });

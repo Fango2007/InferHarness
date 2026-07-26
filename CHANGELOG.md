@@ -30,6 +30,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - **Canonical provider metric normalization** — benchmark response normalization now uses an internal typed `metrics-v2` observation contract for registered Ollama, OpenAI Chat, Anthropic Messages, and Gemini GenerateContent usage and timing fields while persisted benchmark results remain on the existing `metrics-v1` contract.
 - **Canonical client metric normalization** — benchmark execution now records transient `metrics-v2` observations for operation and successful-attempt latency, retry overhead, attempt count, request and normalization health, terminal timeouts, stream completion, and first transport chunk timing while retaining the persisted `metrics-v1` result shape.
 - **Canonical semantic stream timing** — streamed benchmark execution now distinguishes first transport bytes from meaningful text or tool-call output and records transient first-output, first-tool-call, tool-readiness, and last-output timestamps without changing persisted `metrics-v1` results.
+- **Canonical per-request derived observations** — benchmark execution now composes client and provider observations and transiently calculates registered generation-window, token-efficiency, server-rate, and output/input formulas while persisted results remain on `metrics-v1`.
 
 ### Fixed
 

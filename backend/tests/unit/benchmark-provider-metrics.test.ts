@@ -166,6 +166,7 @@ describe('normalizeProviderMetricObservations', () => {
         provider_name: 'Google Gemini'
       }),
       {
+        candidates: [{ content: { parts: [{ text: 'Answer' }] } }],
         usageMetadata: {
           promptTokenCount: 30,
           cachedContentTokenCount: 10,
@@ -187,6 +188,7 @@ describe('normalizeProviderMetricObservations', () => {
       accounting_scope: {
         mapping_classification: 'qualified',
         candidate_scope: 'all_candidates',
+        candidate_count: 1,
         comparison_requires_equivalent_candidate_scope: true
       }
     });

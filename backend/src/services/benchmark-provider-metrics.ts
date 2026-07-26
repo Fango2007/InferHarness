@@ -414,6 +414,14 @@ function normalizeGemini(
       accountingScope: { includes: ['prompt', 'thoughts', 'response_candidates'] }
     }
   ]);
+  const candidateCount = Array.isArray(metadata.candidates) ? metadata.candidates.length : null;
+  const outputTokens = observations.find((observation) => observation.metric_id === 'output_tokens');
+  if (outputTokens?.accounting_scope) {
+    outputTokens.accounting_scope = {
+      ...outputTokens.accounting_scope,
+      candidate_count: candidateCount
+    };
+  }
   const inputTokens = measuredValue(observations, 'input_tokens');
   const cachedInputTokens = measuredValue(observations, 'cached_input_tokens');
   if (inputTokens !== null && cachedInputTokens !== null && cachedInputTokens <= inputTokens) {

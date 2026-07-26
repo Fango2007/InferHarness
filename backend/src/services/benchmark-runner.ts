@@ -22,10 +22,10 @@ import {
   type ProviderProtocol
 } from './benchmark-provider-metrics.js';
 import {
-  measuredClientMetric,
-  normalizeClientMetricObservations,
   type ClientAttemptTelemetry
 } from './benchmark-client-metrics.js';
+import { measuredMetricValue } from './benchmark-metric-observations.js';
+import { composeRequestMetricObservations } from './benchmark-request-metrics.js';
 import {
   classifyStreamSemanticEvent,
   createStreamTimingTracker,
@@ -83,6 +83,16 @@ interface DerivedMetric {
   left: string;
   right: string;
   unit?: string;
+}
+
+interface NormalizedResponseResult {
+  response: NormalizedResponse;
+  provider_observations: MetricObservation[];
+}
+
+interface NormalizedProviderMetricResult {
+  metrics: NormalizedProviderMetrics;
+  observations: MetricObservation[];
 }
 
 interface ExecutableItem {
@@ -751,33 +761,36 @@ function projectedProviderMetric(
 function normalizedProviderMetrics(
   context: ProviderMetricContext | null,
   metadata: Record<string, unknown> | null
-): NormalizedProviderMetrics {
+): NormalizedProviderMetricResult {
   const observations = context ? normalizeProviderMetricObservations(context, metadata) : [];
   const legacyTokens = usageTokens(metadata);
   return {
-    input_tokens: projectedProviderMetric(observations, 'input_tokens', legacyTokens.input_tokens),
-    output_tokens: projectedProviderMetric(observations, 'output_tokens', legacyTokens.output_tokens),
-    total_tokens: projectedProviderMetric(observations, 'total_tokens', legacyTokens.total_tokens),
-    load_duration_ms: projectedProviderMetric(
-      observations,
-      'model_load_time_ms',
-      extractLoadDurationMs(metadata)
-    ),
-    server_total_time_ms: projectedProviderMetric(
-      observations,
-      'server_total_time_ms',
-      extractServerTotalTimeMs(metadata)
-    ),
-    server_prompt_eval_ms: projectedProviderMetric(
-      observations,
-      'server_prefill_time_ms',
-      extractServerPromptEvalMs(metadata)
-    ),
-    server_eval_ms: projectedProviderMetric(
-      observations,
-      'server_decode_time_ms',
-      extractServerEvalMs(metadata)
-    )
+    metrics: {
+      input_tokens: projectedProviderMetric(observations, 'input_tokens', legacyTokens.input_tokens),
+      output_tokens: projectedProviderMetric(observations, 'output_tokens', legacyTokens.output_tokens),
+      total_tokens: projectedProviderMetric(observations, 'total_tokens', legacyTokens.total_tokens),
+      load_duration_ms: projectedProviderMetric(
+        observations,
+        'model_load_time_ms',
+        extractLoadDurationMs(metadata)
+      ),
+      server_total_time_ms: projectedProviderMetric(
+        observations,
+        'server_total_time_ms',
+        extractServerTotalTimeMs(metadata)
+      ),
+      server_prompt_eval_ms: projectedProviderMetric(
+        observations,
+        'server_prefill_time_ms',
+        extractServerPromptEvalMs(metadata)
+      ),
+      server_eval_ms: projectedProviderMetric(
+        observations,
+        'server_decode_time_ms',
+        extractServerEvalMs(metadata)
+      )
+    },
+    observations
   };
 }
 
@@ -1156,7 +1169,7 @@ function normalizeStreamResponse(
   contentType: string,
   responseText: string,
   metricContext: ProviderMetricContext | null
-): NormalizedResponse {
+): NormalizedResponseResult {
   const stream = protocol === 'ollama_chat' && !contentType.includes('text/event-stream')
     ? parseOllamaJsonlStream(responseText)
     : protocol === 'anthropic_messages'
@@ -1164,25 +1177,29 @@ function normalizeStreamResponse(
       : protocol === 'gemini_generate_content'
         ? parseGeminiSseStream(responseText)
         : parseOpenAiSseStream(responseText);
+  const providerMetrics = normalizedProviderMetrics(metricContext, stream.final_metadata);
   return {
-    answer_text: stream.answer_text,
-    ...normalizedProviderMetrics(metricContext, stream.final_metadata),
-    tool_calls: stream.tool_calls,
-    body: stream.final_metadata,
-    text: null,
-    stream: {
-      format: stream.format,
-      events: stream.events,
-      done: stream.done,
-      final_metadata: stream.final_metadata
-    }
+    response: {
+      answer_text: stream.answer_text,
+      ...providerMetrics.metrics,
+      tool_calls: stream.tool_calls,
+      body: stream.final_metadata,
+      text: null,
+      stream: {
+        format: stream.format,
+        events: stream.events,
+        done: stream.done,
+        final_metadata: stream.final_metadata
+      }
+    },
+    provider_observations: providerMetrics.observations
   };
 }
 
 function normalizeAnthropicResponse(
   record: Record<string, unknown>,
   metricContext: ProviderMetricContext | null
-): NormalizedResponse {
+): NormalizedResponseResult {
   const content = Array.isArray(record.content) ? record.content : [];
   const textParts: string[] = [];
   const toolCalls: unknown[] = [];
@@ -1206,19 +1223,23 @@ function normalizeAnthropicResponse(
       }
     }
   }
+  const providerMetrics = normalizedProviderMetrics(metricContext, record);
   return {
-    answer_text: textParts.join(''),
-    ...normalizedProviderMetrics(metricContext, record),
-    tool_calls: toolCalls.length > 0 ? toolCalls : null,
-    body: record,
-    text: null
+    response: {
+      answer_text: textParts.join(''),
+      ...providerMetrics.metrics,
+      tool_calls: toolCalls.length > 0 ? toolCalls : null,
+      body: record,
+      text: null
+    },
+    provider_observations: providerMetrics.observations
   };
 }
 
 function normalizeGeminiResponse(
   record: Record<string, unknown>,
   metricContext: ProviderMetricContext | null
-): NormalizedResponse {
+): NormalizedResponseResult {
   const candidates = Array.isArray(record.candidates) ? record.candidates : [];
   const firstCandidate = objectValue(candidates[0]);
   const content = objectValue(firstCandidate?.content);
@@ -1243,12 +1264,16 @@ function normalizeGeminiResponse(
       });
     }
   }
+  const providerMetrics = normalizedProviderMetrics(metricContext, record);
   return {
-    answer_text: textParts.join(''),
-    ...normalizedProviderMetrics(metricContext, record),
-    tool_calls: toolCalls.length > 0 ? toolCalls : null,
-    body: record,
-    text: null
+    response: {
+      answer_text: textParts.join(''),
+      ...providerMetrics.metrics,
+      tool_calls: toolCalls.length > 0 ? toolCalls : null,
+      body: record,
+      text: null
+    },
+    provider_observations: providerMetrics.observations
   };
 }
 
@@ -1257,7 +1282,7 @@ function normalizeResponse(
   body: unknown,
   text: string | null,
   metricContext: ProviderMetricContext | null
-): NormalizedResponse {
+): NormalizedResponseResult {
   if (body && typeof body === 'object' && !Array.isArray(body)) {
     const record = body as Record<string, unknown>;
     if (protocol === 'anthropic_messages') {
@@ -1275,26 +1300,33 @@ function normalizeResponse(
       ? record.message as Record<string, unknown>
       : null;
     const toolCalls = Array.isArray(message?.tool_calls) ? (message.tool_calls as unknown[]) : null;
+    const providerMetrics = normalizedProviderMetrics(metricContext, record);
     return {
-      answer_text: textFromValue(message?.content) ?? textFromValue(ollamaMessage?.content) ?? textFromValue(record.response) ?? '',
-      ...normalizedProviderMetrics(metricContext, record),
-      tool_calls: toolCalls,
-      body,
-      text: null
+      response: {
+        answer_text: textFromValue(message?.content) ?? textFromValue(ollamaMessage?.content) ?? textFromValue(record.response) ?? '',
+        ...providerMetrics.metrics,
+        tool_calls: toolCalls,
+        body,
+        text: null
+      },
+      provider_observations: providerMetrics.observations
     };
   }
   return {
-    answer_text: text ?? '',
-    input_tokens: null,
-    output_tokens: null,
-    total_tokens: null,
-    load_duration_ms: null,
-    server_total_time_ms: null,
-    server_prompt_eval_ms: null,
-    server_eval_ms: null,
-    tool_calls: null,
-    body,
-    text
+    response: {
+      answer_text: text ?? '',
+      input_tokens: null,
+      output_tokens: null,
+      total_tokens: null,
+      load_duration_ms: null,
+      server_total_time_ms: null,
+      server_prompt_eval_ms: null,
+      server_eval_ms: null,
+      tool_calls: null,
+      body,
+      text
+    },
+    provider_observations: []
   };
 }
 
@@ -1333,6 +1365,7 @@ async function executeItem(
   normalizedResponse: Record<string, unknown> | null;
   metrics: Record<string, unknown> | null;
   error: Record<string, unknown> | null;
+  observations: MetricObservation[][];
 }> {
   const operationSpec = objectAt(instantiation, 'operation_spec');
   const url = textFromValue(operationSpec?.url);
@@ -1348,20 +1381,32 @@ async function executeItem(
   let firstTokenMs: number | null = null;
   const attemptErrors: Record<string, unknown>[] = [];
   const clientAttempts: ClientAttemptTelemetry[] = [];
+  const observationSets: MetricObservation[][] = [];
   const maxAttempts = policy.retry.max_retries + 1;
   const pairMeta = executable.pairMemberId ? { pair_member_id: executable.pairMemberId } : {};
-  const operationElapsedMs = () => {
-    const observations = normalizeClientMetricObservations({
-      operation_started_at_ms: operationStartedAtMs,
-      operation_ended_at_ms: performance.now(),
-      streaming,
-      attempts: clientAttempts
+  const composeAttemptObservations = (
+    providerObservations: MetricObservation[],
+    operationEndedAtMs: number
+  ) => {
+    const observations = composeRequestMetricObservations({
+      clientTelemetry: {
+        operation_started_at_ms: operationStartedAtMs,
+        operation_ended_at_ms: operationEndedAtMs,
+        streaming,
+        attempts: clientAttempts
+      },
+      providerObservations
     });
-    return roundMilliseconds(
-      measuredClientMetric(observations, 'operation_elapsed_ms')
-      ?? (performance.now() - operationStartedAtMs)
-    );
+    observationSets.push(observations);
+    return observations;
   };
+  const operationElapsedMs = (
+    observations: MetricObservation[],
+    operationEndedAtMs: number
+  ) => roundMilliseconds(
+    measuredMetricValue(observations, 'operation_elapsed_ms')
+    ?? (operationEndedAtMs - operationStartedAtMs)
+  );
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const attemptStartedAtMs = performance.now();
@@ -1419,9 +1464,9 @@ async function executeItem(
           responseBody = null;
         }
       }
-      let normalized: NormalizedResponse;
+      let normalizedResult: NormalizedResponseResult;
       try {
-        normalized = effectiveStreaming
+        normalizedResult = effectiveStreaming
           ? normalizeStreamResponse(operationSpec?.protocol, contentType, responseText, metricContext)
           : normalizeResponse(
               operationSpec?.protocol,
@@ -1456,7 +1501,9 @@ async function executeItem(
           response_normalization_succeeded: false,
           stream_completed: effectiveStreaming ? false : null
         });
-        const elapsedMs = operationElapsedMs();
+        const operationEndedAtMs = performance.now();
+        const observations = composeAttemptObservations([], operationEndedAtMs);
+        const elapsedMs = operationElapsedMs(observations, operationEndedAtMs);
         return {
           result: {
             item_index: executable.itemIndex,
@@ -1526,9 +1573,11 @@ async function executeItem(
             server_prompt_eval_ms: null,
             server_eval_ms: null
           },
-          error: issue
+          error: issue,
+          observations: observationSets
         };
       }
+      const normalized = normalizedResult.response;
       const errorCode = response.ok ? null : `http_${response.status}`;
       const streamTiming = streamTimingTracker?.snapshot() ?? emptyStreamTimingTelemetry();
       clientAttempts.push({
@@ -1541,7 +1590,12 @@ async function executeItem(
         response_normalization_succeeded: response.ok,
         stream_completed: streaming ? Boolean(normalized.stream?.done) : null
       });
-      const elapsedMs = operationElapsedMs();
+      const operationEndedAtMs = performance.now();
+      const observations = composeAttemptObservations(
+        normalizedResult.provider_observations,
+        operationEndedAtMs
+      );
+      const elapsedMs = operationElapsedMs(observations, operationEndedAtMs);
       const rawResponse = {
         stage_id: stage.id,
         ...pairMeta,
@@ -1606,7 +1660,8 @@ async function executeItem(
             ...normalized
           },
           metrics,
-          error: null
+          error: null,
+          observations: observationSets
         };
       }
 
@@ -1647,7 +1702,8 @@ async function executeItem(
             ...normalized
           },
           metrics,
-          error: issue
+          error: issue,
+          observations: observationSets
         };
       }
     } catch (error) {
@@ -1675,9 +1731,11 @@ async function executeItem(
         response_normalization_succeeded: null,
         stream_completed: streaming ? false : null
       });
+      const operationEndedAtMs = performance.now();
+      const observations = composeAttemptObservations([], operationEndedAtMs);
       if (!issue.retryable || attempt >= maxAttempts) {
         const completedAt = nowIso();
-        const elapsedMs = operationElapsedMs();
+        const elapsedMs = operationElapsedMs(observations, operationEndedAtMs);
         return {
           result: {
             item_index: executable.itemIndex,
@@ -1695,7 +1753,8 @@ async function executeItem(
           rawResponse: null,
           normalizedResponse: null,
           metrics: null,
-          error: issue
+          error: issue,
+          observations: observationSets
         };
       }
     } finally {
@@ -1811,6 +1870,7 @@ async function executePair(
   normalizedResponses: Record<string, unknown>[];
   metrics: Record<string, unknown> | null;
   errors: Record<string, unknown>[];
+  observations: MetricObservation[][];
 }> {
   const pair = stage.pair ?? [];
   const memberRequestedMetrics = memberMetricRequest(stage, requestedMetrics);
@@ -1819,6 +1879,7 @@ async function executePair(
   const rawResponses: Record<string, unknown>[] = [];
   const normalizedResponses: Record<string, unknown>[] = [];
   const errors: Record<string, unknown>[] = [];
+  const observations: MetricObservation[][] = [];
   const startedAt = nowIso();
 
   await sleep(stage.pre_iteration_delay_ms ?? 0);
@@ -1837,6 +1898,7 @@ async function executePair(
     if (execution.normalizedResponse) normalizedResponses.push(execution.normalizedResponse);
     if (execution.metrics) metricsByMember.set(member.id, execution.metrics);
     if (execution.error) errors.push(execution.error);
+    observations.push(...execution.observations);
     members[member.id] = {
       role: member.role ?? null,
       result: execution.result,
@@ -1877,7 +1939,8 @@ async function executePair(
     rawResponses,
     normalizedResponses,
     metrics: pairMetricRow,
-    errors
+    errors,
+    observations
   };
 }
 
