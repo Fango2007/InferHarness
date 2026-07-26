@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router';
 
 import { InferenceServerErrors } from '../components/InferenceServerErrors.js';
 import { MergedPageHeader } from '../components/MergedPageHeader.js';

@@ -80,20 +80,27 @@ function parseParameterCount(text: string): { count: number; label: string } | n
 }
 
 function parseQuantisationBits(text: string): number | null {
-  const labelMatch = text.match(/\bq(\d+)(?:_k_[sml]|_[0-3])\b/i);
-  if (labelMatch) {
-    const bits = parseFloat(labelMatch[1]);
-    return Number.isFinite(bits) ? bits : null;
-  }
-  const bitMatch = text.match(/(\d+(?:\.\d+)?)\s*bit/i);
-  if (bitMatch) {
-    const bits = parseFloat(bitMatch[1]);
-    return Number.isFinite(bits) ? bits : null;
-  }
-  const qMatch = text.match(/\bq(\d+(?:\.\d+)?)\b/i);
-  if (qMatch) {
-    const bits = parseFloat(qMatch[1]);
-    return Number.isFinite(bits) ? bits : null;
+  const tokens = text.toLowerCase().split(/[^a-z0-9.]+/).filter(Boolean);
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token.endsWith('bit')) {
+      const bits = Number.parseFloat(token.slice(0, -3));
+      if (Number.isFinite(bits)) {
+        return bits;
+      }
+    }
+    if (tokens[index + 1] === 'bit') {
+      const bits = Number.parseFloat(token);
+      if (Number.isFinite(bits)) {
+        return bits;
+      }
+    }
+    if (token.startsWith('q') && token.length > 1) {
+      const bits = Number.parseFloat(token.slice(1));
+      if (Number.isFinite(bits)) {
+        return bits;
+      }
+    }
   }
   return null;
 }

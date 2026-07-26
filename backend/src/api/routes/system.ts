@@ -6,13 +6,21 @@ import { getSystemMetrics } from '../../services/system-metrics.js';
 import { clearDatabase, listEnvEntries, setEnvEntry } from '../../services/system-settings.js';
 
 export function registerSystemRoutes(app: FastifyInstance): void {
-  app.get('/system/metrics', async () => getSystemMetrics());
-
   const systemSettingsRateLimit = createRateLimitPreHandler({
     keyPrefix: 'system-settings',
     maxRequests: 60,
     windowMs: 60_000
   });
+
+  const systemActionRateLimit = createRateLimitPreHandler({
+    keyPrefix: 'system-actions',
+    maxRequests: 30,
+    windowMs: 60_000
+  });
+
+  // Runtime limiting is enforced by systemActionRateLimit; CodeQL does not model local Fastify preHandlers.
+  // codeql[js/missing-rate-limiting]
+  app.get('/system/metrics', { preHandler: systemActionRateLimit }, async () => getSystemMetrics());
 
   app.get('/system/settings', {
     preHandler: systemSettingsRateLimit,
@@ -39,20 +47,22 @@ export function registerSystemRoutes(app: FastifyInstance): void {
     }
   });
 
-  app.get('/system/connectivity-config', async () => {
+  app.get('/system/connectivity-config', { preHandler: systemActionRateLimit }, async () => {
     const pollIntervalMs = Number(process.env.INFERHARNESS_HEALTH_POLL_INTERVAL || 30) * 1000;
     const discoveryTtlMs = Number(process.env.INFERHARNESS_CONTEXT_PROBE_TIMEOUT_MS || 300000);
     return { poll_interval_ms: pollIntervalMs, discovery_ttl_ms: discoveryTtlMs };
   });
 
-  app.post('/system/clear-db', async (_request, reply) => {
+  app.post('/system/clear-db', { preHandler: systemActionRateLimit }, async (_request, reply) => {
     clearDatabase();
     reply.send({ status: 'ok' });
   });
 
-  app.get('/system/env', async () => ({ entries: listEnvEntries() }));
+  // Runtime limiting is enforced by systemActionRateLimit; CodeQL does not model local Fastify preHandlers.
+  // codeql[js/missing-rate-limiting]
+  app.get('/system/env', { preHandler: systemActionRateLimit }, async () => ({ entries: listEnvEntries() }));
 
-  app.post('/system/env', async (request, reply) => {
+  app.post('/system/env', { preHandler: systemActionRateLimit }, async (request, reply) => {
     const body = request.body as { key?: string; value?: string | null };
     const key = body?.key?.trim();
     if (!key) {

@@ -1,11 +1,18 @@
 import { FastifyInstance } from 'fastify';
 
+import { createRateLimitPreHandler } from '../middleware/rate-limit.js';
 import { EvaluationValidationError, createEvaluation, listEvaluations } from '../../services/evaluation-service.js';
 import * as evalPromptModel from '../../models/eval-prompt.js';
 import * as evaluationModel from '../../models/evaluation.js';
 import { getDb } from '../../models/db.js';
 
 export function registerEvaluationsRoutes(app: FastifyInstance): void {
+  const evaluationsRateLimit = createRateLimitPreHandler({
+    keyPrefix: 'evaluations',
+    maxRequests: 60,
+    windowMs: 60_000
+  });
+
   app.post('/evaluations', async (request, reply) => {
     const body = request.body as Record<string, unknown>;
 
@@ -45,7 +52,7 @@ export function registerEvaluationsRoutes(app: FastifyInstance): void {
     }
   });
 
-  app.get('/evaluations', async (request, reply) => {
+  app.get('/evaluations', { preHandler: evaluationsRateLimit }, async (request, reply) => {
     const query = request.query as {
       model_name?: string;
       date_from?: string;
@@ -68,7 +75,7 @@ export function registerEvaluationsRoutes(app: FastifyInstance): void {
     reply.code(200).send(result);
   });
 
-  app.get('/evaluations/:evaluationId', async (request, reply) => {
+  app.get('/evaluations/:evaluationId', { preHandler: evaluationsRateLimit }, async (request, reply) => {
     const { evaluationId } = request.params as { evaluationId: string };
     const evaluation = evaluationModel.getById(evaluationId);
     if (!evaluation) {

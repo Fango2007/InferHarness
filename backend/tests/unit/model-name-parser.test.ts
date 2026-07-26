@@ -46,6 +46,11 @@ describe('guessModelCharacteristics', () => {
     expect(result.quantisation.method).toBe('awq');
   });
 
+  it('parses quantisation bits from long provider-controlled model labels', () => {
+    const result = guessModelCharacteristics(`vendor/model-${'segment-'.repeat(200)}Q4_K_M`);
+    expect(result.quantisation.bits).toBe(4);
+  });
+
   it('extracts Moonshot provider from Kimi model names', () => {
     expect(guessModelCharacteristics('moonshotai/Kimi-K2-Instruct').provider).toBe('moonshot');
     expect(guessModelCharacteristics('Kimi-Linear-48B-AWQ').provider).toBe('moonshot');

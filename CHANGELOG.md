@@ -28,12 +28,18 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - **Canonical provider metric normalization** — benchmark response normalization now uses an internal typed `metrics-v2` observation contract for registered Ollama, OpenAI Chat, Anthropic Messages, and Gemini GenerateContent usage and timing fields while persisted benchmark results remain on the existing `metrics-v1` contract.
 - **Canonical client metric normalization** — benchmark execution now records transient `metrics-v2` observations for operation and successful-attempt latency, retry overhead, attempt count, request and normalization health, terminal timeouts, stream completion, and first transport chunk timing while retaining the persisted `metrics-v1` result shape.
 
+### Fixed
+
+- **Architecture inspection test budget** — gave the composite config-fallback Python inspection test a realistic timeout for full-suite backend runs.
+
 ### Removed
 
 - **Orphaned manual inference flow** — removed the unused `EvaluationForm` frontend and its dedicated `/eval-inference` API while retaining the Evaluate scoring queue, evaluation persistence, and leaderboard.
 
 ### Security
 
+- **GitHub code-scanning fixes** — added route-level rate limits for system, probe, architecture-settings, and evaluation reads; documented CodeQL suppressions for the locally enforced Fastify system-route limits; capped inference-probe JSON response parsing; replaced the flagged model-name quantisation regex with bounded token parsing; and restricted CI workflow permissions.
+- **Dependency vulnerability fixes** — upgraded the frontend router stack to patched React Router 8 with React 19, moved linting to ESLint 10 flat config without the vulnerable import plugin chain, and refreshed Fastify/AJV/transitive overrides so `npm audit` reports no vulnerabilities.
 - **Dependency vulnerability fixes** — refreshed the npm lockfile to patched Vite, Undici, ECharts, and JS-YAML releases, clearing all reported `npm audit` vulnerabilities without forced or breaking upgrades.
 
 ## [0.11.0] - 2026-06-25
