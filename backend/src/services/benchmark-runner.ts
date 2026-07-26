@@ -14,6 +14,13 @@ import { backendFetch } from './inference-proxy.js';
 import { sha256Document, validateBenchmarkDocument } from './benchmark-schemas.js';
 import { parseSseEvents } from './sse-parser.js';
 import { aggregateMetrics as computeAggregations, computeItemMetrics, estimateRequestTriggeredLoad } from './benchmark-metrics.js';
+import {
+  measuredProviderMetric,
+  normalizeProviderMetricObservations,
+  type MetricObservation,
+  type ProviderMetricContext,
+  type ProviderProtocol
+} from './benchmark-provider-metrics.js';
 
 const ENGINE_VERSION = 'benchmark-runner-v1';
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -128,6 +135,16 @@ interface StreamNormalization {
   total_tokens: number | null;
   tool_calls: unknown[] | null;
   final_metadata: Record<string, unknown> | null;
+}
+
+interface NormalizedProviderMetrics {
+  input_tokens: number | null;
+  output_tokens: number | null;
+  total_tokens: number | null;
+  load_duration_ms: number | null;
+  server_total_time_ms: number | null;
+  server_prompt_eval_ms: number | null;
+  server_eval_ms: number | null;
 }
 
 export class BenchmarkStreamParseError extends Error {
@@ -677,6 +694,82 @@ function usageTokens(metadata: Record<string, unknown> | null): Pick<NormalizedR
   };
 }
 
+function isProviderProtocol(value: unknown): value is ProviderProtocol {
+  return value === 'ollama_chat'
+    || value === 'openai_chat'
+    || value === 'anthropic_messages'
+    || value === 'gemini_generate_content';
+}
+
+function knownVersion(value: unknown): string | null {
+  const version = textFromValue(value);
+  return version && version.trim().toLowerCase() !== 'unknown' ? version : null;
+}
+
+function providerMetricContext(
+  instantiation: Record<string, unknown>,
+  protocol: unknown
+): ProviderMetricContext | null {
+  if (!isProviderProtocol(protocol)) {
+    return null;
+  }
+  const snapshot = objectAt(instantiation, 'model_snapshot');
+  const model = objectValue(snapshot?.model);
+  const inferenceServer = objectValue(snapshot?.inference_server);
+  const runtime = objectValue(snapshot?.runtime);
+  const serverSoftware = objectValue(runtime?.server_software);
+  const api = objectValue(runtime?.api);
+  return {
+    protocol,
+    provider_id: textFromValue(inferenceServer?.server_id) ?? textFromValue(model?.server_id),
+    provider_name: textFromValue(serverSoftware?.name),
+    provider_version: knownVersion(serverSoftware?.version) ?? knownVersion(api?.api_version)
+  };
+}
+
+function projectedProviderMetric(
+  observations: MetricObservation[],
+  metricId: string,
+  fallback: number | null
+): number | null {
+  return observations.some((observation) => observation.metric_id === metricId)
+    ? measuredProviderMetric(observations, metricId)
+    : fallback;
+}
+
+function normalizedProviderMetrics(
+  context: ProviderMetricContext | null,
+  metadata: Record<string, unknown> | null
+): NormalizedProviderMetrics {
+  const observations = context ? normalizeProviderMetricObservations(context, metadata) : [];
+  const legacyTokens = usageTokens(metadata);
+  return {
+    input_tokens: projectedProviderMetric(observations, 'input_tokens', legacyTokens.input_tokens),
+    output_tokens: projectedProviderMetric(observations, 'output_tokens', legacyTokens.output_tokens),
+    total_tokens: projectedProviderMetric(observations, 'total_tokens', legacyTokens.total_tokens),
+    load_duration_ms: projectedProviderMetric(
+      observations,
+      'model_load_time_ms',
+      extractLoadDurationMs(metadata)
+    ),
+    server_total_time_ms: projectedProviderMetric(
+      observations,
+      'server_total_time_ms',
+      extractServerTotalTimeMs(metadata)
+    ),
+    server_prompt_eval_ms: projectedProviderMetric(
+      observations,
+      'server_prefill_time_ms',
+      extractServerPromptEvalMs(metadata)
+    ),
+    server_eval_ms: projectedProviderMetric(
+      observations,
+      'server_decode_time_ms',
+      extractServerEvalMs(metadata)
+    )
+  };
+}
+
 function streamEventSnapshot(
   raw: string,
   json: Record<string, unknown> | unknown[] | null,
@@ -1051,7 +1144,12 @@ export function parseGeminiSseStream(raw: string): StreamNormalization {
   };
 }
 
-function normalizeStreamResponse(protocol: unknown, contentType: string, responseText: string): NormalizedResponse {
+function normalizeStreamResponse(
+  protocol: unknown,
+  contentType: string,
+  responseText: string,
+  metricContext: ProviderMetricContext | null
+): NormalizedResponse {
   const stream = protocol === 'ollama_chat' && !contentType.includes('text/event-stream')
     ? parseOllamaJsonlStream(responseText)
     : protocol === 'anthropic_messages'
@@ -1061,13 +1159,7 @@ function normalizeStreamResponse(protocol: unknown, contentType: string, respons
         : parseOpenAiSseStream(responseText);
   return {
     answer_text: stream.answer_text,
-    input_tokens: stream.input_tokens,
-    output_tokens: stream.output_tokens,
-    total_tokens: stream.total_tokens,
-    load_duration_ms: extractLoadDurationMs(stream.final_metadata),
-    server_total_time_ms: extractServerTotalTimeMs(stream.final_metadata),
-    server_prompt_eval_ms: extractServerPromptEvalMs(stream.final_metadata),
-    server_eval_ms: extractServerEvalMs(stream.final_metadata),
+    ...normalizedProviderMetrics(metricContext, stream.final_metadata),
     tool_calls: stream.tool_calls,
     body: stream.final_metadata,
     text: null,
@@ -1080,7 +1172,10 @@ function normalizeStreamResponse(protocol: unknown, contentType: string, respons
   };
 }
 
-function normalizeAnthropicResponse(record: Record<string, unknown>): NormalizedResponse {
+function normalizeAnthropicResponse(
+  record: Record<string, unknown>,
+  metricContext: ProviderMetricContext | null
+): NormalizedResponse {
   const content = Array.isArray(record.content) ? record.content : [];
   const textParts: string[] = [];
   const toolCalls: unknown[] = [];
@@ -1106,18 +1201,17 @@ function normalizeAnthropicResponse(record: Record<string, unknown>): Normalized
   }
   return {
     answer_text: textParts.join(''),
-    ...usageTokens(record),
-    load_duration_ms: extractLoadDurationMs(record),
-    server_total_time_ms: extractServerTotalTimeMs(record),
-    server_prompt_eval_ms: extractServerPromptEvalMs(record),
-    server_eval_ms: extractServerEvalMs(record),
+    ...normalizedProviderMetrics(metricContext, record),
     tool_calls: toolCalls.length > 0 ? toolCalls : null,
     body: record,
     text: null
   };
 }
 
-function normalizeGeminiResponse(record: Record<string, unknown>): NormalizedResponse {
+function normalizeGeminiResponse(
+  record: Record<string, unknown>,
+  metricContext: ProviderMetricContext | null
+): NormalizedResponse {
   const candidates = Array.isArray(record.candidates) ? record.candidates : [];
   const firstCandidate = objectValue(candidates[0]);
   const content = objectValue(firstCandidate?.content);
@@ -1144,25 +1238,26 @@ function normalizeGeminiResponse(record: Record<string, unknown>): NormalizedRes
   }
   return {
     answer_text: textParts.join(''),
-    ...usageTokens(record),
-    load_duration_ms: extractLoadDurationMs(record),
-    server_total_time_ms: extractServerTotalTimeMs(record),
-    server_prompt_eval_ms: extractServerPromptEvalMs(record),
-    server_eval_ms: extractServerEvalMs(record),
+    ...normalizedProviderMetrics(metricContext, record),
     tool_calls: toolCalls.length > 0 ? toolCalls : null,
     body: record,
     text: null
   };
 }
 
-function normalizeResponse(protocol: unknown, body: unknown, text: string | null): NormalizedResponse {
+function normalizeResponse(
+  protocol: unknown,
+  body: unknown,
+  text: string | null,
+  metricContext: ProviderMetricContext | null
+): NormalizedResponse {
   if (body && typeof body === 'object' && !Array.isArray(body)) {
     const record = body as Record<string, unknown>;
     if (protocol === 'anthropic_messages') {
-      return normalizeAnthropicResponse(record);
+      return normalizeAnthropicResponse(record, metricContext);
     }
     if (protocol === 'gemini_generate_content') {
-      return normalizeGeminiResponse(record);
+      return normalizeGeminiResponse(record, metricContext);
     }
     const choices = Array.isArray(record.choices) ? record.choices : [];
     const firstChoice = choices[0] as Record<string, unknown> | undefined;
@@ -1172,25 +1267,10 @@ function normalizeResponse(protocol: unknown, body: unknown, text: string | null
     const ollamaMessage = record.message && typeof record.message === 'object' && !Array.isArray(record.message)
       ? record.message as Record<string, unknown>
       : null;
-    const usage = record.usage && typeof record.usage === 'object' && !Array.isArray(record.usage)
-      ? record.usage as Record<string, unknown>
-      : null;
-    const promptEvalCount = typeof record.prompt_eval_count === 'number' ? record.prompt_eval_count : null;
-    const evalCount = typeof record.eval_count === 'number' ? record.eval_count : null;
-    const inputTokens = typeof usage?.prompt_tokens === 'number' ? usage.prompt_tokens : promptEvalCount;
-    const outputTokens = typeof usage?.completion_tokens === 'number' ? usage.completion_tokens : evalCount;
     const toolCalls = Array.isArray(message?.tool_calls) ? (message.tool_calls as unknown[]) : null;
     return {
       answer_text: textFromValue(message?.content) ?? textFromValue(ollamaMessage?.content) ?? textFromValue(record.response) ?? '',
-      input_tokens: inputTokens,
-      output_tokens: outputTokens,
-      total_tokens: typeof usage?.total_tokens === 'number'
-        ? usage.total_tokens
-        : inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null,
-      load_duration_ms: extractLoadDurationMs(record),
-      server_total_time_ms: extractServerTotalTimeMs(record),
-      server_prompt_eval_ms: extractServerPromptEvalMs(record),
-      server_eval_ms: extractServerEvalMs(record),
+      ...normalizedProviderMetrics(metricContext, record),
       tool_calls: toolCalls,
       body,
       text: null
@@ -1240,6 +1320,7 @@ async function executeItem(
   const timeoutMs = Number(runtimeParameters(instantiation).timeout_ms ?? objectAt(instantiation, 'execution_policy')?.timeout_ms ?? DEFAULT_TIMEOUT_MS);
   const payload = buildBenchmarkRequestPayload(instantiation, executable.item);
   const streaming = runtimeParameters(instantiation).stream === true;
+  const metricContext = providerMetricContext(instantiation, operationSpec?.protocol);
   const startedAt = nowIso();
   const start = performance.now();
   let firstTokenMs: number | null = null;
@@ -1293,8 +1374,13 @@ async function executeItem(
       let normalized: NormalizedResponse;
       try {
         normalized = effectiveStreaming
-          ? normalizeStreamResponse(operationSpec?.protocol, contentType, responseText)
-          : normalizeResponse(operationSpec?.protocol, responseBody, responseBody === null ? responseText : null);
+          ? normalizeStreamResponse(operationSpec?.protocol, contentType, responseText, metricContext)
+          : normalizeResponse(
+              operationSpec?.protocol,
+              responseBody,
+              responseBody === null ? responseText : null,
+              metricContext
+            );
       } catch (error) {
         if (!(error instanceof BenchmarkStreamParseError) && !(error instanceof BenchmarkUpstreamStreamError)) {
           throw error;

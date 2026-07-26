@@ -373,7 +373,15 @@ function installMockOllamaStreamFetch(): { baseUrl: string; requests: unknown[] 
     return streamResponse([
       `${JSON.stringify({ message: { role: 'assistant', content: 'benchmark ' }, done: false })}\n`,
       `${JSON.stringify({ message: { role: 'assistant', content: 'answer' }, done: false })}\n`,
-      `${JSON.stringify({ done: true, prompt_eval_count: 6, eval_count: 2 })}\n`
+      `${JSON.stringify({
+        done: true,
+        prompt_eval_count: 6,
+        eval_count: 2,
+        total_duration: 4_000_000,
+        load_duration: 500_000,
+        prompt_eval_duration: 1_500_000,
+        eval_duration: 2_000_000
+      })}\n`
     ], 'application/x-ndjson');
   }));
   return { baseUrl: 'http://mock.local', requests };
@@ -597,6 +605,8 @@ describe('benchmark runner API', () => {
     expect(result.document.status).toBe('completed');
     expect(result.document.raw_responses).toHaveLength(1);
     expect(result.document.normalized_responses[0].answer_text).toBe('benchmark answer');
+    expect(result.document.normalized_responses[0]).not.toHaveProperty('metric_observations');
+    expect(result.document.normalized_responses[0]).not.toHaveProperty('provider_version');
     expect(result.document.metric_results[0].total_tokens).toBe(7);
     expect(result.document.metric_version).toBe('metrics-v1');
     expect(result.document.aggregated_metrics.elapsed_ms.valid_sample_count).toBe(1);
@@ -1111,6 +1121,14 @@ describe('benchmark runner API', () => {
     expect(result.document.metric_results[0].input_tokens).toBe(6);
     expect(result.document.metric_results[0].output_tokens).toBe(2);
     expect(result.document.metric_results[0].total_tokens).toBe(8);
+    expect(result.document.metric_results[0]).toMatchObject({
+      load_duration_ms: 0.5,
+      server_total_time_ms: 4,
+      server_prompt_eval_ms: 1.5,
+      server_eval_ms: 2
+    });
+    expect(result.document.normalized_responses[0]).not.toHaveProperty('metric_observations');
+    expect(result.document.metric_version).toBe('metrics-v1');
     expect((mockServer.requests[0] as Record<string, unknown>).stream).toBe(true);
     await app.close();
   });
