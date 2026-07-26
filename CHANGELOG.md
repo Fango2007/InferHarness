@@ -22,6 +22,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - **Agent workflow commands** — `AGENTS.md` now records the common validation, development, E2E, and benchmark data persistence workflows agents should use when changing the repo.
 - **Documentation source-of-truth rules** — `AGENTS.md` now freezes `docs/` as the durable documentation home for product and engineering specifications, keeps `specs/` reserved for temporary implementation inputs, and requires runtime code to consume source-tree implementation copies.
 - **Provider-native metrics foundation** — expanded `docs/METRICS.md` with canonical Ollama timing mappings, cross-provider token accounting, native-field provenance, exact/qualified/provider-only mapping rules, and a clean database-reset transition to `metrics-v2` without legacy aliases or historical metric migration.
+- **Canonical provider metric normalization** — benchmark response normalization now uses an internal typed `metrics-v2` observation contract for registered Ollama, OpenAI Chat, Anthropic Messages, and Gemini GenerateContent usage and timing fields while persisted benchmark results remain on the existing `metrics-v1` contract.
 
 ### Removed
 
