@@ -399,6 +399,8 @@ Browser UI
 
 **Frontend**
 React single-page application served by Vite. It talks to the backend through the API and does not access the database directly.
+The browser interface uses a 220px navigation sidebar at desktop widths and an
+accessible off-canvas navigation dialog below 900px.
 
 **Backend**
 Fastify HTTP server responsible for server registration, model discovery, test execution, evaluation records, leaderboard data, and persistence.

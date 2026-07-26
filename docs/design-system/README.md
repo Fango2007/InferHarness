@@ -10,9 +10,10 @@ This document describes the current InferHarness design system at the token,
 component, and implementation-rule level. It is intended to help contributors
 extend the UI without inventing new visual language.
 
-The high-fidelity handoff source is
-`specs/new-layouts/design_handoff_01_design_system/`. This folder keeps a
-repository-maintained design-system snapshot:
+The original high-fidelity handoff was moved from
+`specs/new-layouts/design_handoff_01_design_system/` into this directory.
+`docs/design-system/tokens/` is now the durable design-system specification
+snapshot:
 
 - `docs/design-system/tokens/colors_and_type.css`;
 - `docs/design-system/tokens/components.css`;
@@ -23,9 +24,9 @@ The live frontend implementation uses:
 - `frontend/src/styles/tokens/colors_and_type.css`;
 - `frontend/src/styles/tokens/components.css`.
 
-Those live token files currently match both the handoff token files and the
-snapshot under this folder. Use the token CSS files as the source for exact CSS
-custom-property names and values.
+`frontend/src/styles/tokens/` is the runtime copy. Its CSS and font files must
+remain byte-identical to the durable snapshot. Use the documented token files
+as the source for exact CSS custom-property names and values.
 
 ## 2. Design Intent
 
@@ -165,11 +166,11 @@ Current layout tokens include:
 - `--sidebar-w`: token-level sidebar width;
 - `--nav-btn-size`: square nav button size;
 - `--input-h`: standard input height;
-- `--bp-mobile`: mobile breakpoint.
+- `900px`: canonical breakpoint for the compact top bar and off-canvas
+  navigation. Breakpoint values are written directly in media queries because
+  CSS custom properties cannot be used in media-query conditions.
 
-The current production shell uses a 220px expanded sidebar in
-`frontend/src/styles/index.css`. Treat page-level shell sizing as an app
-implementation layer above the base token file.
+The production shell uses `--sidebar-w` for its 220px desktop sidebar.
 
 ## 7. Radii and Shape
 

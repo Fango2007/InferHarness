@@ -8,6 +8,8 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Added
 
+- **Design-system conformance guard** — added a PostCSS-based `check:design-system` release check that rejects documented/runtime token drift, unresolved CSS variables, and application-level hardcoded colors.
+- **Responsive navigation shell** — added an accessible off-canvas navigation dialog below 900px with native focus containment, Escape and route-change dismissal, focus restoration, and full access to navigation, health, counts, and Settings.
 - **Product roadmap** — added `docs/ROADMAP.md` to define InferHarness product intent, the five milestone outcomes, feature-family sequencing, completion criteria, and deferred capabilities without prematurely specifying implementation design.
 - **Native provider tool-call streaming** — benchmark execution now supports Anthropic Messages and Gemini GenerateContent SSE responses and normalizes streamed tool calls across OpenAI-compatible, Ollama, Anthropic, and Gemini protocols.
 - **Application architecture documentation** — added `docs/ARCHITECTURE.md` to describe the current InferHarness runtime topology, frontend and backend module boundaries, persistence model, provider integration, and major feature areas.
@@ -19,6 +21,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Changed
 
+- **Design-system foundation** — promoted `docs/design-system/tokens/` as the durable byte-identical token source, standardized the desktop sidebar at 220px, added input and accessible semantic-status tokens, resolved invalid aliases, and restored readable template operation chips.
 - **Agent workflow commands** — `AGENTS.md` now records the common validation, development, E2E, and benchmark data persistence workflows agents should use when changing the repo.
 - **Documentation source-of-truth rules** — `AGENTS.md` now freezes `docs/` as the durable documentation home for product and engineering specifications, keeps `specs/` reserved for temporary implementation inputs, and requires runtime code to consume source-tree implementation copies.
 - **Provider-native metrics foundation** — expanded `docs/METRICS.md` with canonical Ollama timing mappings, cross-provider token accounting, native-field provenance, exact/qualified/provider-only mapping rules, and a clean database-reset transition to `metrics-v2` without legacy aliases or historical metric migration.

@@ -363,7 +363,7 @@
   place-items: center;
   border: 1px dashed var(--paper-7);
   border-radius: 14px;
-  color: var(--gold-9);
+  color: var(--gold-4);
   font-family: var(--font-mono);
   letter-spacing: 2px;
 }
@@ -453,23 +453,23 @@
 }
 
 .results-status--pass {
-  background: #ddf2e4;
-  color: #246b3d;
+  background: var(--ok-tint);
+  color: var(--ok-text);
 }
 
 .results-status--fail {
-  background: #f7dedb;
-  color: #93403d;
+  background: var(--danger-tint);
+  color: var(--danger-text);
 }
 
 .results-status--partial {
-  background: #f8edc7;
-  color: #7a5b11;
+  background: var(--warning-tint);
+  color: var(--warning-text);
 }
 
 .results-status--streaming {
-  background: #dfeaf7;
-  color: #315f8c;
+  background: var(--pending-tint);
+  color: var(--pending-text);
 }
 
 .results-toolbar {
@@ -577,7 +577,7 @@
   z-index: 20;
   display: flex;
   justify-content: flex-end;
-  background: rgba(0, 0, 0, 0.38);
+  background: var(--overlay-modal);
 }
 
 .results-drawer {
@@ -588,7 +588,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   background: var(--paper-1);
-  box-shadow: -12px 0 30px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-drawer);
 }
 
 .results-drawer__header {

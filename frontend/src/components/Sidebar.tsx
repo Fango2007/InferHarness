@@ -1,4 +1,6 @@
-import { NavLink } from 'react-router-dom';
+import { Menu, Settings, X } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 
 import type { OnboardingStatus } from '../onboarding.js';
 import { RegLight } from './RegLight.js';
@@ -73,11 +75,26 @@ function RegLightRow({
   );
 }
 
-export function Sidebar({ version, health, modelCount, templateCount, datasetCount, runCount, onboarding, onSettings }: SidebarProps) {
+interface SidebarContentProps extends SidebarProps {
+  onNavigate?: () => void;
+}
+
+function SidebarContent({
+  version,
+  health,
+  modelCount,
+  templateCount,
+  datasetCount,
+  runCount,
+  onboarding,
+  onSettings,
+  onNavigate
+}: SidebarContentProps) {
   const onboardingActive = onboarding?.active === true;
   const unlockedIndex = onboardingActive ? navOrder.indexOf(onboarding.unlockedThrough) : navOrder.length - 1;
+
   return (
-    <aside className="sidebar">
+    <>
       <div className="sidebar-brand">
         <strong>InferHarness</strong>
         <span>v{version}</span>
@@ -100,7 +117,9 @@ export function Sidebar({ version, health, modelCount, templateCount, datasetCou
             onClick={(event) => {
               if (locked) {
                 event.preventDefault();
+                return;
               }
+              onNavigate?.();
             }}
           >
             <span className="sidebar-item__main">
@@ -141,11 +160,82 @@ export function Sidebar({ version, health, modelCount, templateCount, datasetCou
         </div>
       )}
       <div className="sidebar-settings">
-        <button type="button" onClick={onSettings}>
-          <span aria-hidden="true">S</span>
+        <button
+          type="button"
+          onClick={() => {
+            onNavigate?.();
+            onSettings();
+          }}
+        >
+          <span aria-hidden="true"><Settings size={15} strokeWidth={1.8} /></span>
           <strong>Settings</strong>
         </button>
       </div>
-    </aside>
+    </>
+  );
+}
+
+export function Sidebar(props: SidebarProps) {
+  const location = useLocation();
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  const closeDialog = () => {
+    if (dialogRef.current?.open) {
+      dialogRef.current.close();
+    }
+  };
+
+  useEffect(() => {
+    closeDialog();
+  }, [location.pathname, location.search]);
+
+  return (
+    <>
+      <header className="mobile-app-bar">
+        <div>
+          <strong>InferHarness</strong>
+          <span>v{props.version}</span>
+        </div>
+        <button
+          ref={menuButtonRef}
+          type="button"
+          className="mobile-app-bar__menu"
+          aria-label="Open navigation"
+          onClick={() => dialogRef.current?.showModal()}
+        >
+          <Menu aria-hidden="true" size={22} />
+        </button>
+      </header>
+
+      <aside className="sidebar sidebar--desktop">
+        <SidebarContent {...props} />
+      </aside>
+
+      <dialog
+        ref={dialogRef}
+        className="mobile-nav-dialog"
+        aria-label="Primary navigation"
+        onCancel={closeDialog}
+        onClose={() => menuButtonRef.current?.focus()}
+        onClick={(event) => {
+          if (event.target === dialogRef.current) {
+            closeDialog();
+          }
+        }}
+      >
+        <aside className="sidebar sidebar--mobile">
+          <button
+            type="button"
+            className="mobile-nav-dialog__close"
+            aria-label="Close navigation"
+            onClick={closeDialog}
+          >
+            <X aria-hidden="true" size={20} />
+          </button>
+          <SidebarContent {...props} onNavigate={closeDialog} />
+        </aside>
+      </dialog>
+    </>
   );
 }
