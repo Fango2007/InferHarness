@@ -2,11 +2,11 @@
 
 Status: Canonical specification
 
-Specification version: 1.0
+Specification version: 1.1
 
-Target metric version: `metrics-v2`
+Canonical metric version: `metrics-v2`
 
-Last updated: 2026-07-25
+Last updated: 2026-07-26
 
 ## 1. Purpose
 
@@ -44,11 +44,28 @@ This specification covers:
 9. manual qualitative evaluations;
 10. benchmark-scoped host and accelerator telemetry.
 
-Provider request and response formats are outside this specification. Provider
-adapters are responsible for producing normalized events and responses from
-which these metrics can be measured.
+Complete provider request and response schemas are outside this specification.
+Provider-native fields used as metric sources and their canonical mappings are
+defined here. Provider adapters are responsible for producing normalized events
+and responses from which the remaining metrics can be measured.
 
-Migration or reinterpretation of historical metric results is out of scope.
+### 2.1 Clean metrics foundation
+
+`metrics-v2` is the first canonical metric contract that the application will
+implement. Metric identifiers and persisted observations produced before this
+contract are non-canonical implementation data.
+
+The database MUST be reset before InferHarness begins recording canonical
+`metrics-v2` observations. InferHarness MUST NOT provide compatibility aliases,
+backfill old observations, or reinterpret historical metric values. After the
+reset, application code, schemas, built-in templates, tests, and UI labels MUST
+emit and consume only the identifiers and semantics defined here.
+
+Before the first conforming application release records `metrics-v2` data, this
+document MAY refine the foundation by incrementing `Specification version`
+without changing `metric_version`. After canonical `metrics-v2` observations
+exist, any semantic metric change requires a new metric version and MUST NOT
+reinterpret the recorded values.
 
 ## 3. Design Principles
 
@@ -116,9 +133,23 @@ Each metric observation has the following conceptual fields:
 | `reason` | Required when status is not `measured` |
 | `source` | Provenance category from section 3.3 |
 | `metric_version` | Definition version used for the observation |
+| `provider_id` | Provider or server identity when source is provider- or server-reported |
+| `provider_protocol` | Normalized protocol used to obtain the native field |
+| `provider_version` | Provider or server version when known |
+| `native_field` | Original provider field path when a native value was normalized |
+| `native_value` | Original numeric or boolean value before normalization |
+| `native_unit` | Original provider unit |
+| `normalization` | Conversion applied to produce the canonical value |
+| `accounting_scope` | Inclusion, overlap, candidate, modality, cache, or token-category semantics when relevant |
 
 Using only `null` without a status and reason is insufficient for new
 `metrics-v2` observations.
+
+Provider provenance fields are required for `provider_reported` and
+`server_reported` observations when the provider supplies the corresponding
+information. `accounting_scope` is required whenever a native value can overlap
+another count or can cover more than the normalized response, such as cached
+tokens, hidden reasoning tokens, or multiple response candidates.
 
 Configuration errors, such as an invalid expected regular expression or JSON
 Schema, MUST fail validation before execution. They MUST NOT be recorded as a
@@ -212,13 +243,13 @@ retry counts.
 
 These metrics are optional because not every provider exposes them.
 
-| Metric ID | Source | Definition |
-|---|---|---|
-| `server_total_time_ms` | server reported | Server-reported total processing duration |
-| `server_queue_time_ms` | server reported | Time waiting for scheduling or batching |
-| `server_prefill_time_ms` | server reported | Prompt evaluation or prefill duration |
-| `server_decode_time_ms` | server reported | Output generation duration |
-| `model_load_time_ms` | server reported | Model load duration attributed to the request |
+| Metric ID | Source | Definition | Applicability | Preferred aggregation |
+|---|---|---|---|---|
+| `server_total_time_ms` | `server_reported` | Server-reported total processing duration | Server supplies an equivalent total | p50, p95, p99, mean |
+| `server_queue_time_ms` | `server_reported` | Time waiting for scheduling or batching | Server exposes queue duration separately | p50, p95, p99, mean |
+| `server_prefill_time_ms` | `server_reported` | Prompt evaluation or prefill duration | Server exposes prefill duration separately | p50, p95, p99, mean |
+| `server_decode_time_ms` | `server_reported` | Output generation duration | Server exposes decode duration separately | p50, p95, p99, mean |
+| `model_load_time_ms` | `server_reported` | Model load duration attributed to the request | Server attributes a load duration to the request | median, p95, max |
 
 Provider-native fields MUST be converted to milliseconds once, in the provider
 normalizer. The original field name, original unit, and provider protocol MUST
@@ -228,26 +259,134 @@ Server-reported and client-observed timings MUST be labeled separately.
 InferHarness MUST NOT use a provider-reported duration as a silent replacement
 for client-observed latency.
 
+### 8.1 Provider mapping policy
+
+Every provider-native field considered for metric use MUST be classified as one
+of:
+
+| Classification | Rule |
+|---|---|
+| `exact` | Native semantics match a canonical metric. Normalize the value once and retain its native provenance. |
+| `qualified` | Mapping is valid only when declared conditions hold, such as a single response candidate or a known token-accounting relationship. Record those conditions in `accounting_scope`. |
+| `provider_only` | No canonical metric has equivalent semantics. Preserve the value in raw provider metadata, but do not aggregate it or present it as cross-provider evidence. |
+
+A provider field MUST NOT become a canonical metric only because one provider
+exposes it. A new canonical metric requires a stable definition, unit,
+applicability rule, decision-making use, and aggregation policy.
+
+Provider normalizers MUST:
+
+1. apply only mappings registered in this document;
+2. reject non-finite values and impossible negative counts or durations;
+3. convert native units exactly once;
+4. preserve the native field path, value, unit, protocol, and provider version;
+5. emit `unavailable` rather than infer a provider-reported measurement from
+   unrelated fields.
+
+Updating a provider adapter for a renamed field does not change
+`metric_version` when the canonical meaning is unchanged. Changing the meaning,
+formula, unit, applicability, or comparison rules of a canonical metric
+requires a new metric version.
+
+### 8.2 Ollama timing mapping
+
+The following mappings apply to native Ollama `/api/chat` and `/api/generate`
+responses. Ollama emits these fields in the final streaming chunk or in the
+complete non-streaming response.
+
+| Native field | Native unit | Canonical metric | Conversion | Classification |
+|---|---|---|---|---|
+| `total_duration` | nanoseconds | `server_total_time_ms` | divide by `1,000,000` | `exact` |
+| `load_duration` | nanoseconds | `model_load_time_ms` | divide by `1,000,000` | `exact` |
+| `prompt_eval_duration` | nanoseconds | `server_prefill_time_ms` | divide by `1,000,000` | `exact` |
+| `eval_duration` | nanoseconds | `server_decode_time_ms` | divide by `1,000,000` | `exact` |
+
+These metrics describe Ollama's server-side work. They MUST NOT replace
+`successful_attempt_latency_ms`, `time_to_first_output_ms`, or another
+client-observed duration.
+
 ## 9. Token and Generation Metrics
 
 ### 9.1 Token counts
 
-| Metric ID | Definition |
-|---|---|
-| `input_tokens` | Provider- or tokenizer-reported tokens consumed as input |
-| `output_tokens` | Provider- or tokenizer-reported generated output tokens |
-| `total_tokens` | Provider total when supplied; otherwise `input_tokens + output_tokens` only when both components use the same accounting source |
+| Metric ID | Source | Unit | Definition | Applicability |
+|---|---|---|---|---|
+| `input_tokens` | `provider_reported`, `server_reported`, or `derived` | tokens | Total effective input tokens consumed by the request under the declared provider or tokenizer accounting model | Compatible provider total or registered component formula exists |
+| `uncached_input_tokens` | `provider_reported`, `server_reported`, or `derived` | tokens | Input tokens outside separately reported cache-read and cache-write categories | Provider exposes cache accounting with a documented relationship |
+| `cached_input_tokens` | `provider_reported` or `server_reported` | tokens | Input tokens read from an existing provider cache | Provider reports cache-read tokens |
+| `cache_write_input_tokens` | `provider_reported` or `server_reported` | tokens | Input tokens processed to create or extend a provider cache | Provider reports cache-write tokens |
+| `output_tokens` | `provider_reported`, `server_reported`, or `derived` | tokens | Generated output tokens under the declared provider or tokenizer accounting scope | Compatible provider usage or tokenizer count exists |
+| `reasoning_tokens` | `provider_reported` or `server_reported` | tokens | Output tokens attributed to hidden reasoning or thinking when separately reported | Provider reports a reasoning-token breakdown |
+| `tool_input_tokens` | `provider_reported` or `server_reported` | tokens | Input tokens attributed to provider-generated tool-use prompts when separately reported | Provider reports a tool-input breakdown |
+| `total_tokens` | `provider_reported`, `server_reported`, or `derived` | tokens | Provider total when supplied; otherwise a sum only when all included components are compatible, non-overlapping, and use the same accounting source | Compatible provider total or registered component formula exists |
 
 Every token count MUST record:
 
 - `token_count_source`, such as provider usage or local tokenizer;
 - tokenizer/model identity when known;
-- whether cached, reasoning, tool, image, or other special tokens are included.
+- whether component counts are included in, excluded from, or additive to
+  `input_tokens`, `output_tokens`, and `total_tokens`;
+- candidate and modality scope when a count spans multiple responses, images,
+  audio, video, or tool content.
 
 Token counts from different tokenizers SHOULD NOT be directly compared as if
 they represented identical text units.
 
-### 9.2 Per-request generation efficiency
+Preferred per-request aggregates are mean, median, p95, and sum. A sum is valid
+as workload usage only when every included observation uses compatible
+accounting semantics. Every aggregate MUST expose `valid_sample_count`.
+
+`cached_input_tokens`, `reasoning_tokens`, and other component metrics MUST NOT
+be added to a provider total when the provider defines them as subsets of that
+total. InferHarness MUST use the provider's documented accounting relationship
+instead of assuming that similarly named fields are additive.
+
+When a provider does not expose cache writes separately,
+`uncached_input_tokens` MAY include cache-write work. That limitation MUST be
+recorded in `accounting_scope`; InferHarness MUST NOT synthesize a
+`cache_write_input_tokens` observation.
+
+### 9.2 Provider token mappings
+
+| Provider protocol | Native field | Canonical metric | Classification | Accounting condition |
+|---|---|---|---|---|
+| Ollama native | `prompt_eval_count` | `input_tokens` | `exact` | Count applies to the evaluated prompt |
+| Ollama native | `eval_count` | `output_tokens` | `exact` | Count applies to generated response tokens |
+| OpenAI Chat Completions | `usage.prompt_tokens` | `input_tokens` | `exact` | Retain any cached-token breakdown as a subset |
+| OpenAI Chat Completions | `usage.prompt_tokens_details.cached_tokens` | `cached_input_tokens` | `exact` | Included in `input_tokens` |
+| OpenAI Chat Completions | `usage.prompt_tokens - usage.prompt_tokens_details.cached_tokens` | `uncached_input_tokens` | `exact` | Canonical observation source is `derived` |
+| OpenAI Chat Completions | `usage.completion_tokens` | `output_tokens` | `exact` | Retain reasoning or other output details as subsets when supplied |
+| OpenAI Responses | `usage.input_tokens` | `input_tokens` | `exact` | `cached_tokens` is a subset when reported |
+| OpenAI Responses | `usage.input_tokens_details.cached_tokens` | `cached_input_tokens` | `exact` | Included in `input_tokens` |
+| OpenAI Responses | `usage.input_tokens - usage.input_tokens_details.cached_tokens` | `uncached_input_tokens` | `exact` | Canonical observation source is `derived` |
+| OpenAI Responses | `usage.output_tokens` | `output_tokens` | `exact` | Retain output-token details as subsets |
+| OpenAI Responses | `usage.output_tokens_details.reasoning_tokens` | `reasoning_tokens` | `exact` | Included in `output_tokens` |
+| Anthropic Messages | `usage.input_tokens` | `uncached_input_tokens` | `exact` | Cache read and cache write counts are separate |
+| Anthropic Messages | `usage.cache_read_input_tokens` | `cached_input_tokens` | `exact` | Additive when calculating effective input |
+| Anthropic Messages | `usage.cache_creation_input_tokens` | `cache_write_input_tokens` | `exact` | Additive when calculating effective input |
+| Anthropic Messages | sum of the three input-token fields above | `input_tokens` | `exact` | `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`; canonical observation source is `derived` |
+| Anthropic Messages | `usage.output_tokens` | `output_tokens` | `exact` | Use Anthropic's output accounting scope |
+| Anthropic Messages | `usage.output_tokens_details.thinking_tokens` | `reasoning_tokens` | `exact` | Included in `output_tokens` |
+| Gemini GenerateContent | `usageMetadata.promptTokenCount` | `input_tokens` | `exact` | Includes cached content in the effective prompt |
+| Gemini GenerateContent | `usageMetadata.cachedContentTokenCount` | `cached_input_tokens` | `exact` | Included in `input_tokens` |
+| Gemini GenerateContent | `usageMetadata.promptTokenCount - usageMetadata.cachedContentTokenCount` | `uncached_input_tokens` | `exact` | Canonical observation source is `derived` |
+| Gemini GenerateContent | `usageMetadata.candidatesTokenCount` | `output_tokens` | `qualified` | Count spans all candidates; direct response comparison requires equivalent candidate scope |
+| Gemini GenerateContent | `usageMetadata.thoughtsTokenCount` | `reasoning_tokens` | `exact` | Included in Gemini's reported total |
+| Gemini GenerateContent | `usageMetadata.toolUsePromptTokenCount` | `tool_input_tokens` | `exact` | Record whether the provider includes it in prompt or total counts |
+| Gemini GenerateContent | `usageMetadata.totalTokenCount` | `total_tokens` | `exact` | Provider total covers prompt, thoughts, and response candidates |
+
+An adapter MUST derive a canonical total when this registry declares an exact
+component formula, as it does for Anthropic input tokens. An adapter MAY derive
+another total from documented non-overlapping provider components when no
+provider total exists, but that new mapping MUST be added to this registry
+before use. A derived total MUST use source `derived`, retain the component
+observations, and record its formula in `accounting_scope`.
+
+Provider-only usage metadata, including service tiers, modality breakdowns, and
+candidate-level details without canonical equivalents, remains raw provenance
+until this specification defines a corresponding metric.
+
+### 9.3 Per-request generation efficiency
 
 | Metric ID | Formula | Applicability |
 |---|---|---|
@@ -272,7 +411,7 @@ includes hidden reasoning, cached, media, or other tokens that are not part of
 the measured output window, these derived metrics are unavailable unless the
 provider supplies a compatible count.
 
-### 9.3 Response size
+### 9.4 Response size
 
 | Metric ID | Source | Definition |
 |---|---|---|
@@ -283,7 +422,7 @@ Word count is language- and segmentation-dependent. Results MUST record the
 segmentation method and SHOULD NOT use word count for cross-language model
 ranking. Token counts are preferred when the tokenizer provenance is known.
 
-### 9.4 Cost
+### 9.5 Cost
 
 | Metric ID | Source | Definition |
 |---|---|---|
@@ -536,6 +675,8 @@ At minimum, comparisons MUST consider:
 
 - `metric_version`;
 - normalized provider protocol;
+- provider or API version;
+- native-field mapping classification and accounting scope for provider metrics;
 - model and model revision;
 - server and server version;
 - dataset identity and content hash;
@@ -605,11 +746,20 @@ An implementation conforms to this specification when:
 6. boolean aggregates expose pass, valid, expected, and coverage counts;
 7. no UI pass numerator is reconstructed from incompatible denominators;
 8. tool argument schema validity is separate from expected-value matching;
-9. sequential runs are not labeled as system throughput.
+9. sequential runs are not labeled as system throughput;
+10. provider-native values are emitted only through registered exact or
+    qualified mappings;
+11. token component counts preserve their inclusion and overlap semantics;
+12. no non-canonical metric observations remain after the pre-`metrics-v2`
+    database reset.
 
 ## 20. References
 
 - [NVIDIA NIM LLM benchmarking metric definitions](https://docs.nvidia.com/nim/benchmarking/llm/latest/metrics.html)
 - [NVIDIA NIM benchmarking parameters and best practices](https://docs.nvidia.com/nim/benchmarking/llm/latest/parameters.html)
 - [SGLang serving benchmark metric definitions](https://github.com/sgl-project/sglang/blob/main/docs/developer_guide/bench_serving.md)
+- [Ollama API usage fields](https://docs.ollama.com/api/usage)
+- [OpenAI Responses API reference](https://platform.openai.com/docs/api-reference/responses/object)
+- [Anthropic Messages API reference](https://docs.anthropic.com/en/api/messages)
+- [Gemini GenerateContent usage metadata](https://ai.google.dev/api/generate-content#UsageMetadata)
 - [RFC 2119 requirement keywords](https://www.rfc-editor.org/rfc/rfc2119)

@@ -24,7 +24,8 @@ source tree and keep them synchronized with the documented specification.
   relationships, indexes, JSON columns, startup migrations, and change-control
   rules.
 - [Metrics](METRICS.md): canonical definitions, formulas, applicability,
-  provenance, aggregation, and comparison rules for all InferHarness metrics.
+  provider mappings, token accounting, aggregation, and comparison rules for
+  all InferHarness metrics.
 - [Schemas](schemas/README.md): canonical JSON Schema specifications for
   persisted records, runtime snapshots, evaluation payloads, benchmark
   documents, and architecture inspection output.
