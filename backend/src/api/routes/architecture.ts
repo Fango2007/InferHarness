@@ -3,6 +3,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { FastifyInstance } from 'fastify';
 
+import { createRateLimitPreHandler } from '../middleware/rate-limit.js';
 import { getModelById } from '../../models/model.js';
 import type { ModelRecord } from '../../models/model.js';
 import { getInferenceServerById } from '../../models/inference-server.js';
@@ -271,6 +272,12 @@ function inspectionTarget(
 }
 
 export function registerArchitectureRoutes(app: FastifyInstance): void {
+  const architectureSettingsRateLimit = createRateLimitPreHandler({
+    keyPrefix: 'architecture-settings',
+    maxRequests: 30,
+    windowMs: 60_000
+  });
+
   // POST — inspect or return cache
   app.post<{ Params: { serverId: string; modelId: string } }>(
     '/models/:serverId/:modelId/architecture',
@@ -375,6 +382,7 @@ export function registerArchitectureRoutes(app: FastifyInstance): void {
   // GET settings
   app.get<{ Params: { serverId: string; modelId: string } }>(
     '/models/:serverId/:modelId/architecture/settings',
+    { preHandler: architectureSettingsRateLimit },
     async (request, reply) => {
       const { serverId, modelId } = request.params;
       return reply.send(getArchitectureSettings(serverId, modelId));
@@ -384,6 +392,7 @@ export function registerArchitectureRoutes(app: FastifyInstance): void {
   // PATCH settings
   app.patch<{ Params: { serverId: string; modelId: string }; Body: { trust_remote_code: boolean } }>(
     '/models/:serverId/:modelId/architecture/settings',
+    { preHandler: architectureSettingsRateLimit },
     async (request, reply) => {
       const { serverId, modelId } = request.params;
 

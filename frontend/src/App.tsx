@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import packageInfo from '../package.json' with { type: 'json' };
 import { MergedPageHeader } from './components/MergedPageHeader.js';

@@ -1,6 +1,6 @@
 import { Menu, Settings, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router';
 
 import type { OnboardingStatus } from '../onboarding.js';
 import { RegLight } from './RegLight.js';

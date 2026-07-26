@@ -2,6 +2,7 @@ import { QuantisationDescriptor, extractQuantisationLabel, normaliseQuantisation
 import { backendFetch } from './inference-proxy.js';
 
 const DEFAULT_TIMEOUT_MS = 5000;
+const MAX_PROBE_JSON_BYTES = 1_000_000;
 
 export interface NormalizedProbeModel {
   model_id: string;
@@ -31,6 +32,39 @@ export interface ProbeResult {
   models: NormalizedProbeModel[];
   raw: Record<string, unknown> | null;
   error?: string;
+}
+
+async function readJsonPayload(response: Response): Promise<Record<string, unknown> | null> {
+  const contentLength = response.headers.get('content-length');
+  if (contentLength) {
+    const parsedLength = Number.parseInt(contentLength, 10);
+    if (Number.isFinite(parsedLength) && parsedLength > MAX_PROBE_JSON_BYTES) {
+      return null;
+    }
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return (await response.json()) as Record<string, unknown>;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    total += value.byteLength;
+    if (total > MAX_PROBE_JSON_BYTES) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  const body = new TextDecoder().decode(Buffer.concat(chunks, total));
+  return JSON.parse(body) as Record<string, unknown>;
 }
 
 function isMistralProvider(provider: string | null | undefined): boolean {
@@ -252,7 +286,11 @@ export async function probeServer(params: ProbeParams): Promise<ProbeResult> {
       };
     }
 
-    const payload = (await response.json()) as Record<string, unknown>;
+    const payload = await readJsonPayload(response);
+    if (!payload) {
+      errors.push(`${schemaFamily}: JSON response exceeded ${MAX_PROBE_JSON_BYTES} bytes`);
+      continue;
+    }
     rawPayloads[schemaFamily] = payload;
     let normalised: NormalizedProbeModel[];
     if (schemaFamily === 'anthropic') {

@@ -424,7 +424,7 @@ External local or remote servers provide model inference through OpenAI-compatib
 | Language | TypeScript 5 |
 | Backend framework | Fastify |
 | Persistence | SQLite (better-sqlite3) |
-| Frontend | React 18, Vite 8, TailwindCSS |
+| Frontend | React 19, Vite 8, TailwindCSS |
 | Architecture inspection | Python 3.10+, `transformers`, `gguf` |
 | Unit tests | Vitest |
 | End-to-end tests | Playwright |

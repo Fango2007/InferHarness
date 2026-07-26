@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router';
 
 import { MergedPageHeader } from '../components/MergedPageHeader.js';
 import { FirstRunCompleteHero } from '../components/Onboarding.js';

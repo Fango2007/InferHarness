@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 
+import { createRateLimitPreHandler } from '../middleware/rate-limit.js';
 import {
   InvalidBaseUrlError,
   InvalidInferenceServerError,
@@ -54,6 +55,12 @@ function findSavedProbeServer(serverId: string | undefined, baseUrl: string): In
 }
 
 export function registerInferenceServersRoutes(app: FastifyInstance): void {
+  const inferenceServerProbeRateLimit = createRateLimitPreHandler({
+    keyPrefix: 'inference-server-probe',
+    maxRequests: 20,
+    windowMs: 60_000
+  });
+
   app.get('/inference-servers', async (request) => {
     const query = request.query as {
       active?: string;
@@ -86,7 +93,7 @@ export function registerInferenceServersRoutes(app: FastifyInstance): void {
     }
   });
 
-  app.post('/inference-servers/probe', async (request, reply) => {
+  app.post('/inference-servers/probe', { preHandler: inferenceServerProbeRateLimit }, async (request, reply) => {
     const body = request.body as {
       server_id?: string;
       base_url: string;

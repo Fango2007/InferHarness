@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router';
 
 import { RegLight } from '../components/RegLight.js';
 import { ArchitectureLayerNode, ArchitectureTree, getArchitecture, inspectArchitecture, patchSettings } from '../services/architecture-api.js';

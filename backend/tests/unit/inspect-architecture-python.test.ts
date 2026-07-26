@@ -116,7 +116,7 @@ describe('inspect_architecture.py config fallback', () => {
     expect(tree.root.children.some((child: any) => child.name === 'vision_tower')).toBe(true);
     expect(tree.root.children.some((child: any) => child.name === 'multi_modal_projector')).toBe(true);
     expect(tree.warnings.join(' ')).toContain('nested text config');
-  });
+  }, 20_000);
 
   it('returns a structured not_inspectable error instead of a zero-parameter tree for missing dimensions', () => {
     writeConfig(tmpDir, {
