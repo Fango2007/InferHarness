@@ -18,6 +18,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - **Design system documentation** — added `docs/design-system/` with the current InferHarness visual language overview, token snapshot, bundled token fonts, component primitives, and frontend styling rules.
 - **Schema specifications** — copied the application JSON Schema contract pack into `docs/schemas/` as the durable documentation source while keeping runtime validators on the backend source copy.
 - **Test pipeline specification** — promoted the benchmark execution model into `docs/test-pipeline/` with supporting valid and invalid benchmark document examples.
+- **Application parameter specification** — added `docs/PARAMETERS.md` to define canonical inference, response, tool, reasoning, execution, target, and application parameters with provider mappings, including explicit Mistral and DeepSeek profiles, validation, comparability, persistence, and migration requirements.
 
 ### Changed
 
