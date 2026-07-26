@@ -950,6 +950,11 @@ describe('benchmark runner API', () => {
       input_tokens: 21,
       output_tokens: 9
     });
+    expect(result.document.metric_version).toBe('metrics-v1');
+    expect(result.document).not.toHaveProperty('metric_observations');
+    expect(result.document.normalized_responses[0]).not.toHaveProperty('metric_observations');
+    expect(result.document.metric_results[0]).not.toHaveProperty('time_to_first_tool_call_ms');
+    expect(result.document.metric_results[0]).not.toHaveProperty('time_to_tool_calls_ready_ms');
     await app.close();
   });
 
@@ -1091,6 +1096,10 @@ describe('benchmark runner API', () => {
     expect(result.document.normalized_responses[0].stream.done).toBe(true);
     expect(result.document.metric_results[0].first_token_ms).toEqual(expect.any(Number));
     expect(result.document.metric_results[0].total_tokens).toBe(7);
+    expect(result.document.metric_version).toBe('metrics-v1');
+    expect(result.document).not.toHaveProperty('metric_observations');
+    expect(result.document.normalized_responses[0]).not.toHaveProperty('metric_observations');
+    expect(result.document.metric_results[0]).not.toHaveProperty('time_to_first_output_ms');
     expect((mockServer.requests[0] as Record<string, unknown>).stream).toBe(true);
     await app.close();
   });

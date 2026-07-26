@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   normalizeClientMetricObservations,
+  type ClientAttemptTelemetry,
   type ClientOperationTelemetry
 } from '../../src/services/benchmark-client-metrics.js';
 import type { MetricObservation } from '../../src/services/benchmark-metric-observations.js';
@@ -12,20 +13,31 @@ function metric(observations: MetricObservation[], metricId: string): MetricObse
   return result as MetricObservation;
 }
 
+function attempt(overrides: Partial<ClientAttemptTelemetry> = {}): ClientAttemptTelemetry {
+  return {
+    started_at_ms: 10,
+    ended_at_ms: 110,
+    first_chunk_at_ms: null,
+    first_output_at_ms: null,
+    first_tool_call_at_ms: null,
+    tool_calls_ready_at_ms: null,
+    last_output_at_ms: null,
+    tool_call_started: false,
+    tool_call_error: null,
+    request_succeeded: true,
+    timed_out: false,
+    response_normalization_succeeded: true,
+    stream_completed: null,
+    ...overrides
+  };
+}
+
 function telemetry(overrides: Partial<ClientOperationTelemetry> = {}): ClientOperationTelemetry {
   return {
     operation_started_at_ms: 0,
     operation_ended_at_ms: 120,
     streaming: false,
-    attempts: [{
-      started_at_ms: 10,
-      ended_at_ms: 110,
-      first_chunk_at_ms: null,
-      request_succeeded: true,
-      timed_out: false,
-      response_normalization_succeeded: true,
-      stream_completed: null
-    }],
+    attempts: [attempt()],
     ...overrides
   };
 }
@@ -63,24 +75,19 @@ describe('normalizeClientMetricObservations', () => {
       operation_ended_at_ms: 260,
       streaming: true,
       attempts: [
-        {
+        attempt({
           started_at_ms: 0,
           ended_at_ms: 50,
-          first_chunk_at_ms: null,
           request_succeeded: false,
-          timed_out: false,
           response_normalization_succeeded: false,
           stream_completed: false
-        },
-        {
+        }),
+        attempt({
           started_at_ms: 100,
           ended_at_ms: 250,
           first_chunk_at_ms: 130,
-          request_succeeded: true,
-          timed_out: false,
-          response_normalization_succeeded: true,
           stream_completed: true
-        }
+        })
       ]
     }));
 
@@ -95,24 +102,19 @@ describe('normalizeClientMetricObservations', () => {
   it('does not mark an intermediate timeout when a retry succeeds', () => {
     const observations = normalizeClientMetricObservations(telemetry({
       attempts: [
-        {
+        attempt({
           started_at_ms: 0,
           ended_at_ms: 50,
-          first_chunk_at_ms: null,
           request_succeeded: false,
           timed_out: true,
           response_normalization_succeeded: null,
           stream_completed: null
-        },
-        {
+        }),
+        attempt({
           started_at_ms: 60,
           ended_at_ms: 110,
-          first_chunk_at_ms: null,
-          request_succeeded: true,
-          timed_out: false,
-          response_normalization_succeeded: true,
           stream_completed: null
-        }
+        })
       ]
     }));
 
@@ -124,15 +126,14 @@ describe('normalizeClientMetricObservations', () => {
     const observations = normalizeClientMetricObservations(telemetry({
       operation_ended_at_ms: 100,
       streaming: true,
-      attempts: [{
+      attempts: [attempt({
         started_at_ms: 0,
         ended_at_ms: 100,
-        first_chunk_at_ms: null,
         request_succeeded: false,
         timed_out: true,
         response_normalization_succeeded: null,
         stream_completed: false
-      }]
+      })]
     }));
 
     expect(metric(observations, 'request_success').value).toBe(false);
@@ -144,5 +145,65 @@ describe('normalizeClientMetricObservations', () => {
     });
     expect(metric(observations, 'stream_completed').value).toBe(false);
     expect(observations.some((candidate) => candidate.metric_id === 'successful_attempt_latency_ms')).toBe(false);
+  });
+
+  it('separates first transport bytes from meaningful text output', () => {
+    const observations = normalizeClientMetricObservations(telemetry({
+      streaming: true,
+      attempts: [attempt({
+        started_at_ms: 100,
+        ended_at_ms: 250,
+        first_chunk_at_ms: 110,
+        first_output_at_ms: 145,
+        last_output_at_ms: 220,
+        stream_completed: true
+      })]
+    }));
+
+    expect(metric(observations, 'time_to_first_chunk_ms').value).toBe(10);
+    expect(metric(observations, 'time_to_first_output_ms').value).toBe(45);
+    expect(metric(observations, 'time_to_first_tool_call_ms').status).toBe('not_applicable');
+    expect(metric(observations, 'time_to_tool_calls_ready_ms').status).toBe('not_applicable');
+  });
+
+  it('measures first tool output and terminal tool readiness independently', () => {
+    const observations = normalizeClientMetricObservations(telemetry({
+      streaming: true,
+      attempts: [attempt({
+        started_at_ms: 100,
+        ended_at_ms: 250,
+        first_chunk_at_ms: 110,
+        first_output_at_ms: 140,
+        first_tool_call_at_ms: 140,
+        tool_calls_ready_at_ms: 230,
+        last_output_at_ms: 180,
+        tool_call_started: true,
+        stream_completed: true
+      })]
+    }));
+
+    expect(metric(observations, 'time_to_first_output_ms').value).toBe(40);
+    expect(metric(observations, 'time_to_first_tool_call_ms').value).toBe(40);
+    expect(metric(observations, 'time_to_tool_calls_ready_ms').value).toBe(130);
+  });
+
+  it('records an execution error when a started tool call cannot become ready', () => {
+    const observations = normalizeClientMetricObservations(telemetry({
+      streaming: true,
+      attempts: [attempt({
+        first_output_at_ms: 20,
+        first_tool_call_at_ms: 20,
+        tool_call_started: true,
+        tool_call_error: 'Malformed tool arguments.',
+        response_normalization_succeeded: false,
+        stream_completed: false
+      })]
+    }));
+
+    expect(metric(observations, 'time_to_tool_calls_ready_ms')).toMatchObject({
+      value: null,
+      status: 'execution_error',
+      reason: 'Malformed tool arguments.'
+    });
   });
 });
