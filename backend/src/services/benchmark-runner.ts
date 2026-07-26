@@ -26,6 +26,12 @@ import {
   normalizeClientMetricObservations,
   type ClientAttemptTelemetry
 } from './benchmark-client-metrics.js';
+import {
+  classifyStreamSemanticEvent,
+  createStreamTimingTracker,
+  type StreamTimingTelemetry,
+  type StreamTimingTracker
+} from './benchmark-stream-timing.js';
 
 const ENGINE_VERSION = 'benchmark-runner-v1';
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -856,17 +862,14 @@ export function parseOpenAiSseStream(raw: string): StreamNormalization {
           events
         );
       }
+      if (jsonRecord) {
+        content.push(...classifyStreamSemanticEvent('openai_chat', jsonRecord, event.event).text_fragments);
+      }
       const choices = Array.isArray(jsonRecord?.choices) ? jsonRecord.choices : [];
       for (const choice of choices) {
         const choiceRecord = objectValue(choice);
         const delta = objectValue(choiceRecord?.delta);
         const message = objectValue(choiceRecord?.message);
-        const text = typeof delta?.content === 'string'
-          ? delta.content
-          : typeof message?.content === 'string' ? message.content : null;
-        if (text !== null) {
-          content.push(text);
-        }
         const streamedCalls = Array.isArray(delta?.tool_calls)
           ? delta.tool_calls
           : Array.isArray(message?.tool_calls) ? message.tool_calls : [];
@@ -933,13 +936,10 @@ export function parseOllamaJsonlStream(raw: string): StreamNormalization {
           events
         );
       }
-      const message = objectValue(record?.message);
-      const part = typeof message?.content === 'string'
-        ? message.content
-        : typeof record?.response === 'string' ? record.response : null;
-      if (part !== null) {
-        content.push(part);
+      if (record) {
+        content.push(...classifyStreamSemanticEvent('ollama_chat', record).text_fragments);
       }
+      const message = objectValue(record?.message);
       const calls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
       for (const call of calls) {
         const callRecord = objectValue(call);
@@ -1006,6 +1006,9 @@ export function parseAnthropicSseStream(raw: string): StreamNormalization {
           events
         );
       }
+      if (record) {
+        content.push(...classifyStreamSemanticEvent('anthropic_messages', record, event.event).text_fragments);
+      }
       if (eventType === 'message_start') {
         const message = objectValue(record?.message);
         if (message) finalMetadata = message;
@@ -1021,15 +1024,12 @@ export function parseAnthropicSseStream(raw: string): StreamNormalization {
             initialInput: block.input,
             partialJson: ''
           });
-          if (type === 'text' && typeof block.text === 'string') content.push(block.text);
         }
       } else if (eventType === 'content_block_delta') {
         const blockIndex = numberAt(record, 'index');
         const delta = objectValue(record?.delta);
         const block = blockIndex === null ? undefined : blocks.get(blockIndex);
-        if (delta?.type === 'text_delta' && typeof delta.text === 'string') {
-          content.push(delta.text);
-        } else if (block && delta?.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
+        if (block && delta?.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
           block.partialJson += delta.partial_json;
         }
       } else if (eventType === 'content_block_stop') {
@@ -1103,6 +1103,9 @@ export function parseGeminiSseStream(raw: string): StreamNormalization {
           events
         );
       }
+      if (record) {
+        content.push(...classifyStreamSemanticEvent('gemini_generate_content', record, event.event).text_fragments);
+      }
       const candidates = Array.isArray(record?.candidates) ? record.candidates : [];
       for (const candidate of candidates) {
         const candidateRecord = objectValue(candidate);
@@ -1110,7 +1113,6 @@ export function parseGeminiSseStream(raw: string): StreamNormalization {
         const parts = Array.isArray(candidateContent?.parts) ? candidateContent.parts : [];
         for (const part of parts) {
           const partRecord = objectValue(part);
-          if (typeof partRecord?.text === 'string') content.push(partRecord.text);
           const functionCall = objectValue(partRecord?.functionCall);
           const name = textFromValue(functionCall?.name);
           if (functionCall && !name) {
@@ -1307,6 +1309,17 @@ function roundMilliseconds(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
+function emptyStreamTimingTelemetry(): StreamTimingTelemetry {
+  return {
+    first_output_at_ms: null,
+    first_tool_call_at_ms: null,
+    tool_calls_ready_at_ms: null,
+    last_output_at_ms: null,
+    tool_call_started: false,
+    tool_call_error: null
+  };
+}
+
 async function executeItem(
   instantiation: Record<string, unknown>,
   stage: BenchmarkStage,
@@ -1353,6 +1366,7 @@ async function executeItem(
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const attemptStartedAtMs = performance.now();
     let firstChunkAtMs: number | null = null;
+    let streamTimingTracker: StreamTimingTracker | null = null;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -1364,6 +1378,9 @@ async function executeItem(
       });
       let responseText = '';
       const effectiveStreaming = streaming && response.ok;
+      if (effectiveStreaming && isProviderProtocol(operationSpec?.protocol)) {
+        streamTimingTracker = createStreamTimingTracker(operationSpec.protocol, attemptStartedAtMs);
+      }
       firstTokenMs = null;
       if (effectiveStreaming && response.body) {
         const reader = response.body.getReader();
@@ -1379,9 +1396,15 @@ async function executeItem(
             firstChunkAtMs = performance.now();
             firstTokenMs = roundMilliseconds(firstChunkAtMs - operationStartedAtMs);
           }
-          responseText += decoder.decode(value, { stream: true });
+          const receivedAtMs = performance.now();
+          const decodedChunk = decoder.decode(value, { stream: true });
+          responseText += decodedChunk;
+          streamTimingTracker?.push(decodedChunk, receivedAtMs);
         }
-        responseText += decoder.decode();
+        const finalDecodedChunk = decoder.decode();
+        responseText += finalDecodedChunk;
+        streamTimingTracker?.push(finalDecodedChunk, performance.now());
+        streamTimingTracker?.finish(performance.now());
       } else {
         responseText = await response.text();
       }
@@ -1422,10 +1445,12 @@ async function executeItem(
           stream_format: error.format
         };
         attemptErrors.push(issue);
+        const streamTiming = streamTimingTracker?.snapshot() ?? emptyStreamTimingTelemetry();
         clientAttempts.push({
           started_at_ms: attemptStartedAtMs,
           ended_at_ms: attemptEndedAtMs,
           first_chunk_at_ms: firstChunkAtMs,
+          ...streamTiming,
           request_succeeded: response.ok,
           timed_out: false,
           response_normalization_succeeded: false,
@@ -1505,10 +1530,12 @@ async function executeItem(
         };
       }
       const errorCode = response.ok ? null : `http_${response.status}`;
+      const streamTiming = streamTimingTracker?.snapshot() ?? emptyStreamTimingTelemetry();
       clientAttempts.push({
         started_at_ms: attemptStartedAtMs,
         ended_at_ms: attemptEndedAtMs,
         first_chunk_at_ms: firstChunkAtMs,
+        ...streamTiming,
         request_succeeded: response.ok,
         timed_out: false,
         response_normalization_succeeded: response.ok,
@@ -1626,6 +1653,7 @@ async function executeItem(
     } catch (error) {
       const err = error as Error;
       const attemptEndedAtMs = performance.now();
+      const streamTiming = streamTimingTracker?.snapshot() ?? emptyStreamTimingTelemetry();
       const issue = {
         code: err.name === 'AbortError' ? 'timeout' : 'connection_error',
         message: err.name === 'AbortError' ? `Benchmark request timed out after ${timeoutMs}ms` : err.message,
@@ -1641,6 +1669,7 @@ async function executeItem(
         started_at_ms: attemptStartedAtMs,
         ended_at_ms: attemptEndedAtMs,
         first_chunk_at_ms: firstChunkAtMs,
+        ...streamTiming,
         request_succeeded: false,
         timed_out: err.name === 'AbortError',
         response_normalization_succeeded: null,
