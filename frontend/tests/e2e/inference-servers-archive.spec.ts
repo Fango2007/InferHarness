@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
 
-import { archiveInferenceServer, createInferenceServer } from './helpers.js';
+import { archiveInferenceServer, createInferenceServer, dismissOnboarding } from './helpers.js';
 
 test('archives an inference server', async ({ page, request }) => {
+  await dismissOnboarding(page);
   const created = await createInferenceServer(request);
 
   await page.goto('/');
@@ -21,5 +22,10 @@ test('archives an inference server', async ({ page, request }) => {
   ]);
   expect(archiveResponse.ok()).toBeTruthy();
 
+  await page.reload();
+  await page.getByRole('button', { name: 'Archived', exact: true }).click();
+  const archivedCard = page.locator('.catalog-server-card').filter({ hasText: created.inference_server.display_name });
+  await expect(archivedCard).toBeVisible();
+  await archivedCard.click();
   await expect(page.getByRole('button', { name: 'Unarchive', exact: true })).toBeVisible();
 });

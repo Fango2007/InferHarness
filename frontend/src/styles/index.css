@@ -4459,6 +4459,22 @@ pre.code-block {
     grid-template-columns: 1fr;
   }
 
+  .run-unified-layout,
+  .evaluate-queue-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .run-config-rail,
+  .evaluate-queue-rail {
+    border-right: 0;
+    border-bottom: 1px solid var(--paper-7);
+  }
+
+  .evaluate-rubric {
+    border-left: 0;
+    border-top: 1px solid var(--paper-7);
+  }
+
   .filters-row {
     grid-template-columns: 1fr;
   }

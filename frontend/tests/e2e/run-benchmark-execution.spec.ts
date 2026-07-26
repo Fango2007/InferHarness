@@ -4,12 +4,13 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import {
   archiveInferenceServer,
   createModel,
   createInferenceServer,
+  dismissOnboarding,
   findInferenceServerByName
 } from './helpers.js';
 
@@ -26,6 +27,13 @@ interface MockChatServer {
 async function startMockOpenAiChatServer(): Promise<MockChatServer> {
   const requests: Array<Record<string, unknown>> = [];
   const server = http.createServer((request, response) => {
+    if (request.method === 'GET' && request.url === '/v1/models') {
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({
+        data: [{ id: 'gpt-4o-mini', object: 'model', owned_by: 'openai' }]
+      }));
+      return;
+    }
     if (request.method !== 'POST' || request.url !== '/v1/chat/completions') {
       response.writeHead(404).end();
       return;
@@ -69,7 +77,43 @@ async function startMockOpenAiChatServer(): Promise<MockChatServer> {
   };
 }
 
+async function mockHealthyServer(page: Page, serverId: string) {
+  await page.route('**/inference-servers/health*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        results: [{
+          server_id: serverId,
+          ok: true,
+          status_code: 200,
+          response_time_ms: 1,
+          checked_at: '2026-01-01T00:00:00.000Z'
+        }]
+      })
+    });
+  });
+}
+
+async function mockRunCatalog(page: Page, server: unknown, model: unknown) {
+  await page.route(/\/inference-servers(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([server])
+    });
+  });
+  await page.route(/\/models(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([model])
+    });
+  });
+}
+
 test('configures a benchmark smoke run from inline prompt inputs', async ({ page, request }) => {
+  await dismissOnboarding(page);
   const mockChat = await startMockOpenAiChatServer();
   const serverDisplayName = `E2E Benchmark Run ${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
   const server = await createInferenceServer(request, {
@@ -77,10 +121,12 @@ test('configures a benchmark smoke run from inline prompt inputs', async ({ page
     base_url: mockChat.baseUrl,
     schema_family: ['openai-compatible']
   });
-  await createModel(request, server.inference_server.server_id, {
+  const model = await createModel(request, server.inference_server.server_id, {
     model_id: 'gpt-4o-mini',
     display_name: 'gpt-4o-mini'
   });
+  await mockHealthyServer(page, server.inference_server.server_id);
+  await mockRunCatalog(page, server, model);
 
   try {
     await expect
@@ -118,28 +164,30 @@ test('configures a benchmark smoke run from inline prompt inputs', async ({ page
     const runButton = page.getByRole('button', { name: 'Run benchmark' });
     await expect(runButton).toBeEnabled();
 
-    const createInstantiation = page.waitForResponse(
+    const createPlan = page.waitForResponse(
       (response) =>
         response.request().method() === 'POST' &&
-        response.url().includes('/benchmark/instantiations') &&
-        !response.url().includes('/run') &&
+        /\/benchmark\/plans$/.test(new URL(response.url()).pathname) &&
         response.status() === 201
     );
-    const runInstantiation = page.waitForResponse(
+    const runPlan = page.waitForResponse(
       (response) =>
         response.request().method() === 'POST' &&
-        /\/benchmark\/instantiations\/[^/]+\/run$/.test(new URL(response.url()).pathname) &&
+        /\/benchmark\/plans\/[^/]+\/run$/.test(new URL(response.url()).pathname) &&
         response.status() === 201
     );
     await runButton.click();
-    await createInstantiation;
-    await runInstantiation;
+    await createPlan;
+    await runPlan;
 
     await expect(page.locator('.run-message-card pre')).toHaveText('OK');
     await expect(page.locator('.run-status-pill')).toHaveText('completed');
-    await expect(page.locator('.run-asserts')).toContainText('completed');
-    await expect(page.locator('.run-asserts')).not.toContainText('no-instantiation');
-    await expect(page.locator('.run-asserts')).not.toContainText('no-result');
+    const runAudit = page.locator('.run-asserts').filter({
+      has: page.getByRole('heading', { name: 'Run audit' })
+    });
+    await expect(runAudit).toContainText('completed');
+    await expect(runAudit).not.toContainText('no-instantiation');
+    await expect(runAudit).not.toContainText('no-result');
     await expect(page.locator('.run-metric-grid')).toContainText('5');
     await expect(page.locator('.run-metric-grid')).toContainText('1');
     await expect(page.locator('.run-metric-grid')).toContainText('6');
@@ -158,6 +206,7 @@ test('configures a benchmark smoke run from inline prompt inputs', async ({ page
 });
 
 test('runs a server-side JSONL dataset from the Run page', async ({ page, request }) => {
+  await dismissOnboarding(page);
   const mockChat = await startMockOpenAiChatServer();
   const serverDisplayName = `E2E Dataset Run ${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
   const datasetName = `e2e-codegen-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.jsonl`;
@@ -176,10 +225,12 @@ test('runs a server-side JSONL dataset from the Run page', async ({ page, reques
     base_url: mockChat.baseUrl,
     schema_family: ['openai-compatible']
   });
-  await createModel(request, server.inference_server.server_id, {
+  const model = await createModel(request, server.inference_server.server_id, {
     model_id: 'gpt-4o-mini',
     display_name: 'gpt-4o-mini'
   });
+  await mockHealthyServer(page, server.inference_server.server_id);
+  await mockRunCatalog(page, server, model);
 
   try {
     await page.goto('/run');
@@ -199,20 +250,23 @@ test('runs a server-side JSONL dataset from the Run page', async ({ page, reques
         response.url().includes('/benchmark/datasets/manifest') &&
         response.ok()
     );
-    const runInstantiation = page.waitForResponse(
+    const runPlan = page.waitForResponse(
       (response) =>
         response.request().method() === 'POST' &&
-        /\/benchmark\/instantiations\/[^/]+\/run$/.test(new URL(response.url()).pathname) &&
+        /\/benchmark\/plans\/[^/]+\/run$/.test(new URL(response.url()).pathname) &&
         response.status() === 201
     );
     await runButton.click();
     await prepareManifest;
-    await runInstantiation;
+    await runPlan;
 
     await expect(page.locator('.run-status-pill')).toHaveText('completed');
     await expect(page.locator('.run-message-card pre')).toHaveCount(2);
-    await expect(page.locator('.run-asserts')).toContainText('e2e-codegen');
-    await expect(page.locator('.run-asserts')).toContainText('2');
+    const runAudit = page.locator('.run-asserts').filter({
+      has: page.getByRole('heading', { name: 'Run audit' })
+    });
+    await expect(page.locator('.run-prompt-strip')).toContainText('e2e-codegen');
+    await expect(runAudit).toContainText('items 2');
     expect(mockChat.requests).toHaveLength(2);
     expect(mockChat.requests.map((entry) => entry.messages)).toEqual([
       [{ role: 'user', content: 'Write a JavaScript add function.' }],

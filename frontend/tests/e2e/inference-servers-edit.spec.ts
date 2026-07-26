@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
 
-import { archiveInferenceServer, createInferenceServer, findInferenceServerByName } from './helpers.js';
+import { archiveInferenceServer, createInferenceServer, dismissOnboarding, findInferenceServerByName } from './helpers.js';
 
 test('edits an inference server', async ({ page, request }) => {
+  await dismissOnboarding(page);
   // Create server via API with hardware pre-populated to verify edit drawer pre-fills
   const created = await createInferenceServer(request, {
     hardware: {

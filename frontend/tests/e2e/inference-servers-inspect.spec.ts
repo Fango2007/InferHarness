@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
 
-import { archiveInferenceServer, createInferenceServer } from './helpers.js';
+import { archiveInferenceServer, createInferenceServer, dismissOnboarding } from './helpers.js';
 
 test('inspects an inference server', async ({ page, request }) => {
+  await dismissOnboarding(page);
   const created = await createInferenceServer(request);
 
   await page.goto('/');

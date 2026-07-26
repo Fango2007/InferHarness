@@ -219,7 +219,9 @@ test('merged Results dashboard filter and render flow', async ({ page }) => {
   await expect(page.getByLabel('Local Server')).toBeVisible();
   await expect(page.getByLabel('mistral:latest')).toHaveCount(0);
   await expect(page.getByLabel('latency-benchmark')).toHaveCount(0);
-  await page.getByLabel('Local Server').check();
+  const localServerFilter = page.getByLabel('Local Server');
+  await localServerFilter.click();
+  await expect(localServerFilter).toBeChecked();
   await expect(resultsRail.locator('.results-funnel-stage')).toHaveCount(2);
   await expect(resultsRail.locator('.catalog-stage-number')).toHaveText(['1', '2']);
   await expect(resultsRail.getByText('Models')).toBeVisible();
@@ -235,7 +237,9 @@ test('merged Results dashboard filter and render flow', async ({ page }) => {
   await page.getByRole('button', { name: 'Expand Servers filters' }).click();
   await expect(page.getByRole('button', { name: 'Collapse Servers filters' })).toBeVisible();
 
-  await page.getByLabel('mistral:latest').check();
+  const mistralFilter = page.getByLabel('mistral:latest');
+  await mistralFilter.click();
+  await expect(mistralFilter).toBeChecked();
   await expect(resultsRail.locator('.results-funnel-stage')).toHaveCount(3);
   await expect(resultsRail.locator('.catalog-stage-number')).toHaveText(['1', '2', '3']);
   await expect(resultsRail.getByText('Tests & range')).toBeVisible();
@@ -257,7 +261,9 @@ test('merged Results dashboard filter and render flow', async ({ page }) => {
   expect(page.url()).toBe(selectedUrl);
 
   await expect(page.getByLabel('latency-benchmark')).toBeVisible();
-  await page.getByLabel('latency-benchmark').check();
+  const latencyFilter = page.getByLabel('latency-benchmark');
+  await latencyFilter.click();
+  await expect(latencyFilter).toBeChecked();
   const testsStage = resultsRail.locator('.results-funnel-stage').filter({ hasText: 'Tests & range' });
   await expect(testsStage.getByText('1 selected')).toBeVisible();
   await testsStage.getByRole('button', { name: 'Clear' }).click();
@@ -265,12 +271,15 @@ test('merged Results dashboard filter and render flow', async ({ page }) => {
   await expect(page.getByLabel('mistral:latest')).toBeChecked();
   await expect(page.getByLabel('latency-benchmark')).not.toBeChecked();
   await expect(testsStage.getByText('0 selected')).toBeVisible();
-  await page.getByLabel('Local Server').uncheck();
+  await localServerFilter.click();
+  await expect(localServerFilter).not.toBeChecked();
   await expect(resultsRail.locator('.results-funnel-stage')).toHaveCount(1);
   await expect(resultsRail.getByText('Models')).toHaveCount(0);
   await expect(resultsRail.getByText('Tests & range')).toHaveCount(0);
-  await page.getByLabel('Local Server').check();
-  await page.getByLabel('mistral:latest').check();
+  await localServerFilter.click();
+  await expect(localServerFilter).toBeChecked();
+  await mistralFilter.click();
+  await expect(mistralFilter).toBeChecked();
 
   await expect(page.getByText('Total runs')).toBeVisible();
   await expect(page.getByText('Pass rate')).toBeVisible();

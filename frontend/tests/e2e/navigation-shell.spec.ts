@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { dismissOnboarding } from './helpers.js';
+
 function catalogServer(serverId: string, name: string, modelId: string) {
   return {
     inference_server: {
@@ -169,14 +171,15 @@ async function mockSettingsRoutes(page: Page) {
   });
 }
 
-test('sidebar exposes five top-level destinations and follows active routes', async ({ page }) => {
+test('sidebar exposes six top-level destinations and follows active routes', async ({ page }) => {
   await page.goto('/catalog?tab=servers');
 
   const nav = page.getByRole('navigation', { name: 'Primary navigation' });
-  await expect(nav.getByRole('link')).toHaveCount(5);
+  await expect(nav.getByRole('link')).toHaveCount(6);
   await expect(nav.locator('.sidebar-item__main span:first-child')).toHaveText([
     'Catalog',
     'Templates',
+    'Datasets',
     'Run',
     'Results',
     'Evaluate'
@@ -185,6 +188,7 @@ test('sidebar exposes five top-level destinations and follows active routes', as
   for (const [href, label] of [
     ['/catalog?tab=servers', 'Catalog'],
     ['/templates', 'Templates'],
+    ['/datasets', 'Datasets'],
     ['/run', 'Run'],
     ['/results?tab=dashboard', 'Results'],
     ['/evaluate', 'Evaluate']
@@ -205,6 +209,121 @@ test('merged page sub-tabs preserve route state', async ({ page }) => {
   await expect(page).toHaveURL(/\/results\?tab=leaderboard/);
   await page.getByRole('tab', { name: /History/ }).click();
   await expect(page).toHaveURL(/\/results\?tab=history/);
+});
+
+test('responsive shell preserves desktop width and mobile navigation behavior', async ({ page }) => {
+  await dismissOnboarding(page);
+  await mockSettingsRoutes(page);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/catalog?tab=servers');
+
+  const desktopSidebar = page.locator('.sidebar--desktop');
+  await expect(desktopSidebar).toBeVisible();
+  const desktopSidebarBox = await desktopSidebar.boundingBox();
+  expect(desktopSidebarBox?.width).toBe(220);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(desktopSidebar).toBeHidden();
+
+  const menuButton = page.getByRole('button', { name: 'Open navigation' });
+  await expect(menuButton).toBeVisible();
+  const menuButtonBox = await menuButton.boundingBox();
+  expect(menuButtonBox?.width).toBeGreaterThanOrEqual(44);
+  expect(menuButtonBox?.height).toBeGreaterThanOrEqual(44);
+
+  await menuButton.click();
+  const navigationDialog = page.getByRole('dialog', { name: 'Primary navigation' });
+  await expect(navigationDialog).toBeVisible();
+  await expect(navigationDialog.getByRole('link')).toHaveCount(6);
+  await expect(navigationDialog.getByRole('button', { name: /Settings/ })).toBeVisible();
+
+  const closeButton = navigationDialog.getByRole('button', { name: 'Close navigation' });
+  const closeButtonBox = await closeButton.boundingBox();
+  expect(closeButtonBox?.width).toBeGreaterThanOrEqual(44);
+  expect(closeButtonBox?.height).toBeGreaterThanOrEqual(44);
+  await page.keyboard.press('Tab');
+  expect(await page.evaluate(() => {
+    const dialog = document.querySelector<HTMLDialogElement>('.mobile-nav-dialog');
+    return Boolean(dialog?.contains(document.activeElement));
+  })).toBe(true);
+
+  await page.keyboard.press('Escape');
+  await expect(navigationDialog).toBeHidden();
+  await expect(menuButton).toBeFocused();
+
+  await menuButton.click();
+  await navigationDialog.getByRole('link', { name: /^Templates/ }).click();
+  await expect(page).toHaveURL(/\/templates$/);
+  await expect(navigationDialog).toBeHidden();
+  await expect(menuButton).toBeFocused();
+
+  await menuButton.click();
+  await navigationDialog.getByRole('button', { name: /Settings/ }).click();
+  await expect(navigationDialog).toBeHidden();
+  await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible();
+});
+
+test('primary routes avoid page-level horizontal overflow at desktop and mobile sizes', async ({ page }) => {
+  await dismissOnboarding(page);
+  const servers = [catalogServer('srv-a', 'Inferencer', 'mistral:latest')];
+  const models = [catalogModel('srv-a', 'mistral:latest', 'mistral', 'MLX')];
+  await mockCatalogRoutes(page, servers, models);
+
+  const routes = [
+    '/catalog?tab=servers',
+    '/templates',
+    '/datasets',
+    '/run',
+    '/results?tab=dashboard',
+    '/evaluate',
+    '/catalog?tab=models&serverId=srv-a&modelId=mistral%3Alatest'
+  ];
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 390, height: 844 }
+  ]) {
+    await page.setViewportSize(viewport);
+    for (const route of routes) {
+      await page.goto(route);
+      await expect(page.locator('.app-main')).toBeVisible();
+      await expect.poll(() => page.evaluate(() => (
+        document.documentElement.scrollWidth - document.documentElement.clientWidth
+      ))).toBeLessThanOrEqual(1);
+    }
+  }
+});
+
+test('template operation chips meet accessible text contrast', async ({ page }) => {
+  await dismissOnboarding(page);
+  await page.goto('/templates');
+
+  const chips = page.locator('.template-card__chip');
+  await expect.poll(() => chips.count()).toBeGreaterThan(0);
+  const chipCount = await chips.count();
+  expect(chipCount).toBeGreaterThan(0);
+  const contrast = await chips.first().evaluate((chip) => {
+    const parse = (value: string) => {
+      const channels = value.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [0, 0, 0];
+      return channels.map((channel) => {
+        const normalized = channel / 255;
+        return normalized <= 0.03928
+          ? normalized / 12.92
+          : ((normalized + 0.055) / 1.055) ** 2.4;
+      });
+    };
+    const luminance = (channels: number[]) => (
+      0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+    );
+    const style = getComputedStyle(chip);
+    const foreground = luminance(parse(style.color));
+    const background = luminance(parse(style.backgroundColor));
+    return (Math.max(foreground, background) + 0.05)
+      / (Math.min(foreground, background) + 0.05);
+  });
+
+  expect(contrast).toBeGreaterThanOrEqual(4.5);
 });
 
 test('catalog servers header owns actions and conditional filter rail', async ({ page }) => {
@@ -314,6 +433,7 @@ test('settings opens from the sidebar footer', async ({ page }) => {
   await expect(dialog.getByRole('button', { name: /Connectivity/ })).toBeVisible();
   await expect(dialog.getByRole('button', { name: /Frontend/ })).toBeVisible();
   await expect(dialog.getByRole('button', { name: /Advanced/ })).toBeVisible();
+  await dialog.getByRole('button', { name: /Runtime/ }).click();
   await expect(dialog.locator('.label').filter({ hasText: /^Runtime$/ })).toBeVisible();
 });
 
@@ -324,6 +444,7 @@ test('settings supports categorized env panes, folding, secrets, saves, add, rem
   await page.getByRole('button', { name: /Settings/ }).click();
   const dialog = page.getByRole('dialog');
 
+  await dialog.getByRole('button', { name: /Runtime/ }).click();
   await expect(dialog.locator('.label').filter({ hasText: /^Runtime$/ })).toBeVisible();
   await expect(dialog.getByText('2 keys')).toBeVisible();
   await expect(dialog.getByText('Execution runtime')).toBeVisible();
@@ -332,7 +453,7 @@ test('settings supports categorized env panes, folding, secrets, saves, add, rem
   await expect(dialog.locator('.label').filter({ hasText: /^Model Selection$/ })).toBeVisible();
   const modelSelect = dialog.getByLabel('Model');
   await expect(modelSelect).toBeVisible();
-  await expect(modelSelect).toHaveValue('srv-a::mistral:latest');
+  await expect(modelSelect).toHaveValue('');
   await dialog.getByLabel('Model').selectOption('srv-b::qwen:latest');
   const modelSummary = dialog.locator('.settings-model-summary');
   await expect(modelSummary.getByText('srv-b')).toBeVisible();
@@ -449,16 +570,21 @@ test('catalog models funnel aligns staged rail controls', async ({ page }) => {
 
   await page.goto('/catalog?tab=models');
   const catalogPage = page.locator('.catalog-models');
-  await expect(catalogPage.locator('.catalog-stage-number')).toHaveText(['1']);
+  await expect(catalogPage.locator('.catalog-stage-number')).toHaveText(['1', '2']);
+  await expect(page.locator('.catalog-server-stage .server-filter-row').filter({ hasText: 'srv-a.local' }).getByRole('checkbox')).toBeChecked();
 
-  await page.locator('.catalog-server-stage .server-filter-row').filter({ hasText: 'srv-a.local' }).getByRole('checkbox').check();
+  const secondServer = page.locator('.catalog-server-stage .server-filter-row').filter({ hasText: 'srv-b.local' }).getByRole('checkbox');
+  await secondServer.click();
+  await expect(secondServer).toBeChecked();
   await expect(catalogPage.locator('.catalog-stage-number')).toHaveText(['1', '2']);
   const modelFilterRail = page.locator('.catalog-model-filter-stage');
   await expect(modelFilterRail.getByText('Models')).toBeVisible();
   await expect(modelFilterRail.getByText('0 selected')).toBeVisible();
   await expect(modelFilterRail.getByRole('button', { name: 'Collapse' })).toBeVisible();
 
-  await page.getByLabel('Mistral').check();
+  const mistralFilter = page.getByLabel('Mistral');
+  await mistralFilter.click();
+  await expect(mistralFilter).toBeChecked();
   await expect(modelFilterRail.getByText('1 selected')).toBeVisible();
   await expect(modelFilterRail.getByRole('button', { name: 'Clear' })).toBeVisible();
   await modelFilterRail.getByRole('button', { name: 'Collapse' }).click();
@@ -467,6 +593,7 @@ test('catalog models funnel aligns staged rail controls', async ({ page }) => {
   await expect(page.getByLabel('Mistral')).toBeChecked();
   await modelFilterRail.getByRole('button', { name: 'Clear' }).click();
   await expect(page.locator('.catalog-server-stage .server-filter-row').filter({ hasText: 'srv-a.local' }).getByRole('checkbox')).toBeChecked();
+  await expect(page.locator('.catalog-server-stage .server-filter-row').filter({ hasText: 'srv-b.local' }).getByRole('checkbox')).toBeChecked();
   await expect(page.getByLabel('Mistral')).not.toBeChecked();
 });
 
@@ -502,10 +629,15 @@ test('catalog model cards use model-level provider and capability metadata', asy
   for (const label of ['text', 'json schema output', 'tools', 'embeddings', 'vision', 'audio', 'reasoning', 'explicit tokens', 'thinking', 'coding', 'instruct', 'mixture of experts']) {
     await expect(modelFilterRail.getByLabel(label)).toBeVisible();
   }
-  await modelFilterRail.getByLabel('vision').check();
+  const visionFilter = modelFilterRail.getByLabel('vision');
+  await visionFilter.click();
+  await expect(visionFilter).toBeChecked();
   await expect(card).toBeVisible();
-  await modelFilterRail.getByLabel('vision').uncheck();
-  await modelFilterRail.getByLabel('audio').check();
+  await visionFilter.click();
+  await expect(visionFilter).not.toBeChecked();
+  const audioFilter = modelFilterRail.getByLabel('audio');
+  await audioFilter.click();
+  await expect(audioFilter).toBeChecked();
   await expect(page.locator('.catalog-model-card')).toHaveCount(0);
 });
 
