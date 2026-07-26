@@ -177,6 +177,7 @@ The production shell uses `--sidebar-w` for its 220px desktop sidebar.
 Use established radius tokens:
 
 - `--r-pill`: chips, pills, circular status elements;
+- `--r-micro` and `--r-compact`: compact code and status surfaces;
 - `--r-input`: inputs and compact controls;
 - `--r-row`: dense rows;
 - `--r-list`: list items and code surfaces;
@@ -234,22 +235,19 @@ or repeated action.
 
 ## 10. Component Primitives
 
-The shared primitive classes in `components.css` are available for new surfaces:
+`components.css` owns native control defaults and the shared classes used by the
+application:
 
 | Primitive | Classes | Use |
 |---|---|---|
-| Buttons | `.btn`, `.btn--ghost`, `.btn--danger`, `.btn--pending`, `.btn--sm` | Text actions and primary commands |
-| Icon buttons | `.icon-btn`, `.icon-btn--danger` | Compact icon-only actions |
-| Navigation buttons | `.nav-btn`, `.nav-btn.is-active` | Sidebar/navigation controls |
-| Fields | `.field`, `.textarea` | Inputs and textareas |
-| Cards | `.card`, `.card--hover` | Bordered content groups |
-| Health | `.health`, `.health__dot`, `.health--up`, `.health--down`, `.health--pending` | Backend/server status |
-| Tabs | `.tabs`, `.tabs__btn`, `.detail-tabs`, `.detail-tabs__btn` | Mode and detail navigation |
-| Lists | `.list-item`, `.list-item.is-selected` | Selectable rows/cards |
-| Status text | `.status-ok`, `.status-failed`, `.status-pending` | Inline state labels |
-| Code | `.pre--dark`, `.pre--light`, `.code-inline` | Logs, JSON, commands, inline code |
-| Tables | `.table` | Dense tabular data |
-| Metrics | `.metric-card`, `.metric-card__row` | Compact metric summaries |
+| Native controls | `button`, `input`, `select`, `textarea`, `label` | Default form and action behavior |
+| Buttons | `.btn`, `.btn--ghost`, `.btn--danger`, `.btn--sm`, `.icon-btn`, `.icon-btn--danger` | Text and icon actions |
+| Fields | `.field` | Settings and other explicit shared fields |
+| Cards and lists | `.card`, `.list-item`, `.list-item.selected` | Bordered groups and selectable rows |
+| Tabs | `.sub-tab-bar`, `.sub-tab`, `.details-tabs` | Primary page sub-tabs and model/server detail tabs |
+| Empty states | `.empty-state`, `.empty-state__blocks`, `.empty-state__actions` | Shared empty-state composition |
+| Status | `.muted`, `.error`, `.status-*` | Supporting, error, and run-verdict states |
+| Utilities | `.actions`, `.code-inline` | Shared action rows and inline code |
 
 Prefer these primitives for new UI before creating feature-local variants.
 

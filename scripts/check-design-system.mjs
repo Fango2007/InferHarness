@@ -49,6 +49,7 @@ const parsedFiles = await Promise.all(cssFiles.map(async (file) => ({
 const definitions = new Set();
 const usages = [];
 const hardcodedColor = /(?:#[\da-f]{3,8}\b|(?:rgb|hsl)a?\()/i;
+const rawPixelValue = /(?:^|\s)\d*\.?\d+px(?:\s|$)/;
 
 for (const parsed of parsedFiles) {
   parsed.root.walkDecls((declaration) => {
@@ -67,6 +68,18 @@ for (const parsed of parsedFiles) {
     if (parsed.file !== colorTokenFile && hardcodedColor.test(declaration.value)) {
       errors.push(
         `${relative(parsed.file)}:${declaration.source?.start?.line ?? 0} uses a hardcoded color in ${declaration.prop}.`
+      );
+    }
+
+    if (!parsed.file.startsWith(runtimeTokens) && declaration.prop === 'font-size' && rawPixelValue.test(declaration.value)) {
+      errors.push(
+        `${relative(parsed.file)}:${declaration.source?.start?.line ?? 0} uses a raw pixel font size.`
+      );
+    }
+
+    if (!parsed.file.startsWith(runtimeTokens) && declaration.prop.endsWith('radius') && rawPixelValue.test(declaration.value)) {
+      errors.push(
+        `${relative(parsed.file)}:${declaration.source?.start?.line ?? 0} uses a non-token border radius.`
       );
     }
   });

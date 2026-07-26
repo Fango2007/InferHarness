@@ -213,6 +213,8 @@
 
   /* ---- 8. Radii ------------------------------------------- */
   --r-pill:       999px;
+  --r-micro:      4px;
+  --r-compact:    6px;
   --r-input:      8px;
   --r-row:        10px;
   --r-list:       12px;
