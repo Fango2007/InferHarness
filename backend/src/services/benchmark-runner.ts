@@ -25,6 +25,13 @@ import {
   type ClientAttemptTelemetry
 } from './benchmark-client-metrics.js';
 import { measuredMetricValue } from './benchmark-metric-observations.js';
+import {
+  aggregateMetricObservations,
+  planMetricObservationSamples,
+  resolveCanonicalMetricIntents,
+  type CanonicalMetricIntent,
+  type MetricObservationSample
+} from './benchmark-observation-aggregation.js';
 import { composeRequestMetricObservations } from './benchmark-request-metrics.js';
 import {
   classifyStreamSemanticEvent,
@@ -1365,7 +1372,7 @@ async function executeItem(
   normalizedResponse: Record<string, unknown> | null;
   metrics: Record<string, unknown> | null;
   error: Record<string, unknown> | null;
-  observations: MetricObservation[][];
+  observationSample: MetricObservationSample;
 }> {
   const operationSpec = objectAt(instantiation, 'operation_spec');
   const url = textFromValue(operationSpec?.url);
@@ -1407,6 +1414,18 @@ async function executeItem(
     measuredMetricValue(observations, 'operation_elapsed_ms')
     ?? (operationEndedAtMs - operationStartedAtMs)
   );
+  const observationSample = (completed: boolean): MetricObservationSample => ({
+    stage_id: stage.id,
+    item_index: executable.itemIndex,
+    iteration: executable.iteration,
+    pair_member_id: executable.pairMemberId ?? null,
+    streaming,
+    expected: true,
+    attempted: true,
+    completed,
+    attempt_observations: observationSets,
+    terminal_observations: observationSets[observationSets.length - 1] ?? null
+  });
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const attemptStartedAtMs = performance.now();
@@ -1574,7 +1593,7 @@ async function executeItem(
             server_eval_ms: null
           },
           error: issue,
-          observations: observationSets
+          observationSample: observationSample(false)
         };
       }
       const normalized = normalizedResult.response;
@@ -1661,7 +1680,7 @@ async function executeItem(
           },
           metrics,
           error: null,
-          observations: observationSets
+          observationSample: observationSample(true)
         };
       }
 
@@ -1703,7 +1722,7 @@ async function executeItem(
           },
           metrics,
           error: issue,
-          observations: observationSets
+          observationSample: observationSample(false)
         };
       }
     } catch (error) {
@@ -1754,7 +1773,7 @@ async function executeItem(
           normalizedResponse: null,
           metrics: null,
           error: issue,
-          observations: observationSets
+          observationSample: observationSample(false)
         };
       }
     } finally {
@@ -1776,6 +1795,42 @@ function executableItemsForStage(stage: BenchmarkStage, items: Record<string, un
     }
   });
   return executable;
+}
+
+function metricObservationSampleKey(sample: {
+  stage_id: string;
+  item_index: number;
+  iteration: number;
+  pair_member_id: string | null;
+}): string {
+  return [
+    sample.stage_id,
+    sample.item_index,
+    sample.iteration,
+    sample.pair_member_id ?? ''
+  ].join('\u0000');
+}
+
+function canonicalMetricIntentsForRun(
+  stages: BenchmarkStage[],
+  requestedMetrics: string[],
+  streaming: boolean
+): CanonicalMetricIntent[] {
+  return stages.flatMap((stage) => {
+    if (stage.record_metrics === false) return [];
+    const pairMembers = stage.type === 'paired_request_loop'
+      ? (stage.pair ?? []).map((member) => member.id)
+      : [null];
+    const derivedMetricReferences = (stage.derived_metrics ?? [])
+      .flatMap((metric) => [metric.left, metric.right]);
+    return pairMembers.flatMap((pairMemberId) => resolveCanonicalMetricIntents({
+      stage_id: stage.id,
+      pair_member_id: pairMemberId,
+      requested_metrics: requestedMetrics,
+      derived_metric_references: derivedMetricReferences,
+      streaming
+    }));
+  });
 }
 
 function skippedResult(executable: ExecutableItem, reason: string): Record<string, unknown> {
@@ -1870,7 +1925,7 @@ async function executePair(
   normalizedResponses: Record<string, unknown>[];
   metrics: Record<string, unknown> | null;
   errors: Record<string, unknown>[];
-  observations: MetricObservation[][];
+  observationSamples: MetricObservationSample[];
 }> {
   const pair = stage.pair ?? [];
   const memberRequestedMetrics = memberMetricRequest(stage, requestedMetrics);
@@ -1879,7 +1934,7 @@ async function executePair(
   const rawResponses: Record<string, unknown>[] = [];
   const normalizedResponses: Record<string, unknown>[] = [];
   const errors: Record<string, unknown>[] = [];
-  const observations: MetricObservation[][] = [];
+  const observationSamples: MetricObservationSample[] = [];
   const startedAt = nowIso();
 
   await sleep(stage.pre_iteration_delay_ms ?? 0);
@@ -1898,7 +1953,7 @@ async function executePair(
     if (execution.normalizedResponse) normalizedResponses.push(execution.normalizedResponse);
     if (execution.metrics) metricsByMember.set(member.id, execution.metrics);
     if (execution.error) errors.push(execution.error);
-    observations.push(...execution.observations);
+    observationSamples.push(execution.observationSample);
     members[member.id] = {
       role: member.role ?? null,
       result: execution.result,
@@ -1940,7 +1995,7 @@ async function executePair(
     normalizedResponses,
     metrics: pairMetricRow,
     errors,
-    observations
+    observationSamples
   };
 }
 
@@ -1985,6 +2040,26 @@ export async function runBenchmarkInstantiation(instantiationId: string) {
   const policy = parseExecutionPolicy(record.document);
   const requestedMetrics = templateMetricsFromInstantiation(record.document);
   const requestedAggregations = templateAggregationsFromInstantiation(record.document);
+  const streaming = runtimeParameters(record.document).stream === true;
+  const plannedObservationSamples = planMetricObservationSamples({
+    stages: stages.map((stage) => ({
+      stage_id: stage.id,
+      stage_type: stage.type,
+      item_count: items.length,
+      iterations_per_item: stage.iterations_per_item ?? 1,
+      pair_member_ids: (stage.pair ?? []).map((member) => member.id),
+      record_metrics: stage.record_metrics !== false
+    })),
+    streaming
+  });
+  const observationSamplesByKey = new Map(
+    plannedObservationSamples.map((sample) => [metricObservationSampleKey(sample), sample])
+  );
+  const canonicalMetricIntents = canonicalMetricIntentsForRun(
+    stages,
+    requestedMetrics,
+    streaming
+  );
   const server = getInferenceServerById(record.server_id);
   if (!server) {
     throw new BenchmarkNotFoundError(`Inference server not found: ${record.server_id}`);
@@ -2025,6 +2100,15 @@ export async function runBenchmarkInstantiation(instantiationId: string) {
         normalizedResponses.push(...execution.normalizedResponses);
       } else if (execution.normalizedResponse) {
         normalizedResponses.push(execution.normalizedResponse);
+      }
+      const executionObservationSamples = 'observationSamples' in execution
+        ? execution.observationSamples
+        : [execution.observationSample];
+      for (const sample of executionObservationSamples) {
+        const key = metricObservationSampleKey(sample);
+        if (observationSamplesByKey.has(key)) {
+          observationSamplesByKey.set(key, sample);
+        }
       }
       if (execution.metrics && (stage.record_metrics !== false)) metricResults.push(execution.metrics);
       const executionErrors = 'errors' in execution ? execution.errors : execution.error ? [execution.error] : [];
@@ -2069,6 +2153,14 @@ export async function runBenchmarkInstantiation(instantiationId: string) {
       break;
     }
   }
+
+  const canonicalAggregates = aggregateMetricObservations({
+    samples: [...observationSamplesByKey.values()],
+    intents: canonicalMetricIntents,
+    requestedAggregations
+  });
+  // Canonical aggregates remain transient until the atomic metrics-v2 persistence cutover.
+  void canonicalAggregates;
 
   const resultDocument = {
     kind: 'test_run_result',

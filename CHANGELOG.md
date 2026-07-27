@@ -32,6 +32,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - **Canonical client metric normalization** — benchmark execution now records transient `metrics-v2` observations for operation and successful-attempt latency, retry overhead, attempt count, request and normalization health, terminal timeouts, stream completion, and first transport chunk timing while retaining the persisted `metrics-v1` result shape.
 - **Canonical semantic stream timing** — streamed benchmark execution now distinguishes first transport bytes from meaningful text or tool-call output and records transient first-output, first-tool-call, tool-readiness, and last-output timestamps without changing persisted `metrics-v1` results.
 - **Canonical per-request derived observations** — benchmark execution now composes client and provider observations and transiently calculates registered generation-window, token-efficiency, server-rate, and output/input formulas while persisted results remain on `metrics-v1`.
+- **Canonical observation-aware aggregation** — benchmark execution now transiently aggregates canonical request observations with explicit coverage, applicability, execution-error, provenance, and paired-member accounting while persisted results remain on `metrics-v1`.
 
 ### Fixed
 
