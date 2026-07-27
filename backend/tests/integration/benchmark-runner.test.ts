@@ -28,6 +28,12 @@ function expectNoCanonicalDerivedMetrics(value: Record<string, unknown>): void {
   }
 }
 
+function expectNoCanonicalObservationState(value: Record<string, unknown>): void {
+  expect(value).not.toHaveProperty('metric_observations');
+  expect(value).not.toHaveProperty('canonical_aggregates');
+  expect(value).not.toHaveProperty('metric_observation_aggregates');
+}
+
 function streamFixture(name: string): string {
   return fs.readFileSync(new URL(`../fixtures/streams/${name}`, import.meta.url), 'utf8');
 }
@@ -636,6 +642,7 @@ describe('benchmark runner API', () => {
     expect(result.document.normalized_responses[0]).not.toHaveProperty('provider_version');
     expect(result.document.metric_results[0].total_tokens).toBe(7);
     expect(result.document.metric_version).toBe('metrics-v1');
+    expectNoCanonicalObservationState(result.document);
     expectNoCanonicalDerivedMetrics(result.document.metric_results[0]);
     expect(result.document.aggregated_metrics.elapsed_ms.valid_sample_count).toBe(1);
     expect(mockServer.requests).toHaveLength(1);
@@ -699,6 +706,8 @@ describe('benchmark runner API', () => {
     expect(result.document.metric_results[0].cold_token_delta).toBe(6);
     expect(result.document.aggregated_metrics.cold_token_delta.mean).toBe(5.5);
     expect(result.document.aggregated_metrics.cold_token_delta.valid_sample_count).toBe(2);
+    expect(result.document.metric_version).toBe('metrics-v1');
+    expectNoCanonicalObservationState(result.document);
     await app.close();
   });
 
@@ -967,7 +976,7 @@ describe('benchmark runner API', () => {
       output_tokens: 9
     });
     expect(result.document.metric_version).toBe('metrics-v1');
-    expect(result.document).not.toHaveProperty('metric_observations');
+    expectNoCanonicalObservationState(result.document);
     expect(result.document.normalized_responses[0]).not.toHaveProperty('metric_observations');
     expect(result.document.metric_results[0]).not.toHaveProperty('time_to_first_tool_call_ms');
     expect(result.document.metric_results[0]).not.toHaveProperty('time_to_tool_calls_ready_ms');
