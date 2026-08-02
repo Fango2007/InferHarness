@@ -33,6 +33,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - **Canonical semantic stream timing** — streamed benchmark execution now distinguishes first transport bytes from meaningful text or tool-call output and records transient first-output, first-tool-call, tool-readiness, and last-output timestamps without changing persisted `metrics-v1` results.
 - **Canonical per-request derived observations** — benchmark execution now composes client and provider observations and transiently calculates registered generation-window, token-efficiency, server-rate, and output/input formulas while persisted results remain on `metrics-v1`.
 - **Canonical observation-aware aggregation** — benchmark execution now transiently aggregates canonical request observations with explicit coverage, applicability, execution-error, provenance, and paired-member accounting while persisted results remain on `metrics-v1`.
+- **Canonical correctness observations** — benchmark execution now transiently evaluates registered functional and tool-call correctness metrics with explicit comparator, applicability, multiset, schema, and coverage semantics while persisted results remain on `metrics-v1`.
 
 ### Fixed
 

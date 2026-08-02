@@ -85,7 +85,7 @@ function metricIds(intents: CanonicalMetricIntent[]): string[] {
 }
 
 describe('resolveCanonicalMetricIntents', () => {
-  it('adds execution defaults and maps legacy performance metrics', () => {
+  it('adds execution defaults and maps legacy performance and correctness metrics', () => {
     const intents = resolveCanonicalMetricIntents({
       stage_id: 'chat',
       pair_member_id: null,
@@ -109,13 +109,13 @@ describe('resolveCanonicalMetricIntents', () => {
       'successful_attempt_latency_ms',
       'input_tokens',
       'output_tokens',
-      'per_request_output_tokens_per_second'
+      'per_request_output_tokens_per_second',
+      'json_syntax_valid'
     ]));
-    expect(metricIds(intents)).not.toContain('json_syntax_valid');
     expect(metricIds(intents)).not.toContain('stream_completed');
   });
 
-  it('adds streaming and tool timing defaults without canonicalizing correctness aliases', () => {
+  it('adds streaming timing and the canonical tool diagnostic set', () => {
     const intents = resolveCanonicalMetricIntents({
       stage_id: 'tools',
       pair_member_id: null,
@@ -130,9 +130,13 @@ describe('resolveCanonicalMetricIntents', () => {
       'time_per_output_token_ms',
       'decode_output_tokens_per_second',
       'time_to_first_tool_call_ms',
-      'time_to_tool_calls_ready_ms'
+      'time_to_tool_calls_ready_ms',
+      'tool_call_assertion_pass',
+      'tool_selection_precision',
+      'tool_arguments_schema_valid',
+      'duplicate_tool_call_count'
     ]));
-    expect(metricIds(intents)).not.toContain('tool_call_assertion_pass');
+    expect(metricIds(intents)).not.toContain('tool_selected_correctly');
   });
 
   it('resolves only the selected pair member and includes derived-metric operands', () => {

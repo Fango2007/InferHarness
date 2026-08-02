@@ -34,6 +34,10 @@ import {
 } from './benchmark-observation-aggregation.js';
 import { composeRequestMetricObservations } from './benchmark-request-metrics.js';
 import {
+  evaluateCanonicalCorrectnessObservations,
+  validateDatasetComparatorConfiguration
+} from './benchmark-correctness-metrics.js';
+import {
   classifyStreamSemanticEvent,
   createStreamTimingTracker,
   type StreamTimingTelemetry,
@@ -1393,7 +1397,8 @@ async function executeItem(
   const pairMeta = executable.pairMemberId ? { pair_member_id: executable.pairMemberId } : {};
   const composeAttemptObservations = (
     providerObservations: MetricObservation[],
-    operationEndedAtMs: number
+    operationEndedAtMs: number,
+    correctnessObservations: MetricObservation[] = []
   ) => {
     const observations = composeRequestMetricObservations({
       clientTelemetry: {
@@ -1404,6 +1409,7 @@ async function executeItem(
       },
       providerObservations
     });
+    observations.push(...correctnessObservations);
     observationSets.push(observations);
     return observations;
   };
@@ -1612,7 +1618,15 @@ async function executeItem(
       const operationEndedAtMs = performance.now();
       const observations = composeAttemptObservations(
         normalizedResult.provider_observations,
-        operationEndedAtMs
+        operationEndedAtMs,
+        response.ok
+          ? evaluateCanonicalCorrectnessObservations({
+              requestedMetricIds: requestedMetrics,
+              answerText: normalized.answer_text,
+              toolCalls: normalized.tool_calls ?? [],
+              item: executable.item
+            })
+          : []
       );
       const elapsedMs = operationElapsedMs(observations, operationEndedAtMs);
       const rawResponse = {
@@ -2036,6 +2050,7 @@ export async function runBenchmarkInstantiation(instantiationId: string) {
 
   const startedAt = nowIso();
   const items = resolveBenchmarkDatasetItems(record.document);
+  validateDatasetComparatorConfiguration(items);
   const stages = stagesFromInstantiation(record.document);
   const policy = parseExecutionPolicy(record.document);
   const requestedMetrics = templateMetricsFromInstantiation(record.document);

@@ -658,6 +658,101 @@ describe('benchmark runner API', () => {
     await app.close();
   });
 
+  it('keeps canonical correctness observations transient while preserving legacy correctness fields', async () => {
+    mockServer = installMockInferenceFetch();
+    const app = createServer();
+    seedServerAndModel(mockServer.baseUrl);
+    const template = {
+      ...benchmarkTemplate(),
+      metrics: ['exact_match', 'json_valid', 'schema_valid']
+    };
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/benchmark/instantiations',
+      headers: AUTH_HEADERS,
+      payload: {
+        template,
+        server_id: 'srv-runner',
+        model_id: 'mock-chat',
+        runtime_profile: runtimeProfile({ timeout_ms: 5000 }),
+        dataset: {
+          dataset_id: 'embedded-correctness-runner',
+          source: { source_type: 'inline', format: 'json' },
+          snapshot_policy: 'embedded',
+          items: [{
+            id: 'item-1',
+            prompt: 'Run benchmark.',
+            expected_answer: 'benchmark answer',
+            expected_schema: { type: 'object' }
+          }]
+        }
+      }
+    });
+    expect(createResponse.statusCode, JSON.stringify(createResponse.json())).toBe(201);
+
+    const runResponse = await app.inject({
+      method: 'POST',
+      url: `/benchmark/instantiations/${createResponse.json().id}/run`,
+      headers: AUTH_HEADERS
+    });
+    expect(runResponse.statusCode, JSON.stringify(runResponse.json())).toBe(201);
+    const result = runResponse.json();
+    expect(result.document.metric_version).toBe('metrics-v1');
+    expect(result.document.metric_results[0]).toMatchObject({
+      exact_match: true,
+      json_valid: false,
+      schema_valid: false
+    });
+    expect(result.document.metric_results[0]).not.toHaveProperty('json_syntax_valid');
+    expect(result.document.metric_results[0]).not.toHaveProperty('json_schema_valid');
+    expectNoCanonicalObservationState(result.document);
+    expect(mockServer.requests).toHaveLength(1);
+    await app.close();
+  });
+
+  it('rejects invalid comparator configuration before sending a provider request', async () => {
+    mockServer = installMockInferenceFetch();
+    const app = createServer();
+    seedServerAndModel(mockServer.baseUrl);
+    const template = {
+      ...benchmarkTemplate(),
+      metrics: ['regex_match']
+    };
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/benchmark/instantiations',
+      headers: AUTH_HEADERS,
+      payload: {
+        template,
+        server_id: 'srv-runner',
+        model_id: 'mock-chat',
+        runtime_profile: runtimeProfile({ timeout_ms: 5000 }),
+        dataset: {
+          dataset_id: 'embedded-invalid-regex-runner',
+          source: { source_type: 'inline', format: 'json' },
+          snapshot_policy: 'embedded',
+          items: [{
+            id: 'item-1',
+            prompt: 'Run benchmark.',
+            expected_format: 'regex',
+            expected_answer: '['
+          }]
+        }
+      }
+    });
+    expect(createResponse.statusCode, JSON.stringify(createResponse.json())).toBe(201);
+
+    const runResponse = await app.inject({
+      method: 'POST',
+      url: `/benchmark/instantiations/${createResponse.json().id}/run`,
+      headers: AUTH_HEADERS
+    });
+    expect(runResponse.statusCode).toBe(400);
+    expect(runResponse.json().error).toContain('invalid expected regular expression');
+    expect(mockServer.requests).toHaveLength(0);
+    await app.close();
+  });
+
   it('executes paired_request_loop stages and aggregates pair metrics', async () => {
     mockServer = installMockTokenSequenceFetch([10, 4, 8, 3]);
     const app = createServer();

@@ -3,6 +3,10 @@ import type {
   MetricObservationSource,
   ProviderProtocol
 } from './benchmark-metric-observations.js';
+import {
+  CANONICAL_TOOL_CALL_METRICS,
+  resolveCanonicalCorrectnessMetricIds
+} from './benchmark-correctness-metrics.js';
 
 export type CanonicalMetricValueType = 'number' | 'boolean';
 
@@ -121,7 +125,25 @@ const METRIC_DEFINITIONS: Record<string, MetricDefinition> = {
   decode_output_tokens_per_second: { value_type: 'number', unit: 'tokens_per_second' },
   server_prefill_tokens_per_second: { value_type: 'number', unit: 'tokens_per_second' },
   server_decode_tokens_per_second: { value_type: 'number', unit: 'tokens_per_second' },
-  output_input_token_ratio: { value_type: 'number', unit: 'ratio' }
+  output_input_token_ratio: { value_type: 'number', unit: 'ratio' },
+  exact_match: { value_type: 'boolean', unit: 'boolean' },
+  normalized_exact_match: { value_type: 'boolean', unit: 'boolean' },
+  required_terms_present: { value_type: 'boolean', unit: 'boolean' },
+  forbidden_terms_absent: { value_type: 'boolean', unit: 'boolean' },
+  json_syntax_valid: { value_type: 'boolean', unit: 'boolean' },
+  json_schema_valid: { value_type: 'boolean', unit: 'boolean' },
+  regex_match: { value_type: 'boolean', unit: 'boolean' },
+  tool_call_assertion_pass: { value_type: 'boolean', unit: 'boolean' },
+  tool_call_count: { value_type: 'number', unit: 'count' },
+  tool_selection_exact_match: { value_type: 'boolean', unit: 'boolean' },
+  tool_selection_precision: { value_type: 'number', unit: 'ratio' },
+  tool_selection_recall: { value_type: 'number', unit: 'ratio' },
+  tool_arguments_json_valid: { value_type: 'boolean', unit: 'boolean' },
+  tool_arguments_schema_valid: { value_type: 'boolean', unit: 'boolean' },
+  tool_arguments_match_expected: { value_type: 'boolean', unit: 'boolean' },
+  missing_tool_call_count: { value_type: 'number', unit: 'count' },
+  unexpected_tool_call_count: { value_type: 'number', unit: 'count' },
+  duplicate_tool_call_count: { value_type: 'number', unit: 'count' }
 };
 
 const LEGACY_PERFORMANCE_ALIASES: Record<string, string> = {
@@ -158,14 +180,7 @@ const STREAMING_DEFAULTS = [
   'decode_output_tokens_per_second'
 ];
 
-const LEGACY_TOOL_METRICS = new Set([
-  'tool_call_count',
-  'tool_selected_correctly',
-  'tool_arguments_valid',
-  'tool_call_assertion_pass',
-  'missing_tool_call',
-  'hallucinated_tool_call'
-]);
+const CANONICAL_TOOL_METRIC_SET = new Set<string>(CANONICAL_TOOL_CALL_METRICS);
 
 export function planMetricObservationSamples(input: {
   stages: MetricObservationStagePlan[];
@@ -243,18 +258,20 @@ export function resolveCanonicalMetricIntents(
     ...context.requested_metrics,
     ...(context.derived_metric_references ?? [])
   ];
-  let requestsToolMetrics = false;
+  const requestedCorrectnessMetrics: string[] = [];
   for (const reference of references) {
     const requestedMetric = requestedMetricForContext(reference, context.pair_member_id);
     if (!requestedMetric) continue;
-    if (LEGACY_TOOL_METRICS.has(requestedMetric)) {
-      requestsToolMetrics = true;
-      continue;
-    }
+    requestedCorrectnessMetrics.push(requestedMetric);
     const canonicalMetric = LEGACY_PERFORMANCE_ALIASES[requestedMetric];
     if (canonicalMetric) metricIds.add(canonicalMetric);
   }
 
+  const correctnessMetrics = resolveCanonicalCorrectnessMetricIds(requestedCorrectnessMetrics);
+  for (const metricId of correctnessMetrics) metricIds.add(metricId);
+  const requestsToolMetrics = correctnessMetrics.some(
+    (metricId) => CANONICAL_TOOL_METRIC_SET.has(metricId)
+  );
   if (context.streaming && requestsToolMetrics) {
     metricIds.add('time_to_first_tool_call_ms');
     metricIds.add('time_to_tool_calls_ready_ms');
